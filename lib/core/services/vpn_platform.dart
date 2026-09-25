@@ -355,6 +355,9 @@ class VpnPlatform {
     }
     final url = asset['browser_download_url'] as String;
     final name = asset['name'] as String;
+    if (!_isCoreArchive(name)) {
+      throw StateError('unsupported-archive');
+    }
     final dir = await coreDirectory();
     final archivePath = p.join(dir.path, name);
     final started = DateTime.now();
@@ -384,51 +387,73 @@ class VpnPlatform {
     return binary;
   }
 
-  Map<String, dynamic>? _pickCoreAsset(List assets) {
-    final names = assets.whereType<Map>().map((e) {
-      return e.map((k, v) => MapEntry(k.toString(), v));
-    }).toList();
-    bool match(Map<String, dynamic> asset, List<String> needles) {
-      final name = '${asset['name']}'.toLowerCase();
-      return needles.every(name.contains);
-    }
+  /// Official sing-box CLI archives only. Every accepted name starts with
+  /// `sing-box-` and ends with the CLI archive extension, so installers such
+  /// as `SFA-*.apk`, `SFW-*.exe`, `.deb` and `.rpm` can never be picked.
+  /// The trailing part is anchored on purpose: it keeps `android-arm` from
+  /// matching `android-arm64` and skips `*-legacy-windows-7.zip`,
+  /// `*-glibc.tar.gz` and `*-musl.tar.gz` builds.
+  static final Map<String, RegExp> _coreAssetPatterns = {
+    'windows-amd64': RegExp(r'^sing-box-.*-windows-amd64\.zip$'),
+    'windows-386': RegExp(r'^sing-box-.*-windows-386\.zip$'),
+    'windows-arm64': RegExp(r'^sing-box-.*-windows-arm64\.zip$'),
+    'android-arm64': RegExp(r'^sing-box-.*-android-arm64\.tar\.gz$'),
+    'android-arm': RegExp(r'^sing-box-.*-android-arm\.tar\.gz$'),
+    'android-386': RegExp(r'^sing-box-.*-android-386\.tar\.gz$'),
+    'android-amd64': RegExp(r'^sing-box-.*-android-amd64\.tar\.gz$'),
+    'android-any': RegExp(r'^sing-box-.*-android-[a-z0-9]+\.tar\.gz$'),
+    'linux-amd64': RegExp(r'^sing-box-.*-linux-amd64\.tar\.gz$'),
+    'linux-arm64': RegExp(r'^sing-box-.*-linux-arm64\.tar\.gz$'),
+  };
 
-    if (Platform.isWindows) {
-      return names.cast<Map<String, dynamic>?>().firstWhere(
-            (asset) => match(asset!, ['windows', 'amd64', '.zip']),
-            orElse: () => null,
-          );
-    }
-    if (Platform.isAndroid) {
-      final abi = _androidAbi();
-      return names.cast<Map<String, dynamic>?>().firstWhere(
-            (asset) => match(asset!, ['android', abi]),
-            orElse: () => names.cast<Map<String, dynamic>?>().firstWhere(
-                  (asset) => match(asset!, ['android', 'arm64']),
-                  orElse: () => null,
-                ),
-          );
-    }
-    if (Platform.isLinux) {
-      return names.cast<Map<String, dynamic>?>().firstWhere(
-            (asset) => match(asset!, ['linux', 'amd64']),
-            orElse: () => null,
-          );
+  /// Only CLI archives can be unpacked by [_extractCore]; anything else
+  /// (SFA apk, SFW exe, deb, rpm) is rejected before it is downloaded.
+  static bool _isCoreArchive(String name) {
+    final lower = name.toLowerCase();
+    return lower.endsWith('.tar.gz') ||
+        lower.endsWith('.tgz') ||
+        lower.endsWith('.zip');
+  }
+
+  Map<String, dynamic>? _pickCoreAsset(List assets) {
+    final maps = assets.whereType<Map>().map((item) {
+      return item.map((k, v) => MapEntry(k.toString(), v));
+    }).toList();
+    final pattern = _coreAssetPatterns[_coreAssetKey];
+    if (pattern == null) return null;
+    for (final asset in maps.cast<Map<String, dynamic>>()) {
+      final name = '${asset['name']}'.toLowerCase();
+      if (pattern.hasMatch(name)) return asset;
     }
     return null;
   }
 
-  String _androidAbi() {
-    final arch = Abi.current();
-    switch (arch) {
-      case Abi.androidArm64:
-        return 'arm64';
+  /// Pure form of the matching rules, kept public so they can be unit tested
+  /// without touching the network or the file system.
+  static String? matchCoreAssetName(Iterable<String> names, String key) {
+    final pattern = _coreAssetPatterns[key];
+    if (pattern == null) return null;
+    for (final name in names) {
+      if (pattern.hasMatch(name.toLowerCase())) return name;
+    }
+    return null;
+  }
+
+  /// Platform token of the CLI archive this device needs. 32-bit ARM maps to
+  /// `android-arm`, never to `android-arm64`.
+  String get _coreAssetKey {
+    if (Platform.isWindows) return 'windows-amd64';
+    if (Platform.isLinux) return 'linux-amd64';
+    if (!Platform.isAndroid) return '';
+    switch (Abi.current()) {
       case Abi.androidArm:
-        return 'armv7';
+        return 'android-arm';
       case Abi.androidX64:
-        return 'amd64';
+        return 'android-amd64';
+      case Abi.androidArm64:
+        return 'android-arm64';
       default:
-        return 'arm64';
+        return 'android-any';
     }
   }
 

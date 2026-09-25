@@ -7,6 +7,7 @@ class SubscriptionModel {
     required this.url,
     this.lastUpdated,
     this.autoUpdateInterval = UpdateInterval.manual,
+    this.order = 0,
     this.isPinned = false,
     this.enabled = true,
     this.userAgent,
@@ -22,6 +23,7 @@ class SubscriptionModel {
   String url;
   DateTime? lastUpdated;
   UpdateInterval autoUpdateInterval;
+  int order;
   bool isPinned;
   bool enabled;
   String? userAgent;
@@ -45,6 +47,7 @@ class SubscriptionModel {
         'url': url,
         'lastUpdated': lastUpdated?.toIso8601String(),
         'autoUpdateInterval': autoUpdateInterval.minutes,
+        'order': order,
         'isPinned': isPinned,
         'enabled': enabled,
         'userAgent': userAgent,
@@ -64,6 +67,7 @@ class SubscriptionModel {
       autoUpdateInterval: UpdateInterval.fromMinutes(
         (json['autoUpdateInterval'] as num?)?.toInt() ?? 0,
       ),
+      order: (json['order'] as num?)?.toInt() ?? 0,
       isPinned: json['isPinned'] == true,
       enabled: json['enabled'] != false,
       userAgent: json['userAgent'] as String?,

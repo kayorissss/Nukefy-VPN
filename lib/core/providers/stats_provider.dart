@@ -61,7 +61,7 @@ class StatsProvider extends ChangeNotifier {
       upBps: upBytesPerSecond,
       downBps: downBytesPerSecond,
     ));
-    if (samples.length > 60) samples.removeAt(0);
+    if (samples.length > 120) samples.removeAt(0);
     notifyListeners();
   }
 

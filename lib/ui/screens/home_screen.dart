@@ -50,7 +50,7 @@ class HomeScreen extends StatelessWidget {
                 Text(s.t('appTitle'), style: AppTextStyles.headline),
                 const Spacer(),
                 IconButton(
-                  onPressed: () => context.read<NavProvider>().setIndex(3),
+                  onPressed: () => context.read<NavProvider>().setIndex(4),
                   icon: const Icon(Icons.settings_rounded),
                 ),
               ],

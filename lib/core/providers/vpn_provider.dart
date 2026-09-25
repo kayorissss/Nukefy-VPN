@@ -183,13 +183,16 @@ class VpnProvider extends ChangeNotifier {
     }
   }
 
-  Future<String> downloadCore(void Function(DownloadProgress progress) onProgress) async {
+  /// Downloads and unpacks the sing-box core. Returns `true` when the binary
+  /// ended up on disk; the caller must not print the returned path as an
+  /// error — a successful install reports "core installed".
+  Future<bool> downloadCore(void Function(DownloadProgress progress) onProgress) async {
     coreBusy = true;
     notifyListeners();
     try {
-      final path = await _platform.downloadCore(onProgress: onProgress);
+      await _platform.downloadCore(onProgress: onProgress);
       await refreshCore();
-      return path;
+      return core?.available ?? false;
     } finally {
       coreBusy = false;
       notifyListeners();

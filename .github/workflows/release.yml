@@ -4,10 +4,19 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag the builds are attached to'
+        required: true
+        default: 'v1.0.1'
 
 permissions:
   contents: write
   pull-requests: write
+
+env:
+  # Works both for a published release and for a manual re-run of the workflow.
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
 
 jobs:
   android:
@@ -66,7 +75,7 @@ jobs:
       - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyVPN-android.apk
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
+          tag_name: ${{ env.RELEASE_TAG }}
           files: NukefyVPN-android.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -127,7 +136,7 @@ jobs:
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath NukefyVPN-windows-x64.zip
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
+          tag_name: ${{ env.RELEASE_TAG }}
           files: NukefyVPN-windows-x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

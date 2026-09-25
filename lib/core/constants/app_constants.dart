@@ -1,7 +1,7 @@
 class AppConstants {
   static const String appName = 'Nukefy VPN';
-  static const String version = '1.0.0';
-  static const int buildNumber = 1;
+  static const String version = '1.0.1';
+  static const int buildNumber = 2;
   static const String packageName = 'com.nukefy.vpn';
 
   static const String author = '@kayorisan';
@@ -16,6 +16,28 @@ class AppConstants {
   static const String singboxRepo = 'SagerNet/sing-box';
   static const String singboxReleasesApi =
       'https://api.github.com/repos/SagerNet/sing-box/releases/latest';
+
+  /// Port used by the "Проверить сеть" check on the Jammers tab.
+  static const int networkCheckPort = 443;
+
+  /// Hosts that keep answering when an ISP runs a whitelist instead of a
+  /// full block. Used to tell "whitelist" apart from "no interference".
+  static const List<String> russianProbeHosts = [
+    'yandex.ru',
+    'vk.com',
+    'www.gosuslugi.ru',
+    'mail.ru',
+  ];
+
+  /// Everything else. Google is the reference point: if it answers, there is
+  /// no visible jamming.
+  static const List<String> otherProbeHosts = [
+    'google.com',
+    'www.gstatic.com',
+    'update.miui.com',
+    'cloudflare.com',
+    'github.com',
+  ];
 
   /// Hardcoded MTProto proxy. Opens Telegram, which offers to enable it.
   static const String telegramProxyUrl =
@@ -43,7 +65,7 @@ class AppConstants {
 
   static const String defaultProxyDns = 'https://1.1.1.1/dns-query';
   static const String defaultDirectDns = '77.88.8.8';
-  static const String userAgent = 'NukefyVPN/1.0.0';
+  static const String userAgent = 'NukefyVPN/1.0.1';
 
   static const List<String> shareSchemes = [
     'vless',

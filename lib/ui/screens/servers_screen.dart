@@ -31,6 +31,7 @@ class ServersScreen extends StatelessWidget {
     final settings = context.watch<SettingsProvider>();
     final s = settings.strings;
     final visible = _ordered(servers, settings.settings.antiblock && settings.settings.preferBridge);
+    final subscriptions = servers.orderedSubscriptions;
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: () async {
@@ -48,25 +49,81 @@ class ServersScreen extends StatelessWidget {
                   children: [
                     Text(s.t('servers'), style: AppTextStyles.title),
                     const SizedBox(height: 12),
-                    TextField(
-                      onChanged: servers.setQuery,
-                      decoration: InputDecoration(
-                        hintText: s.t('search'),
-                        prefixIcon: const Icon(Icons.search_rounded),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            onChanged: servers.setQuery,
+                            decoration: InputDecoration(
+                              hintText: s.t('search'),
+                              prefixIcon: const Icon(Icons.search_rounded),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Ввести вручную, импорт из файла и проверка пинга
+                        // живут в этом меню, а не на виду.
+                        PopupMenuButton<String>(
+                          tooltip: s.t('actions'),
+                          icon: const Icon(Icons.more_vert_rounded),
+                          color: Theme.of(context).cardColor,
+                          onSelected: (value) => _menuAction(context, value),
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: 'manual',
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.edit_rounded, color: AppColors.cyan),
+                                title: Text(s.t('enterManually')),
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'file',
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.folder_open_rounded, color: AppColors.cyan),
+                                title: Text(s.t('importFile')),
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'ping',
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.network_check_rounded, color: AppColors.cyan),
+                                title: Text(s.t('checkPing')),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                    Row(
                       children: [
-                        _Action(icon: Icons.content_paste_rounded, label: s.t('paste'), onTap: () => ImportActions.paste(context)),
-                        _Action(icon: Icons.edit_rounded, label: s.t('manual'), onTap: () => ImportActions.manual(context)),
-                        _Action(icon: Icons.qr_code_scanner_rounded, label: s.t('qr'), onTap: () async {
-                          final text = await Navigator.push<String>(context, MaterialPageRoute(builder: (_) => const QrScannerScreen()));
-                          if (text != null && context.mounted) await ImportActions.handleText(context, text);
-                        }),
-                        _Action(icon: Icons.folder_open_rounded, label: s.t('importFile'), onTap: () => ImportActions.fromFile(context)),
+                        Expanded(
+                          child: _BigAction(
+                            icon: Icons.content_paste_rounded,
+                            label: s.t('pasteClipboard'),
+                            onTap: () => ImportActions.paste(context),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _BigAction(
+                            icon: Icons.qr_code_scanner_rounded,
+                            label: s.t('qr'),
+                            onTap: () async {
+                              final text = await Navigator.push<String>(
+                                context,
+                                MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+                              );
+                              if (text != null && context.mounted) await ImportActions.handleText(context, text);
+                            },
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -74,11 +131,6 @@ class ServersScreen extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        FilterChip(
-                          label: Text(servers.pinging ? s.t('pinging') : s.t('checkPing')),
-                          selected: servers.pinging,
-                          onSelected: (_) => servers.pingAll(),
-                        ),
                         FilterChip(
                           label: Text(s.t('sortPing')),
                           selected: servers.sort == 'ping',
@@ -151,12 +203,15 @@ class ServersScreen extends StatelessWidget {
                 ),
               )
             else ...[
-              for (final sub in servers.orderedSubscriptions)
+              for (var i = 0; i < subscriptions.length; i++)
                 SliverToBoxAdapter(
                   child: _SubscriptionBlock(
-                    subscription: sub,
-                    servers: visible.where((e) => e.subscriptionId == sub.id).toList(),
+                    subscription: subscriptions[i],
+                    servers: visible.where((e) => e.subscriptionId == subscriptions[i].id).toList(),
                     antiblock: settings.settings.antiblock,
+                    index: i + 1,
+                    canMoveUp: i > 0,
+                    canMoveDown: i < subscriptions.length - 1,
                   ),
                 ),
               SliverToBoxAdapter(
@@ -173,6 +228,17 @@ class ServersScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _menuAction(BuildContext context, String value) async {
+    switch (value) {
+      case 'manual':
+        await ImportActions.manual(context);
+      case 'file':
+        await ImportActions.fromFile(context);
+      case 'ping':
+        await context.read<ServersProvider>().pingAll();
+    }
+  }
+
   List<ServerModel> _ordered(ServersProvider provider, bool bridgesFirst) {
     final list = provider.filtered;
     if (!bridgesFirst) return list;
@@ -184,31 +250,45 @@ class ServersScreen extends StatelessWidget {
   }
 }
 
-class _Action extends StatelessWidget {
-  const _Action({required this.icon, required this.label, required this.onTap});
+/// One of the two large actions at the top of the Servers tab.
+class _BigAction extends StatelessWidget {
+  const _BigAction({required this.icon, required this.label, required this.onTap});
+
   final IconData icon;
   final String label;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Theme.of(context).dividerColor),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: AppColors.cyan),
-            const SizedBox(width: 6),
-            Text(label, style: AppTextStyles.bodySecondary.copyWith(color: Theme.of(context).colorScheme.onSurface)),
-          ],
+    return SizedBox(
+      height: 64,
+      child: Material(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Theme.of(context).dividerColor),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: AppColors.cyan, size: 24),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -220,15 +300,22 @@ class _SubscriptionBlock extends StatelessWidget {
     required this.subscription,
     required this.servers,
     required this.antiblock,
+    required this.index,
+    required this.canMoveUp,
+    required this.canMoveDown,
   });
 
   final SubscriptionModel subscription;
   final List<ServerModel> servers;
   final bool antiblock;
+  final int index;
+  final bool canMoveUp;
+  final bool canMoveDown;
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsProvider>().strings;
+    final provider = context.watch<ServersProvider>();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Container(
@@ -239,34 +326,189 @@ class _SubscriptionBlock extends StatelessWidget {
         ),
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            initiallyExpanded: true,
-            title: Text(subscription.name, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
-            subtitle: Text(
-              '${subscription.url}\n${s.t('updated')}: ${subscription.lastUpdated == null ? '—' : FormatUtils.timeAgo(subscription.lastUpdated!, ru: s.code == 'ru')} · ${s.t('serversCount')}: ${servers.length}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.bodySecondary,
-            ),
-            trailing: IconButton(
-              icon: const Icon(Icons.more_horiz_rounded),
-              onPressed: () => _subscriptionMenu(context, subscription),
-            ),
-            children: [
-              if (subscription.lastError != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(subscription.lastError!, style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error)),
+          // Долгое нажатие открывает настройки подписки.
+          child: GestureDetector(
+            onLongPress: () => _editSubscription(context, subscription),
+            child: ExpansionTile(
+              initiallyExpanded: true,
+              tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              title: Row(
+                children: [
+                  _NumberBadge(index: index),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      subscription.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  _SubscriptionPing(
+                    pingMs: provider.subscriptionPing(subscription.id),
+                    busy: provider.subscriptionPinging(subscription.id),
+                    onTap: () => provider.pingSubscription(subscription.id),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: s.t('refresh'),
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.refresh_rounded, color: AppColors.cyan),
+                    onPressed: () => provider.refreshSubscription(subscription.id),
+                  ),
+                ],
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${s.t('updated')}: ${subscription.lastUpdated == null ? '—' : FormatUtils.timeAgo(subscription.lastUpdated!, ru: s.code == 'ru')} · ${s.t('serversCount')}: ${servers.length}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodySecondary,
+                    ),
+                    if (subscription.lastError != null)
+                      Text(
+                        subscription.lastError!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error),
+                      ),
+                    Row(
+                      children: [
+                        _MoveButton(
+                          icon: Icons.arrow_upward_rounded,
+                          label: s.t('moveUp'),
+                          enabled: canMoveUp,
+                          onPressed: () => provider.moveSubscription(subscription.id, -1),
+                        ),
+                        const SizedBox(width: 4),
+                        _MoveButton(
+                          icon: Icons.arrow_downward_rounded,
+                          label: s.t('moveDown'),
+                          enabled: canMoveDown,
+                          onPressed: () => provider.moveSubscription(subscription.id, 1),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          tooltip: s.t('actions'),
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.more_horiz_rounded),
+                          onPressed: () => _subscriptionMenu(context, subscription),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              for (final server in servers)
-                ServerTile(server: server, antiblock: antiblock)
-                    .animate()
-                    .fadeIn(duration: 220.ms)
-                    .slideX(begin: 0.04),
-              const SizedBox(height: 8),
-            ],
+              ),
+              children: [
+                for (final server in servers)
+                  ServerTile(server: server, antiblock: antiblock)
+                      .animate()
+                      .fadeIn(duration: 220.ms)
+                      .slideX(begin: 0.04),
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _NumberBadge extends StatelessWidget {
+  const _NumberBadge({required this.index});
+
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 26,
+      height: 26,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.cyan.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        '$index',
+        style: AppTextStyles.monoValue.copyWith(color: AppColors.cyan, fontSize: 12),
+      ),
+    );
+  }
+}
+
+/// Ping of the best server in the subscription; tapping re-pings them all.
+class _SubscriptionPing extends StatelessWidget {
+  const _SubscriptionPing({
+    required this.pingMs,
+    required this.busy,
+    required this.onTap,
+  });
+
+  final int? pingMs;
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = AppColors.pingColor(pingMs);
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: busy
+            ? const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(
+                pingMs == null ? '—' : pingMs! < 0 ? '✕' : '${pingMs}ms',
+                style: AppTextStyles.monoValue.copyWith(color: color, fontSize: 12),
+              ),
+      ),
+    );
+  }
+}
+
+class _MoveButton extends StatelessWidget {
+  const _MoveButton({
+    required this.icon,
+    required this.label,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: enabled ? onPressed : null,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        minimumSize: const Size(0, 34),
+        visualDensity: VisualDensity.compact,
+      ),
+      icon: Icon(icon, size: 16, color: AppColors.cyan),
+      label: Text(
+        label,
+        style: AppTextStyles.bodySecondary.copyWith(color: AppColors.cyan),
       ),
     );
   }

@@ -25,6 +25,7 @@ class ServersProvider extends ChangeNotifier {
   List<SubscriptionModel> subscriptions = [];
   bool pinging = false;
   bool refreshing = false;
+  final Set<String> pingingSubscriptions = <String>{};
   String query = '';
   String? protocolFilter;
   String? countryFilter;
@@ -117,9 +118,70 @@ class ServersProvider extends ChangeNotifier {
     final list = List<SubscriptionModel>.from(subscriptions);
     list.sort((a, b) {
       if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+      if (a.order != b.order) return a.order.compareTo(b.order);
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
     return list;
+  }
+
+  /// Lowest ping among the servers of a subscription, or `null` when nothing
+  /// was measured yet.
+  int? subscriptionPing(String subscriptionId) {
+    final values = serversOf(subscriptionId)
+        .map((server) => server.pingMs)
+        .whereType<int>()
+        .where((ms) => ms >= 0)
+        .toList()
+      ..sort();
+    return values.isEmpty ? null : values.first;
+  }
+
+  bool subscriptionPinging(String subscriptionId) =>
+      pingingSubscriptions.contains(subscriptionId);
+
+  /// Pings only the servers that belong to one subscription.
+  Future<void> pingSubscription(String subscriptionId) async {
+    final targets = serversOf(subscriptionId)
+        .map((server) => (id: server.id, host: server.address, port: server.port))
+        .toList();
+    if (targets.isEmpty || pingingSubscriptions.contains(subscriptionId)) return;
+    pingingSubscriptions.add(subscriptionId);
+    notifyListeners();
+    try {
+      await PingUtils.pingAll(
+        targets,
+        onEach: (id, ms) {
+          final server = byId(id);
+          if (server == null) return;
+          server
+            ..pingMs = ms
+            ..lastPingAt = DateTime.now();
+          notifyListeners();
+        },
+      );
+    } finally {
+      pingingSubscriptions.remove(subscriptionId);
+      await _persist();
+      notifyListeners();
+    }
+  }
+
+  /// Moves a subscription one slot up (`delta` < 0) or down (`delta` > 0) in
+  /// the list the user sees.
+  Future<void> moveSubscription(String id, int delta) async {
+    if (delta == 0) return;
+    final ordered = orderedSubscriptions;
+    final index = ordered.indexWhere((sub) => sub.id == id);
+    if (index < 0) return;
+    final target = index + delta;
+    if (target < 0 || target >= ordered.length) return;
+    final current = ordered[index];
+    final other = ordered[target];
+    final currentOrder = current.order;
+    current.order = other.order;
+    other.order = currentOrder;
+    await _persist();
+    notifyListeners();
   }
 
   Future<int> addDrafts(
@@ -166,11 +228,15 @@ class ServersProvider extends ChangeNotifier {
   }
 
   Future<SubscriptionModel> addSubscription(String url, {String? name}) async {
+    final nextOrder = subscriptions.isEmpty
+        ? 0
+        : subscriptions.map((e) => e.order).reduce((a, b) => a > b ? a : b) + 1;
     final sub = SubscriptionModel(
       id: _uuid.v4(),
       name: name ?? _nameFromUrl(url),
       url: url.trim(),
       autoUpdateInterval: UpdateInterval.hour6,
+      order: nextOrder,
     );
     subscriptions.add(sub);
     await _persist();
