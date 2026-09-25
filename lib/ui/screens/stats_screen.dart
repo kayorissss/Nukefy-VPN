@@ -15,18 +15,18 @@ class StatsScreen extends StatelessWidget {
     final stats = context.watch<StatsProvider>();
     final settings = context.watch<SettingsProvider>();
     final s = settings.strings;
+    final p = context.palette;
     return SafeArea(
+      bottom: false,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.paddingOf(context).bottom + 100),
         children: [
-          Text(s.t('stats'), style: AppTextStyles.title),
-          const SizedBox(height: 14),
           // Current speed, large.
           Container(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
             decoration: BoxDecoration(
               color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(color: Theme.of(context).dividerColor),
             ),
             child: Row(
@@ -49,7 +49,7 @@ class StatsScreen extends StatelessWidget {
                     icon: Icons.arrow_upward_rounded,
                     caption: s.t('upload'),
                     value: FormatUtils.speed(stats.upBps),
-                    color: AppColors.cyan,
+                    color: p.accent,
                   ),
                 ),
               ],
@@ -61,7 +61,7 @@ class StatsScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             decoration: BoxDecoration(
               color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(color: Theme.of(context).dividerColor),
             ),
             child: Column(
@@ -71,7 +71,7 @@ class StatsScreen extends StatelessWidget {
                   children: [
                     _Legend(color: AppColors.success, label: s.t('trafficDown')),
                     const SizedBox(width: 14),
-                    _Legend(color: AppColors.cyan, label: s.t('upload')),
+                    _Legend(color: p.accent, label: s.t('upload')),
                     const Spacer(),
                     Text(s.t('statsNow'), style: AppTextStyles.metricCaption),
                   ],
@@ -81,7 +81,7 @@ class StatsScreen extends StatelessWidget {
                   height: 240,
                   width: double.infinity,
                   child: CustomPaint(
-                    painter: _SpeedChartPainter(samples: stats.samples),
+                    painter: _SpeedChartPainter(samples: stats.samples, palette: context.palette),
                     child: const SizedBox.expand(),
                   ),
                 ),
@@ -95,7 +95,7 @@ class StatsScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             decoration: BoxDecoration(
               color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(color: Theme.of(context).dividerColor),
             ),
             child: Column(
@@ -149,9 +149,9 @@ class StatsScreen extends StatelessWidget {
           else
             ...stats.logs.map((entry) {
               final color = switch (entry.status) {
-                'connected' => AppColors.success,
+                'connected' => p.success,
                 'error' => AppColors.error,
-                _ => AppColors.textSecondary,
+                _ => p.textSecondary,
               };
               return ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -247,7 +247,7 @@ class _TrafficCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
@@ -262,7 +262,7 @@ class _TrafficCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '↑ ${FormatUtils.bytes(up)}',
-            style: AppTextStyles.monoValue.copyWith(color: AppColors.cyan, fontSize: 15),
+            style: AppTextStyles.monoValue.copyWith(color: p.accent, fontSize: 15),
           ),
           const SizedBox(height: 6),
           Text('${s.t('received')} / ${s.t('sent')}', style: AppTextStyles.bodySecondary),
@@ -273,23 +273,24 @@ class _TrafficCard extends StatelessWidget {
 }
 
 class _SpeedChartPainter extends CustomPainter {
-  _SpeedChartPainter({required this.samples});
+  _SpeedChartPainter({required this.samples, required this.palette});
   final List samples;
+  final NukefyPalette palette;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(14));
-    canvas.drawRRect(rect, Paint()..color = const Color(0xFF141414));
+    canvas.drawRRect(rect, Paint()..color = palette.surface);
     canvas.drawRRect(
       rect,
       Paint()
         ..style = PaintingStyle.stroke
-        ..color = AppColors.border,
+        ..color = palette.border,
     );
 
     final baseline = size.height - 14.0;
     final grid = Paint()
-      ..color = AppColors.border.withValues(alpha: 0.6)
+      ..color = palette.border.withValues(alpha: 0.6)
       ..strokeWidth = 1;
     for (var i = 1; i <= 3; i++) {
       final y = baseline - (size.height - 34) * i / 4;
@@ -310,10 +311,10 @@ class _SpeedChartPainter extends CustomPainter {
       ..lineTo(size.width - 8, baseline)
       ..lineTo(8, baseline)
       ..close();
-    canvas.drawPath(download, Paint()..color = AppColors.success.withValues(alpha: 0.14));
+    canvas.drawPath(download, Paint()..color = palette.success.withValues(alpha: 0.14));
 
-    _stroke(canvas, size, maxValue, AppColors.success, (sample) => (sample.downBps as int).toDouble());
-    _stroke(canvas, size, maxValue, AppColors.cyan, (sample) => (sample.upBps as int).toDouble());
+    _stroke(canvas, size, maxValue, palette.success, (sample) => (sample.downBps as int).toDouble());
+    _stroke(canvas, size, maxValue, palette.accent, (sample) => (sample.upBps as int).toDouble());
   }
 
   Path _line(Size size, double maxValue, double Function(dynamic) pick) {

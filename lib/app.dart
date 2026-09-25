@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'core/providers/servers_provider.dart';
@@ -18,7 +19,14 @@ class NukefyApp extends StatelessWidget {
     final servers = context.watch<ServersProvider>();
     final empty = servers.servers.isEmpty && servers.subscriptions.isEmpty;
     final welcome = !settings.settings.seenWelcome && empty;
-    return MaterialApp(
+    final brightness = switch (settings.themeMode) {
+      ThemeMode.light => Brightness.light,
+      ThemeMode.dark => Brightness.dark,
+      ThemeMode.system => MediaQuery.platformBrightnessOf(context),
+    };
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: AppTheme.overlay(brightness),
+      child: MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Nukefy VPN',
       debugShowCheckedModeBanner: false,
@@ -26,6 +34,7 @@ class NukefyApp extends StatelessWidget {
       darkTheme: AppTheme.dark(),
       themeMode: settings.themeMode,
       home: welcome ? const WelcomeScreen() : const MainShell(),
+      ),
     );
   }
 }

@@ -6,7 +6,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_constants.dart';
-import '../../core/models/vpn_status.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/vpn_provider.dart';
 import '../../core/services/update_service.dart';
@@ -21,6 +20,7 @@ import '../widgets/section_card.dart';
 import 'log_screen.dart';
 import 'per_app_screen.dart';
 import 'routing_screen.dart';
+import 'update_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -31,117 +31,76 @@ class SettingsScreen extends StatelessWidget {
     final vpn = context.watch<VpnProvider>();
     final s = settings.strings;
     final value = settings.settings;
+    final p = context.palette;
+    final bottom = MediaQuery.paddingOf(context).bottom;
     return SafeArea(
+      bottom: false,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
         children: [
-          Text(s.t('settings'), style: AppTextStyles.title),
-          const SizedBox(height: 14),
-          // The core has to be downloaded before anything else works, so it
-          // sits at the very top instead of hiding under MUX and Telegram.
-          SectionCard(
-            title: s.t('core'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  vpn.core == null
-                      ? s.t('checking')
-                      : vpn.core!.available
-                          ? '${s.t('coreReady')}${vpn.core!.version == null ? '' : ' · ${vpn.core!.version}'}'
-                          : s.t('coreMissing'),
-                  style: AppTextStyles.bodyRegular,
-                ),
-                const SizedBox(height: 6),
-                Text(Platform.isAndroid ? s.t('coreAndroid') : s.t('coreWindows'), style: AppTextStyles.bodySecondary),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: vpn.coreBusy ? null : () => _downloadCore(context),
-                    icon: vpn.coreBusy
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.download_rounded),
-                    label: Text(s.t('downloadCore')),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: TextButton(
-                    onPressed: () => vpn.refreshCore(),
-                    child: Text(s.t('refresh')),
-                  ),
-                ),
-                const SizedBox(height: 4),
-              ],
-            ),
-          ),
+          // Telegram proxy is the thing people look for first when the
+          // messenger is throttled — so it goes right on top.
+          _TelegramCard(strings: s),
+          // Desktop downloads sing-box as a separate binary; Android ships
+          // the core inside the APK (libbox), so there is nothing to install.
+          if (!Platform.isAndroid) _CoreCard(vpn: vpn, strings: s),
           SectionCard(
             title: s.t('general'),
+            icon: Icons.tune_rounded,
             child: Column(
               children: [
                 SettingsTile(
                   icon: Icons.dark_mode_outlined,
                   title: s.t('theme'),
-                  trailing: DropdownButton<ThemePreference>(
+                  trailing: NukefyDropdown<ThemePreference>(
                     value: value.theme,
-                    underline: const SizedBox.shrink(),
-                    items: [
-                      DropdownMenuItem(value: ThemePreference.dark, child: Text(s.t('dark'))),
-                      DropdownMenuItem(value: ThemePreference.light, child: Text(s.t('light'))),
-                      DropdownMenuItem(value: ThemePreference.system, child: Text(s.t('system'))),
-                    ],
-                    onChanged: (next) {
-                      if (next != null) settings.update((item) => item.theme = next);
+                    items: {
+                      ThemePreference.dark: s.t('dark'),
+                      ThemePreference.light: s.t('light'),
+                      ThemePreference.system: s.t('system'),
                     },
+                    onChanged: (next) => settings.update((item) => item.theme = next),
                   ),
                 ),
                 SettingsTile(
                   icon: Icons.language_rounded,
                   title: s.t('language'),
-                  trailing: DropdownButton<LanguagePreference>(
+                  trailing: NukefyDropdown<LanguagePreference>(
                     value: value.language,
-                    underline: const SizedBox.shrink(),
-                    items: [
-                      DropdownMenuItem(value: LanguagePreference.ru, child: Text(s.t('russian'))),
-                      DropdownMenuItem(value: LanguagePreference.en, child: Text(s.t('english'))),
-                      DropdownMenuItem(value: LanguagePreference.system, child: Text(s.t('system'))),
-                    ],
-                    onChanged: (next) {
-                      if (next != null) settings.update((item) => item.language = next);
+                    items: {
+                      LanguagePreference.ru: s.t('russian'),
+                      LanguagePreference.en: s.t('english'),
+                      LanguagePreference.system: s.t('system'),
                     },
+                    onChanged: (next) => settings.update((item) => item.language = next),
                   ),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('autoConnect'), style: AppTextStyles.bodyRegular),
+                SwitchTile(
+                  icon: Icons.bolt_rounded,
+                  title: s.t('autoConnect'),
+                  subtitle: s.t('autoConnectHint'),
                   value: value.autoConnect,
                   onChanged: (next) => settings.update((item) => item.autoConnect = next),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('launchOnBoot'), style: AppTextStyles.bodyRegular),
+                SwitchTile(
+                  icon: Icons.power_settings_new_rounded,
+                  title: s.t('launchOnBoot'),
                   value: value.launchOnBoot,
                   onChanged: (next) async {
                     await settings.update((item) => item.launchOnBoot = next);
                     await VpnPlatform().setAutoStart(next);
                   },
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('notifications'), style: AppTextStyles.bodyRegular),
+                SwitchTile(
+                  icon: Icons.notifications_none_rounded,
+                  title: s.t('notifications'),
                   value: value.notifications,
                   onChanged: (next) => settings.update((item) => item.notifications = next),
                 ),
                 if (Platform.isWindows)
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(s.t('minimizeToTray'), style: AppTextStyles.bodyRegular),
+                  SwitchTile(
+                    icon: Icons.minimize_rounded,
+                    title: s.t('minimizeToTray'),
                     value: value.minimizeToTray,
                     onChanged: (next) => settings.update((item) => item.minimizeToTray = next),
                   ),
@@ -150,6 +109,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           SectionCard(
             title: s.t('vpn'),
+            icon: Icons.vpn_key_outlined,
             child: Column(
               children: [
                 SettingsTile(
@@ -158,227 +118,186 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: _modeLabel(s, value.routingMode),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RoutingScreen())),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('tun'), style: AppTextStyles.bodyRegular),
-                  subtitle: Text(s.t('tunHint'), style: AppTextStyles.bodySecondary),
-                  value: value.tunEnabled,
-                  onChanged: (next) => settings.update((item) => item.tunEnabled = next),
-                ),
-                SettingsTile(
-                  icon: Icons.layers_outlined,
-                  title: s.t('stack'),
-                  trailing: DropdownButton<String>(
-                    value: value.tunStack,
-                    underline: const SizedBox.shrink(),
-                    items: const [
-                      DropdownMenuItem(value: 'mixed', child: Text('mixed')),
-                      DropdownMenuItem(value: 'system', child: Text('system')),
-                      DropdownMenuItem(value: 'gvisor', child: Text('gVisor')),
-                    ],
-                    onChanged: (next) {
-                      if (next != null) settings.update((item) => item.tunStack = next);
-                    },
+                if (Platform.isAndroid)
+                  SettingsTile(
+                    icon: Icons.apps_rounded,
+                    title: s.t('perApp'),
+                    subtitle: '${_perAppLabel(s, value.perAppMode)} · ${s.t('perAppHint')}',
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PerAppScreen())),
                   ),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('localProxy'), style: AppTextStyles.bodyRegular),
-                  subtitle: Text('SOCKS ${value.socksPort} · HTTP ${value.httpPort}', style: AppTextStyles.monoValue),
+                if (!Platform.isAndroid)
+                  SwitchTile(
+                    icon: Icons.router_outlined,
+                    title: s.t('tun'),
+                    subtitle: s.t('tunHint'),
+                    value: value.tunEnabled,
+                    onChanged: (next) => settings.update((item) => item.tunEnabled = next),
+                  ),
+                SwitchTile(
+                  icon: Icons.lan_outlined,
+                  title: s.t('localProxy'),
+                  subtitle: 'SOCKS ${value.socksPort} · HTTP ${value.httpPort}',
                   value: value.localProxyEnabled,
                   onChanged: (next) => settings.update((item) => item.localProxyEnabled = next),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('allowLan'), style: AppTextStyles.bodyRegular),
-                  value: value.allowLan,
-                  onChanged: (next) => settings.update((item) => item.allowLan = next),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('blockQuic'), style: AppTextStyles.bodyRegular),
+                SwitchTile(
+                  icon: Icons.block_rounded,
+                  title: s.t('blockQuic'),
+                  subtitle: s.t('blockQuicHint'),
                   value: value.blockQuic,
                   onChanged: (next) => settings.update((item) => item.blockQuic = next),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('blockIpv6'), style: AppTextStyles.bodyRegular),
-                  value: value.blockIpv6,
-                  onChanged: (next) => settings.update((item) => item.blockIpv6 = next),
-                ),
-                TextField(
-                  key: ValueKey('proxy-${value.proxyDns}'),
-                  controller: TextEditingController(text: value.proxyDns),
-                  decoration: InputDecoration(labelText: s.t('proxyDns')),
-                  onSubmitted: (text) => settings.update((item) => item.proxyDns = text.trim()),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  key: ValueKey('direct-${value.directDns}'),
-                  controller: TextEditingController(text: value.directDns),
-                  decoration: InputDecoration(labelText: s.t('directDns')),
-                  onSubmitted: (text) => settings.update((item) => item.directDns = text.trim()),
-                ),
-                const SizedBox(height: 8),
               ],
             ),
           ),
-          SectionCard(
-            title: s.t('antiblockTitle'),
+          if (Platform.isAndroid)
+            SectionCard(
+              title: s.t('android'),
+              icon: Icons.android_rounded,
+              child: Column(
+                children: [
+                  SettingsTile(
+                    icon: Icons.battery_charging_full_rounded,
+                    title: s.t('battery'),
+                    subtitle: s.t('batteryHint'),
+                    onTap: () => VpnPlatform().requestBatteryOptimization(),
+                  ),
+                  SettingsTile(
+                    icon: Icons.vpn_lock_rounded,
+                    title: s.t('alwaysOn'),
+                    subtitle: s.t('alwaysOnHint'),
+                    onTap: () => VpnPlatform().openVpnSettings(),
+                  ),
+                ],
+              ),
+            ),
+          // Everything below is for people who know what they are doing.
+          _MoreCard(
+            title: s.t('more'),
+            description: s.t('moreHint'),
             child: Column(
               children: [
-                Text(s.t('antiblockHint'), style: AppTextStyles.bodySecondary),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('antiblockTitle'), style: AppTextStyles.bodyRegular),
+                SwitchTile(
+                  icon: Icons.shield_outlined,
+                  title: s.t('antiblockTitle'),
+                  subtitle: s.t('antiblockHint'),
                   value: value.antiblock,
                   onChanged: (next) => settings.update((item) => item.antiblock = next),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('preferBridge'), style: AppTextStyles.bodyRegular),
+                SwitchTile(
+                  title: s.t('preferBridge'),
                   value: value.preferBridge,
                   onChanged: (next) => settings.update((item) => item.preferBridge = next),
                 ),
-                const SizedBox(height: 4),
-              ],
-            ),
-          ),
-          // Knobs that almost nobody needs: MUX, TLS fragmentation, MTU.
-          _MoreCard(
-            title: s.t('more'),
-            child: Column(
-              children: [
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('${s.t('mtu')}: ${value.mtu}', style: AppTextStyles.bodyRegular),
-                  subtitle: Slider(
-                    value: value.mtu.clamp(1280, 9000).toDouble(),
-                    min: 1280,
-                    max: 9000,
-                    divisions: 20,
-                    label: '${value.mtu}',
-                    onChanged: (next) => settings.update((item) => item.mtu = next.round()),
-                  ),
+                SwitchTile(
+                  title: s.t('allowLan'),
+                  value: value.allowLan,
+                  onChanged: (next) => settings.update((item) => item.allowLan = next),
                 ),
+                SwitchTile(
+                  title: s.t('blockIpv6'),
+                  value: value.blockIpv6,
+                  onChanged: (next) => settings.update((item) => item.blockIpv6 = next),
+                ),
+                if (!Platform.isAndroid)
+                  SettingsTile(
+                    icon: Icons.layers_outlined,
+                    title: s.t('stack'),
+                    trailing: NukefyDropdown<String>(
+                      value: value.tunStack,
+                      items: const {'mixed': 'mixed', 'system': 'system', 'gvisor': 'gVisor'},
+                      onChanged: (next) => settings.update((item) => item.tunStack = next),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Text(s.t('dnsHint'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: ValueKey('proxy-${value.proxyDns}'),
+                  controller: TextEditingController(text: value.proxyDns),
+                  decoration: InputDecoration(labelText: s.t('proxyDns'), helperText: s.t('proxyDnsHint')),
+                  onSubmitted: (text) => settings.update((item) => item.proxyDns = text.trim()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: ValueKey('direct-${value.directDns}'),
+                  controller: TextEditingController(text: value.directDns),
+                  decoration: InputDecoration(labelText: s.t('directDns'), helperText: s.t('directDnsHint')),
+                  onSubmitted: (text) => settings.update((item) => item.directDns = text.trim()),
+                ),
+                const SizedBox(height: 12),
                 const Divider(height: 1),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('fragment'), style: AppTextStyles.bodyRegular),
+                _SliderTile(
+                  title: '${s.t('mtu')}: ${value.mtu}',
+                  value: value.mtu.clamp(1280, 9000).toDouble(),
+                  min: 1280,
+                  max: 9000,
+                  divisions: 20,
+                  onChanged: (next) => settings.update((item) => item.mtu = next.round()),
+                ),
+                SwitchTile(
+                  title: s.t('fragment'),
                   value: value.tlsFragment,
                   onChanged: (next) => settings.update((item) => item.tlsFragment = next),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('recordFragment'), style: AppTextStyles.bodyRegular),
+                SwitchTile(
+                  title: s.t('recordFragment'),
                   value: value.recordFragment,
                   onChanged: (next) => settings.update((item) => item.recordFragment = next),
                 ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('${s.t('fragmentDelay')}: ${value.fragmentFallbackMs}', style: AppTextStyles.bodyRegular),
-                  subtitle: Slider(
-                    value: value.fragmentFallbackMs.clamp(10, 500).toDouble(),
-                    min: 10,
-                    max: 500,
-                    divisions: 49,
-                    onChanged: (next) => settings.update((item) => item.fragmentFallbackMs = next.round()),
-                  ),
+                _SliderTile(
+                  title: '${s.t('fragmentDelay')}: ${value.fragmentFallbackMs}',
+                  value: value.fragmentFallbackMs.clamp(10, 500).toDouble(),
+                  min: 10,
+                  max: 500,
+                  divisions: 49,
+                  onChanged: (next) => settings.update((item) => item.fragmentFallbackMs = next.round()),
                 ),
                 const Divider(height: 1),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('mux'), style: AppTextStyles.bodyRegular),
+                SwitchTile(
+                  title: s.t('mux'),
                   value: value.muxEnabled,
                   onChanged: (next) => settings.update((item) => item.muxEnabled = next),
                 ),
                 SettingsTile(
                   icon: Icons.hub_outlined,
                   title: s.t('muxProtocol'),
-                  trailing: DropdownButton<String>(
+                  trailing: NukefyDropdown<String>(
                     value: value.muxProtocol,
-                    underline: const SizedBox.shrink(),
-                    items: const [
-                      DropdownMenuItem(value: 'h2mux', child: Text('h2mux')),
-                      DropdownMenuItem(value: 'smux', child: Text('smux')),
-                      DropdownMenuItem(value: 'yamux', child: Text('yamux')),
-                    ],
-                    onChanged: (next) {
-                      if (next != null) settings.update((item) => item.muxProtocol = next);
-                    },
+                    items: const {'h2mux': 'h2mux', 'smux': 'smux', 'yamux': 'yamux'},
+                    onChanged: (next) => settings.update((item) => item.muxProtocol = next),
                   ),
                 ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('${s.t('muxConnections')}: ${value.muxMaxConnections}', style: AppTextStyles.bodyRegular),
-                  subtitle: Slider(
-                    value: value.muxMaxConnections.clamp(1, 8).toDouble(),
-                    min: 1,
-                    max: 8,
-                    divisions: 7,
-                    onChanged: (next) => settings.update((item) => item.muxMaxConnections = next.round()),
-                  ),
+                _SliderTile(
+                  title: '${s.t('muxConnections')}: ${value.muxMaxConnections}',
+                  value: value.muxMaxConnections.clamp(1, 8).toDouble(),
+                  min: 1,
+                  max: 8,
+                  divisions: 7,
+                  onChanged: (next) => settings.update((item) => item.muxMaxConnections = next.round()),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('muxPadding'), style: AppTextStyles.bodyRegular),
+                SwitchTile(
+                  title: s.t('muxPadding'),
                   value: value.muxPadding,
                   onChanged: (next) => settings.update((item) => item.muxPadding = next),
                 ),
-              ],
-            ),
-          ),
-          SectionCard(
-            title: s.t('telegram'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(s.t('telegramHelp'), style: AppTextStyles.bodySecondary),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () => launchUrl(Uri.parse(AppConstants.telegramProxyUrl), mode: LaunchMode.externalApplication),
-                    icon: const Icon(Icons.send_rounded),
-                    label: Text(s.t('telegramButton')),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-          if (Platform.isAndroid)
-            SectionCard(
-              title: s.t('apps'),
-              child: Column(
-                children: [
-                  SettingsTile(
-                    icon: Icons.apps_rounded,
-                    title: s.t('perApp'),
-                    subtitle: _perAppLabel(s, value.perAppMode),
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PerAppScreen())),
-                  ),
-                  SettingsTile(
-                    icon: Icons.battery_charging_full_rounded,
-                    title: s.t('battery'),
-                    onTap: () => VpnPlatform().requestBatteryOptimization(),
-                  ),
-                  SettingsTile(
-                    icon: Icons.vpn_lock_rounded,
-                    title: s.t('alwaysOn'),
-                    onTap: () => VpnPlatform().openVpnSettings(),
-                  ),
-                ],
-              ),
-            ),
-          SectionCard(
-            title: s.t('advanced'),
-            child: Column(
-              children: [
+                const Divider(height: 1),
                 SettingsTile(
                   icon: Icons.article_outlined,
                   title: s.t('showLog'),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LogScreen())),
+                ),
+                SettingsTile(
+                  icon: Icons.bug_report_outlined,
+                  title: s.t('logLevel'),
+                  trailing: NukefyDropdown<String>(
+                    value: value.logLevel,
+                    items: const {'debug': 'debug', 'info': 'info', 'warn': 'warn', 'error': 'error'},
+                    onChanged: (next) => settings.update((item) => item.logLevel = next),
+                  ),
                 ),
                 SettingsTile(
                   icon: Icons.upload_file_rounded,
@@ -407,35 +326,23 @@ class SettingsScreen extends StatelessWidget {
                     if (ok && context.mounted) await settings.reset();
                   },
                 ),
-                SettingsTile(
-                  icon: Icons.tune_rounded,
-                  title: s.t('logLevel'),
-                  trailing: DropdownButton<String>(
-                    value: value.logLevel,
-                    underline: const SizedBox.shrink(),
-                    items: const [
-                      DropdownMenuItem(value: 'debug', child: Text('debug')),
-                      DropdownMenuItem(value: 'info', child: Text('info')),
-                      DropdownMenuItem(value: 'warn', child: Text('warn')),
-                      DropdownMenuItem(value: 'error', child: Text('error')),
-                    ],
-                    onChanged: (next) {
-                      if (next != null) settings.update((item) => item.logLevel = next);
-                    },
-                  ),
-                ),
               ],
             ),
           ),
           SectionCard(
             title: s.t('about'),
+            icon: Icons.info_outline_rounded,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SettingsTile(
-                  icon: Icons.info_outline_rounded,
+                  icon: Icons.tag_rounded,
                   title: s.t('version'),
                   subtitle: AppConstants.version,
+                  trailing: TextButton(
+                    onPressed: () => checkUpdatesFlow(context),
+                    child: Text(s.t('checkUpdates')),
+                  ),
                 ),
                 SettingsTile(
                   icon: Icons.person_outline_rounded,
@@ -449,24 +356,18 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: AppConstants.githubRepo,
                   onTap: () => launchUrl(Uri.parse(AppConstants.githubUrl), mode: LaunchMode.externalApplication),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.t('checkOnStart'), style: AppTextStyles.bodyRegular),
+                SwitchTile(
+                  icon: Icons.system_update_alt_rounded,
+                  title: s.t('checkOnStart'),
                   value: value.checkUpdatesOnStart,
                   onChanged: (next) => settings.update((item) => item.checkUpdatesOnStart = next),
                 ),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => checkUpdatesFlow(context),
-                    icon: const Icon(Icons.system_update_alt_rounded),
-                    label: Text(s.t('checkUpdates')),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(s.t('privacy'), style: AppTextStyles.bodySecondary),
                 const SizedBox(height: 6),
-                Text(s.t('webrtc'), style: AppTextStyles.bodySecondary),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text('${s.t('privacy')}\n${s.t('webrtc')}',
+                      style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+                ),
                 const SizedBox(height: 8),
               ],
             ),
@@ -494,11 +395,176 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-/// Collapsible block for the knobs most users never touch.
-class _MoreCard extends StatefulWidget {
-  const _MoreCard({required this.title, required this.child});
+class _TelegramCard extends StatelessWidget {
+  const _TelegramCard({required this.strings});
+  final S strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    const tg = Color(0xFF2AABEE);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(22),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: () => launchUrl(Uri.parse(AppConstants.telegramProxyUrl), mode: LaunchMode.externalApplication),
+          child: Ink(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [tg.withValues(alpha: p.isDark ? 0.22 : 0.16), p.accent2.withValues(alpha: 0.10)],
+              ),
+              border: Border.all(color: tg.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(color: tg, borderRadius: BorderRadius.circular(16)),
+                  child: const Icon(Icons.send_rounded, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(strings.t('telegramButton'), style: AppTextStyles.headline.copyWith(fontSize: 15)),
+                      const SizedBox(height: 3),
+                      Text(strings.t('telegramHelp'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.open_in_new_rounded, color: p.textSecondary, size: 20),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CoreCard extends StatelessWidget {
+  const _CoreCard({required this.vpn, required this.strings});
+  final VpnProvider vpn;
+  final S strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = strings;
+    final p = context.palette;
+    final core = vpn.core;
+    final ready = core?.available ?? false;
+    final color = core == null ? p.textSecondary : (ready ? p.success : AppColors.warning);
+    final status = core == null
+        ? s.t('checking')
+        : ready
+            ? '${s.t('coreInstalledState')}${core.version == null ? '' : ' · sing-box ${core.version}'}'
+            : s.t('coreMissing');
+    return SectionCard(
+      title: s.t('core'),
+      icon: Icons.memory_rounded,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color,
+                  boxShadow: [BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 8)],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: Text(status, key: ValueKey(status), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              IconButton(
+                tooltip: s.t('refresh'),
+                onPressed: () => vpn.refreshCore(),
+                icon: Icon(Icons.refresh_rounded, color: p.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(s.t('coreWindows'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ready
+                ? OutlinedButton.icon(
+                    onPressed: vpn.coreBusy ? null : () => _downloadCore(context),
+                    icon: const Icon(Icons.update_rounded),
+                    label: Text(s.t('reinstallCore')),
+                  )
+                : FilledButton.icon(
+                    onPressed: vpn.coreBusy ? null : () => _downloadCore(context),
+                    icon: vpn.coreBusy
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.download_rounded),
+                    label: Text(s.t('downloadCore')),
+                  ),
+          ),
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+}
+
+class _SliderTile extends StatelessWidget {
+  const _SliderTile({
+    required this.title,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.onChanged,
+  });
 
   final String title;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 10, 2, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+          Slider(value: value, min: min, max: max, divisions: divisions, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+}
+
+/// Collapsible block for the knobs most users never touch.
+class _MoreCard extends StatefulWidget {
+  const _MoreCard({required this.title, required this.child, this.description});
+
+  final String title;
+  final String? description;
   final Widget child;
 
   @override
@@ -510,41 +576,58 @@ class _MoreCardState extends State<_MoreCard> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).dividerColor),
+        color: p.card,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: p.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
-            borderRadius: BorderRadius.circular(16),
             onTap: () => setState(() => _open = !_open),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
               child: Row(
                 children: [
-                  const Icon(Icons.tune_rounded, size: 18, color: AppColors.cyan),
-                  const SizedBox(width: 8),
-                  Text(widget.title.toUpperCase(), style: AppTextStyles.section),
-                  const Spacer(),
-                  Icon(
-                    _open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                    size: 20,
-                    color: AppColors.textSecondary,
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(color: p.accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                    child: Icon(Icons.science_outlined, size: 18, color: p.accent),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(widget.title.toUpperCase(), style: AppTextStyles.section),
+                        if (widget.description != null)
+                          Text(widget.description!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  AnimatedRotation(
+                    duration: const Duration(milliseconds: 220),
+                    turns: _open ? 0.5 : 0,
+                    child: Icon(Icons.expand_more_rounded, size: 22, color: p.textSecondary),
                   ),
                 ],
               ),
             ),
           ),
-          if (_open)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-              child: widget.child,
-            ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _open
+                ? Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 10), child: widget.child)
+                : const SizedBox(width: double.infinity),
+          ),
         ],
       ),
     );
@@ -580,8 +663,9 @@ Future<void> _downloadCore(BuildContext context) async {
     return;
   }
   if (result == true) {
-    // A successful install reports success — never the binary path.
-    showNukefySnack(context, s.t('coreInstalled'));
+    // The card above now shows "installed · version"; the snack just confirms.
+    final version = vpn.core?.version;
+    showNukefySnack(context, version == null ? s.t('coreInstalled') : '${s.t('coreInstalled')} · sing-box $version');
     return;
   }
   showNukefySnack(context, s.t('coreExtractFail'), error: true);
@@ -589,7 +673,6 @@ Future<void> _downloadCore(BuildContext context) async {
 
 Future<void> checkUpdatesFlow(BuildContext context, {bool silentIfCurrent = false}) async {
   final s = context.read<SettingsProvider>().strings;
-  final messenger = ScaffoldMessenger.of(context);
   try {
     final info = await UpdateService().check();
     if (!context.mounted) return;
@@ -597,50 +680,7 @@ Future<void> checkUpdatesFlow(BuildContext context, {bool silentIfCurrent = fals
       if (!silentIfCurrent) showNukefySnack(context, s.t('upToDate'));
       return;
     }
-    if (!context.mounted) return;
-    final start = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(s.t('updateAvailable')),
-        content: Text('${s.t('newVersion')}: ${info.version}\n\n${info.notes}'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(s.t('later'))),
-          if (!info.hasAsset)
-            TextButton(
-              onPressed: () {
-                launchUrl(Uri.parse(info.htmlUrl), mode: LaunchMode.externalApplication);
-                Navigator.pop(context, false);
-              },
-              child: Text(s.t('openRelease')),
-            ),
-          if (info.hasAsset)
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(s.t('download'))),
-        ],
-      ),
-    );
-    if (start != true || !context.mounted) return;
-    final file = await showDialog<Object?>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _TaskProgressDialog<File>(
-        title: s.t('updateTitle'),
-        subtitle: '${s.t('newVersion')} ${info.version}',
-        strings: s,
-        task: (onProgress) => UpdateService().download(info, onProgress: onProgress),
-      ),
-    );
-    if (file is! File || !context.mounted) {
-      if (file is String && context.mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(file)));
-      }
-      return;
-    }
-    if (Platform.isAndroid && file.path.endsWith('.apk')) {
-      await VpnPlatform().installApk(file.path);
-    } else {
-      await VpnPlatform().revealFile(file.path);
-    }
-    if (context.mounted) showNukefySnack(context, s.t('ready'));
+    await UpdateScreen.open(context, info);
   } on Exception catch (error) {
     if (silentIfCurrent || !context.mounted) return;
     final message = '$error'.contains('404') ? s.t('noReleases') : s.t('networkError');

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -20,6 +21,10 @@ final navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isAndroid || Platform.isIOS) {
+    // Draw behind the status and gesture bars; colours come from AppTheme.overlay.
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  }
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
     const options = WindowOptions(

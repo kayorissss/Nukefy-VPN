@@ -76,15 +76,20 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
     await refreshCore();
     final info = core;
-    final forceProxy = info == null || !info.libbox && Platform.isAndroid;
     if (info == null || !info.available) {
       status = VpnStatus.error;
-      errorMessage = 'CORE_MISSING';
+      // Android builds carry the core inside the APK; if it is absent the
+      // user has a stripped build, which is a different problem from a
+      // desktop that simply has not downloaded sing-box yet.
+      errorMessage = Platform.isAndroid ? 'LIBBOX_MISSING' : 'CORE_MISSING';
       mode = 'missing';
       notifyListeners();
       return;
     }
-    if (Platform.isAndroid && settings.settings.tunEnabled && info.libbox) {
+    // Android always runs through libbox + VpnService; desktop uses the
+    // system TUN whenever the user has it enabled.
+    final useTun = Platform.isAndroid ? info.libbox : settings.settings.tunEnabled;
+    if (Platform.isAndroid && useTun) {
       final ready = await _platform.prepareVpn();
       if (!ready) {
         status = VpnStatus.disconnected;
@@ -103,12 +108,12 @@ class VpnProvider extends ChangeNotifier {
       settings: settings.settings,
       logPath: '${dir.path}/sing-box.log',
       cachePath: '${dir.path}/cache.db',
-      desktopTun: !Platform.isAndroid,
-      forceProxyOnly: forceProxy && !info.libbox,
+      desktopTun: !Platform.isAndroid && useTun,
+      forceProxyOnly: !useTun,
     );
     final result = await _platform.start(
       configJson: json,
-      preferTun: settings.settings.tunEnabled && info.libbox || !Platform.isAndroid,
+      preferTun: useTun,
       serverName: server.name,
       serverHost: server.address,
       serverPort: server.port,

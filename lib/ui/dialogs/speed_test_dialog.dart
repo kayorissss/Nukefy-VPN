@@ -99,7 +99,7 @@ class _SpeedDialogState extends State<_SpeedDialog> {
                   children: [
                     Text('↓ ${FormatUtils.speed(_result!.downloadBps)}', style: AppTextStyles.monoValue.copyWith(color: AppColors.success, fontSize: 18)),
                     const SizedBox(height: 6),
-                    Text('↑ ${FormatUtils.speed(_result!.uploadBps)}', style: AppTextStyles.monoValue.copyWith(color: AppColors.cyan, fontSize: 18)),
+                    Text('↑ ${FormatUtils.speed(_result!.uploadBps)}', style: AppTextStyles.monoValue.copyWith(color: context.palette.accent, fontSize: 18)),
                     const SizedBox(height: 6),
                     Text(FormatUtils.bytes(_result!.bytes), style: AppTextStyles.bodySecondary),
                   ],

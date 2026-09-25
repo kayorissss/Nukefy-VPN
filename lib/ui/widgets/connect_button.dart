@@ -78,17 +78,19 @@ class _ConnectButtonState extends State<ConnectButton>
     super.dispose();
   }
 
-  Color get _color {
+  Color _colorOf(NukefyPalette p) {
     return switch (widget.status) {
-      VpnStatus.connected => AppColors.success,
-      VpnStatus.connecting => AppColors.cyan,
+      VpnStatus.connected => p.success,
+      VpnStatus.connecting => p.accent,
       VpnStatus.error => AppColors.error,
-      VpnStatus.disconnected => AppColors.border,
+      VpnStatus.disconnected => p.isDark ? const Color(0xFF3A4352) : const Color(0xFFB8C0CC),
     };
   }
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
+    final color = _colorOf(p);
     return AnimatedBuilder(
       animation: Listenable.merge([_spin, _pulse, _shake]),
       builder: (context, _) {
@@ -103,45 +105,65 @@ class _ConnectButtonState extends State<ConnectButton>
               HapticFeedback.selectionClick();
               widget.onPressed();
             },
-            child: SizedBox(
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 200),
+              scale: widget.status == VpnStatus.connecting ? 0.97 : 1,
+              child: SizedBox(
               width: 188,
               height: 188,
               child: CustomPaint(
                 painter: _RingPainter(
-                  color: _color,
+                  color: color,
                   spin: _spin.value,
                   glow: glow,
                   connected: widget.status == VpnStatus.connected,
                   connecting: widget.status == VpnStatus.connecting,
                 ),
                 child: Center(
-                  child: Container(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeOutCubic,
                     width: 124,
                     height: 124,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: const Color(0xFF141414),
-                      border: Border.all(color: _color, width: 1.4),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: p.isDark
+                            ? const [Color(0xFF171C25), Color(0xFF0E1218)]
+                            : const [Colors.white, Color(0xFFE9EDF3)],
+                      ),
+                      border: Border.all(color: color, width: 1.6),
                       boxShadow: [
                         BoxShadow(
-                          color: _color.withValues(alpha: glow * 0.7),
-                          blurRadius: 28,
+                          color: color.withValues(alpha: glow * 0.7),
+                          blurRadius: 30,
                           spreadRadius: 1,
                         ),
+                        if (!p.isDark)
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
                       ],
                     ),
-                    child: Icon(
-                      Icons.power_settings_new_rounded,
-                      size: 48,
-                      color: widget.status == VpnStatus.disconnected
-                          ? AppColors.textSecondary
-                          : Colors.white,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      child: Icon(
+                        Icons.power_settings_new_rounded,
+                        key: ValueKey(widget.status == VpnStatus.disconnected),
+                        size: 48,
+                        color: widget.status == VpnStatus.disconnected ? p.textSecondary : color,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
+        ),
         );
       },
     );

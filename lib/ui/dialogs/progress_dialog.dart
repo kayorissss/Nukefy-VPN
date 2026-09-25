@@ -50,13 +50,13 @@ class NukefyProgressDialog extends StatelessWidget {
                     child: CircularProgressIndicator(
                       value: progress == null || (progress!.total <= 0 && !done) ? null : fraction,
                       strokeWidth: 7,
-                      backgroundColor: AppColors.border,
-                      color: done ? AppColors.success : AppColors.cyan,
+                      backgroundColor: context.palette.border,
+                      color: done ? context.palette.success : context.palette.accent,
                     ),
                   ),
                   Text(
                     done ? '100%' : '$percent%',
-                    style: AppTextStyles.monoValue.copyWith(fontSize: 22, color: AppColors.cyan),
+                    style: AppTextStyles.number.copyWith(fontSize: 22, color: context.palette.accent),
                   ),
                 ],
               ),

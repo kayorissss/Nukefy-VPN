@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/services/vpn_platform.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 
 class PerAppScreen extends StatefulWidget {
@@ -42,6 +43,25 @@ class _PerAppScreenState extends State<PerAppScreen> {
       appBar: AppBar(title: Text(s.t('perApp'))),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: context.palette.accent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: context.palette.accent.withValues(alpha: 0.25)),
+              ),
+              child: Text(
+                switch (mode) {
+                  PerAppMode.off => s.t('perAppExplainOff'),
+                  PerAppMode.include => s.t('perAppExplainInclude'),
+                  PerAppMode.exclude => s.t('perAppExplainExclude'),
+                },
+                style: AppTextStyles.bodySecondary.copyWith(color: context.palette.text),
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: SegmentedButton<PerAppMode>(

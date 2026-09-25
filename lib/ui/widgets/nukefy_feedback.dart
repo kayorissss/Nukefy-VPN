@@ -9,7 +9,7 @@ void showNukefySnack(BuildContext context, String message, {bool error = false})
     ..showSnackBar(
       SnackBar(
         content: Text(message, style: AppTextStyles.bodyRegular),
-        backgroundColor: error ? const Color(0xFF2A1218) : AppColors.surface,
+        backgroundColor: error ? AppColors.error.withValues(alpha: 0.9) : context.palette.surface,
       ),
     );
 }

@@ -1,7 +1,7 @@
 name: nukefy_vpn
 description: Nukefy VPN — клиент sing-box для VLESS Reality, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, WireGuard и AmneziaWG.
 publish_to: "none"
-version: 1.0.1+2
+version: 2.0.0+3
 
 environment:
   sdk: ">=3.13.0 <4.0.0"
@@ -44,12 +44,28 @@ flutter:
     - assets/icons/
     - assets/fonts/
   fonts:
-    - family: Inter
+    - family: Unbounded
       fonts:
-        - asset: assets/fonts/Inter.ttf
-    - family: SpaceGrotesk
+        - asset: assets/fonts/Unbounded-400.ttf
+          weight: 400
+        - asset: assets/fonts/Unbounded-500.ttf
+          weight: 500
+        - asset: assets/fonts/Unbounded-600.ttf
+          weight: 600
+        - asset: assets/fonts/Unbounded-700.ttf
+          weight: 700
+        - asset: assets/fonts/Unbounded-800.ttf
+          weight: 800
+    - family: Montserrat
       fonts:
-        - asset: assets/fonts/SpaceGrotesk.ttf
+        - asset: assets/fonts/Montserrat-400.ttf
+          weight: 400
+        - asset: assets/fonts/Montserrat-500.ttf
+          weight: 500
+        - asset: assets/fonts/Montserrat-600.ttf
+          weight: 600
+        - asset: assets/fonts/Montserrat-700.ttf
+          weight: 700
     - family: JetBrainsMono
       fonts:
         - asset: assets/fonts/JetBrainsMono.ttf

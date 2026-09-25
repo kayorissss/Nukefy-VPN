@@ -36,7 +36,10 @@ class SingboxConfigBuilder {
     required bool desktopTun,
     required bool forceProxyOnly,
   }) {
-    final useTun = settings.tunEnabled && !forceProxyOnly;
+    // The caller decides whether TUN is possible; `forceProxyOnly` is the
+    // single switch (Android always has TUN via VpnService, desktop follows
+    // the user setting).
+    final useTun = !forceProxyOnly;
     final proxy = _tagged(_cloneOutbound(server), 'proxy');
     _applyMuxAndFragment(proxy, settings);
     if (detour != null) {

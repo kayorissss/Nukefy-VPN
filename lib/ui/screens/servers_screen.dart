@@ -1,24 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/server_model.dart';
 import '../../core/models/subscription_model.dart';
 import '../../core/models/vpn_status.dart';
+import '../../core/providers/nav_provider.dart';
 import '../../core/providers/servers_provider.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/vpn_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
-import '../../core/utils/geo_utils.dart';
 import '../../core/utils/share_link_builder.dart';
 import '../dialogs/speed_test_dialog.dart';
 import '../import_actions.dart';
+import '../widgets/country_badge.dart';
 import '../widgets/nukefy_feedback.dart';
 import '../widgets/ping_badge.dart';
+import '../widgets/section_card.dart';
 import 'qr_scanner_screen.dart';
 import 'server_edit_screen.dart';
 
@@ -32,7 +33,9 @@ class ServersScreen extends StatelessWidget {
     final s = settings.strings;
     final visible = _ordered(servers, settings.settings.antiblock && settings.settings.preferBridge);
     final subs = servers.orderedSubscriptions;
+    final bottom = MediaQuery.paddingOf(context).bottom;
     return SafeArea(
+      bottom: false,
       child: RefreshIndicator(
         onRefresh: () async {
           await servers.refreshAll();
@@ -42,7 +45,7 @@ class ServersScreen extends StatelessWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               sliver: SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,7 +72,7 @@ class ServersScreen extends StatelessWidget {
                               value: 'manual',
                               child: Row(
                                 children: [
-                                  const Icon(Icons.edit_rounded, size: 18, color: AppColors.cyan),
+                                  Icon(Icons.edit_rounded, size: 18, color: context.palette.accent),
                                   const SizedBox(width: 10),
                                   Text(s.t('enterManually')),
                                 ],
@@ -79,7 +82,7 @@ class ServersScreen extends StatelessWidget {
                               value: 'file',
                               child: Row(
                                 children: [
-                                  const Icon(Icons.folder_open_rounded, size: 18, color: AppColors.cyan),
+                                  Icon(Icons.folder_open_rounded, size: 18, color: context.palette.accent),
                                   const SizedBox(width: 10),
                                   Text(s.t('importFile')),
                                 ],
@@ -89,7 +92,7 @@ class ServersScreen extends StatelessWidget {
                               value: 'ping',
                               child: Row(
                                 children: [
-                                  const Icon(Icons.network_ping_rounded, size: 18, color: AppColors.cyan),
+                                  Icon(Icons.speed_rounded, size: 18, color: context.palette.accent),
                                   const SizedBox(width: 10),
                                   Text(s.t('checkPing')),
                                 ],
@@ -135,59 +138,7 @@ class ServersScreen extends StatelessWidget {
                         prefixIcon: const Icon(Icons.search_rounded),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        FilterChip(
-                          label: Text(s.t('sortPing')),
-                          selected: servers.sort == 'ping',
-                          onSelected: (_) => servers.setSort(servers.sort == 'ping' ? 'manual' : 'ping'),
-                        ),
-                        FilterChip(
-                          label: Text(s.t('onlyOnline')),
-                          selected: servers.onlyAvailable,
-                          onSelected: (v) => servers.setFilters(availableOnly: v),
-                        ),
-                        PopupMenuButton<String>(
-                          child: Chip(label: Text(servers.protocolFilter ?? s.t('protocol'))),
-                          onSelected: (value) => servers.setFilters(
-                            protocol: value == '*' ? null : value,
-                            clearProtocol: value == '*',
-                          ),
-                          itemBuilder: (context) => [
-                            PopupMenuItem(value: '*', child: Text(s.t('all'))),
-                            for (final protocol in servers.protocols)
-                              PopupMenuItem(value: protocol, child: Text(FormatUtils.protocolLabel(protocol))),
-                          ],
-                        ),
-                        PopupMenuButton<String>(
-                          child: Chip(label: Text(servers.countryFilter ?? s.t('country'))),
-                          onSelected: (value) => servers.setFilters(
-                            country: value == '*' ? null : value,
-                            clearCountry: value == '*',
-                          ),
-                          itemBuilder: (context) => [
-                            PopupMenuItem(value: '*', child: Text(s.t('all'))),
-                            for (final country in servers.countries)
-                              PopupMenuItem(value: country, child: Text(country)),
-                          ],
-                        ),
-                        FilterChip(
-                          label: Text(s.t('antiblock')),
-                          selected: servers.onlyAntiblock,
-                          onSelected: (v) => servers.setFilters(antiblockOnly: v),
-                        ),
-                        if (servers.protocolFilter != null)
-                          FilterChip(
-                            label: Text(FormatUtils.protocolLabel(servers.protocolFilter!)),
-                            selected: true,
-                            onSelected: (_) => servers.setFilters(clearProtocol: true),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                   ],
                 ),
               ),
@@ -201,7 +152,7 @@ class ServersScreen extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.cloud_off_rounded, size: 42, color: AppColors.textSecondary),
+                        Icon(Icons.cloud_off_rounded, size: 42, color: context.palette.textSecondary),
                         const SizedBox(height: 12),
                         Text(s.t('emptyServers'), style: AppTextStyles.headline),
                         const SizedBox(height: 6),
@@ -227,7 +178,7 @@ class ServersScreen extends StatelessWidget {
                   antiblock: settings.settings.antiblock,
                 ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              SliverToBoxAdapter(child: SizedBox(height: bottom + 100)),
             ],
           ],
         ),
@@ -256,30 +207,43 @@ class _BigAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Material(
-      color: AppColors.cyan.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(14),
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(18),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         onTap: onTap,
-        child: Container(
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Ink(
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.cyan.withValues(alpha: 0.45)),
+            borderRadius: BorderRadius.circular(18),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [p.accent.withValues(alpha: 0.18), p.accent2.withValues(alpha: 0.10)],
+            ),
+            border: Border.all(color: p.accent.withValues(alpha: 0.35)),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 20, color: AppColors.cyan),
-              const SizedBox(width: 8),
-              Flexible(
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: p.accent.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 20, color: p.accent),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
                 child: Text(
                   label,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600),
+                  style: AppTextStyles.button.copyWith(fontSize: 11.5, color: p.text),
                 ),
               ),
             ],
@@ -324,6 +288,7 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
   Widget build(BuildContext context) {
     final s = context.watch<SettingsProvider>().strings;
     final provider = context.watch<ServersProvider>();
+    final p = context.palette;
     final sub = widget.subscription;
     final updated = sub.lastUpdated == null
         ? '—'
@@ -332,25 +297,32 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Theme.of(context).dividerColor),
+          color: p.card,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: p.border),
         ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             InkWell(
-              borderRadius: BorderRadius.circular(16),
               onTap: () => setState(() => _open = !_open),
+              onLongPress: () => _subscriptionMenu(context, sub),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
                 child: Row(
                   children: [
-                    Text(
-                      '${widget.number}.',
-                      style: AppTextStyles.monoValue.copyWith(color: AppColors.textSecondary),
+                    Container(
+                      width: 30,
+                      height: 30,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: p.accent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text('${widget.number}', style: AppTextStyles.number.copyWith(color: p.accent, fontSize: 12)),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     // Long press opens the subscription settings.
                     Expanded(
                       child: GestureDetector(
@@ -376,43 +348,37 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    SizedBox(
-                      height: 34,
-                      child: OutlinedButton(
-                        onPressed: provider.refreshing ? null : () => provider.refreshSubscription(sub.id),
-                        child: provider.refreshing
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Text(s.t('updateSub'), style: const TextStyle(fontSize: 12.5)),
-                      ),
+                    IconButton(
+                      tooltip: s.t('updateSub'),
+                      onPressed: provider.refreshing ? null : () => provider.refreshSubscription(sub.id),
+                      icon: provider.refreshing
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : Icon(Icons.refresh_rounded, size: 21, color: p.accent),
                     ),
                     IconButton(
                       tooltip: s.t('checkPing'),
                       onPressed: _pinging ? null : _ping,
                       icon: _pinging
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.network_ping_rounded, size: 20, color: AppColors.cyan),
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : Icon(Icons.speed_rounded, size: 21, color: p.accent),
                     ),
-                    IconButton(
-                      tooltip: s.t('actions'),
-                      onPressed: () => setState(() => _open = !_open),
-                      icon: Icon(
-                        _open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                        color: AppColors.textSecondary,
-                      ),
+                    AnimatedRotation(
+                      duration: const Duration(milliseconds: 220),
+                      turns: _open ? 0 : -0.5,
+                      child: Icon(Icons.expand_less_rounded, color: p.textSecondary),
                     ),
+                    const SizedBox(width: 6),
                   ],
                 ),
               ),
             ),
-            if (_open) ...[
+            AnimatedSize(
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: !_open ? const SizedBox(width: double.infinity) : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               if (sub.lastError != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
@@ -422,12 +388,11 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
                   ),
                 ),
               for (final server in widget.servers)
-                ServerTile(server: server, antiblock: widget.antiblock)
-                    .animate()
-                    .fadeIn(duration: 220.ms)
-                    .slideX(begin: 0.04),
+                ServerTile(server: server, antiblock: widget.antiblock),
               const SizedBox(height: 8),
-            ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -449,7 +414,7 @@ class _ManualBlock extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(s.t('manualServers').toUpperCase(), style: AppTextStyles.section),
+          Padding(padding: const EdgeInsets.only(left: 4), child: Text(s.t('manualServers').toUpperCase(), style: AppTextStyles.section.copyWith(color: context.palette.textSecondary))),
           const SizedBox(height: 8),
           for (final server in servers) ServerTile(server: server, antiblock: antiblock),
         ],
@@ -467,83 +432,160 @@ class ServerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsProvider>().strings;
-    final selected = context.watch<VpnProvider>().activeServerId == server.id;
+    final vpn = context.watch<VpnProvider>();
+    final p = context.palette;
+    final selected = vpn.activeServerId == server.id;
+    final connected = selected && vpn.status == VpnStatus.connected;
     final dim = server.isTimeout;
     final label = server.isBridge
         ? s.t('bridgeWorks')
         : (antiblock && dim ? s.t('jammer') : null);
-    return Opacity(
-      opacity: dim ? 0.55 : 1,
-      child: ListTile(
-        onTap: () => _actions(context, server),
-        onLongPress: () => _actions(context, server),
-        leading: Text(GeoUtils.flagEmoji(server.countryCode), style: const TextStyle(fontSize: 22)),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                server.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.bodyRegular.copyWith(
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        color: selected ? p.accent.withValues(alpha: 0.10) : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          // Tap connects straight away; long press opens the actions.
+          onTap: () => _tapServer(context, server),
+          onLongPress: () => _actions(context, server),
+          child: Opacity(
+            opacity: dim ? 0.6 : 1,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 10, 8),
+              child: Row(
+                children: [
+                  CountryBadge(code: server.countryCode, size: 40),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                server.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.bodyRegular.copyWith(
+                                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            if (server.isNew) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: p.accent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(s.t('newBadge'), style: AppTextStyles.tab.copyWith(color: p.accent, fontSize: 8.5)),
+                              ),
+                            ],
+                            if (server.isBridge) ...[
+                              const SizedBox(width: 6),
+                              Icon(Icons.shield_rounded, size: 14, color: p.success),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          [FormatUtils.protocolLabel(server.protocol), ?label].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (connected)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Icon(Icons.bolt_rounded, size: 18, color: p.success),
+                    ),
+                  PingBadge(pingMs: server.pingMs, compact: true),
+                ],
               ),
             ),
-            if (server.isNew)
-              Container(
-                margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.cyan.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(s.t('newBadge'), style: AppTextStyles.monoValue.copyWith(color: AppColors.cyan, fontSize: 10)),
-              ),
-            if (server.isBridge)
-              const Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: Text('🛡️', style: TextStyle(fontSize: 14)),
-              ),
-          ],
+          ),
         ),
-        subtitle: Text(
-          [
-            FormatUtils.protocolLabel(server.protocol),
-            ?label,
-          ].join(' · '),
-          style: AppTextStyles.bodySecondary,
-        ),
-        trailing: PingBadge(pingMs: server.pingMs, compact: true),
       ),
     );
   }
 }
 
+Future<void> _tapServer(BuildContext context, ServerModel server) async {
+  final vpn = context.read<VpnProvider>();
+  if (vpn.activeServerId == server.id && vpn.status == VpnStatus.connected) {
+    // Already on this server — nothing to do; show the actions instead.
+    await _actions(context, server);
+    return;
+  }
+  HapticFeedback.selectionClick();
+  await vpn.connect(server);
+  if (context.mounted) context.read<NavProvider>().setIndex(0);
+}
+
 Future<void> _actions(BuildContext context, ServerModel server) async {
   final s = context.read<SettingsProvider>().strings;
+  final vpn = context.read<VpnProvider>();
+  final p = context.palette;
+  final manual = server.subscriptionId == null;
+  final connected = vpn.activeServerId == server.id && vpn.status == VpnStatus.connected;
   final action = await showModalBottomSheet<String>(
     context: context,
-    showDragHandle: true,
-    builder: (context) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(leading: const Icon(Icons.play_arrow_rounded, color: AppColors.cyan), title: Text(s.t('connect')), onTap: () => Navigator.pop(context, 'connect')),
-          ListTile(leading: const Icon(Icons.push_pin_outlined), title: Text(server.isPinned ? s.t('unpin') : s.t('pin')), onTap: () => Navigator.pop(context, 'pin')),
-          ListTile(leading: const Icon(Icons.edit_outlined), title: Text(s.t('edit')), onTap: () => Navigator.pop(context, 'edit')),
-          ListTile(leading: const Icon(Icons.copy_rounded), title: Text(s.t('copyLink')), onTap: () => Navigator.pop(context, 'copy')),
-          ListTile(leading: const Icon(Icons.speed_rounded), title: Text(s.t('speedTest')), onTap: () => Navigator.pop(context, 'speed')),
-          ListTile(leading: const Icon(Icons.delete_outline_rounded, color: AppColors.error), title: Text(s.t('delete')), onTap: () => Navigator.pop(context, 'delete')),
-        ],
-      ),
+    useSafeArea: true,
+    constraints: const BoxConstraints(maxWidth: 560),
+    builder: (context) => Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          child: Row(
+            children: [
+              CountryBadge(code: server.countryCode, size: 40),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(server.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.headline.copyWith(fontSize: 15)),
+                    Text('${FormatUtils.protocolLabel(server.protocol)} · ${server.address}:${server.port}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        ListTile(
+          leading: Icon(connected ? Icons.power_settings_new_rounded : Icons.play_arrow_rounded, color: connected ? AppColors.error : p.accent),
+          title: Text(connected ? s.t('disconnect') : s.t('connect')),
+          onTap: () => Navigator.pop(context, connected ? 'disconnect' : 'connect'),
+        ),
+        ListTile(leading: const Icon(Icons.speed_rounded), title: Text(s.t('speedTest')), onTap: () => Navigator.pop(context, 'speed')),
+        ListTile(leading: const Icon(Icons.push_pin_outlined), title: Text(server.isPinned ? s.t('unpin') : s.t('pin')), onTap: () => Navigator.pop(context, 'pin')),
+        ListTile(leading: const Icon(Icons.copy_rounded), title: Text(s.t('copyLink')), onTap: () => Navigator.pop(context, 'copy')),
+        // Editing raw JSON only makes sense for servers added by hand;
+        // subscription entries are overwritten on the next refresh anyway.
+        if (manual) ListTile(leading: const Icon(Icons.edit_outlined), title: Text(s.t('edit')), onTap: () => Navigator.pop(context, 'edit')),
+        if (manual) ListTile(leading: const Icon(Icons.delete_outline_rounded, color: AppColors.error), title: Text(s.t('delete')), onTap: () => Navigator.pop(context, 'delete')),
+        const SizedBox(height: 8),
+      ],
     ),
   );
   if (!context.mounted || action == null) return;
   final servers = context.read<ServersProvider>();
   switch (action) {
     case 'connect':
-      await context.read<VpnProvider>().connect(server);
+      await vpn.connect(server);
+      if (context.mounted) context.read<NavProvider>().setIndex(0);
+    case 'disconnect':
+      await vpn.disconnect();
     case 'pin':
       await servers.togglePin(server.id);
     case 'edit':
@@ -581,7 +623,7 @@ Future<void> _subscriptionMenu(BuildContext context, SubscriptionModel sub) asyn
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
             child: Row(
               children: [
-                const Icon(Icons.link_rounded, size: 18, color: AppColors.cyan),
+                Icon(Icons.link_rounded, size: 18, color: context.palette.accent),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -668,13 +710,15 @@ Future<void> _editSubscription(BuildContext context, SubscriptionModel sub) asyn
               const SizedBox(height: 8),
               TextField(controller: ua, decoration: InputDecoration(labelText: s.t('userAgent'))),
               const SizedBox(height: 8),
-              DropdownButton<UpdateInterval>(
-                value: interval,
-                isExpanded: true,
-                items: UpdateInterval.values
-                    .map((e) => DropdownMenuItem(value: e, child: Text(_intervalLabel(s, e))))
-                    .toList(),
-                onChanged: (value) => setState(() => interval = value ?? interval),
+              Row(
+                children: [
+                  Expanded(child: Text(s.t('interval'), style: AppTextStyles.bodySecondary)),
+                  NukefyDropdown<UpdateInterval>(
+                    value: interval,
+                    items: {for (final e in UpdateInterval.values) e: _intervalLabel(s, e)},
+                    onChanged: (value) => setState(() => interval = value),
+                  ),
+                ],
               ),
             ],
           ),
