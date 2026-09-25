@@ -1,0 +1,56 @@
+Analyzing Nukefy-VPN...                                         
+
+   info • Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?' • lib/core/services/singbox_config_builder.dart:292:9 • use_null_aware_elements
+   info • Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?' • lib/core/services/singbox_config_builder.dart:307:11 • use_null_aware_elements
+   info • Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?' • lib/core/services/singbox_config_builder.dart:316:11 • use_null_aware_elements
+   info • Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?' • lib/core/services/singbox_config_builder.dart:323:11 • use_null_aware_elements
+   info • Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?' • lib/core/services/singbox_config_builder.dart:324:11 • use_null_aware_elements
+  error • Invalid constant value • lib/core/theme/app_theme.dart:319:31 • invalid_constant
+  error • The method 'CupertinoPageTransitionsBuilder' isn't defined for the type 'AppTheme'. Try correcting the name to the name of an existing method, or defining a method named 'CupertinoPageTransitionsBuilder' • lib/core/theme/app_theme.dart:319:31 • undefined_method
+  error • The values in a const map literal must be constant. Try removing the keyword 'const' from the map literal • lib/core/theme/app_theme.dart:319:31 • non_constant_map_value
+   info • Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?' • lib/core/utils/link_parser.dart:402:7 • use_null_aware_elements
+   info • Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?' • lib/core/utils/link_parser.dart:873:7 • use_null_aware_elements
+   info • 'TrayListener' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:22:75 • deprecated_member_use
+   info • 'trayManager' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:28:5 • deprecated_member_use
+   info • 'trayManager' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:41:11 • deprecated_member_use
+   info • 'trayManager' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:42:11 • deprecated_member_use
+   info • 'trayManager' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:50:11 • deprecated_member_use
+   info • 'Menu' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:51:7 • deprecated_member_use
+   info • 'MenuItem' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:53:11 • deprecated_member_use
+   info • 'MenuItem' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:54:11 • deprecated_member_use
+   info • 'MenuItem' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:55:11 • deprecated_member_use
+   info • 'MenuItem' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:56:11 • deprecated_member_use
+   info • 'trayManager' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:66:7 • deprecated_member_use
+   info • 'trayManager' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:89:5 • deprecated_member_use
+   info • 'MenuItem' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:93:28 • deprecated_member_use
+warning • The value of the local variable 'p' isn't used. Try removing the variable or using it • lib/ui/screens/main_shell.dart:28:11 • unused_local_variable
+   info • 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement • lib/ui/screens/routing_screen.dart:28:15 • deprecated_member_use
+   info • 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement • lib/ui/screens/routing_screen.dart:31:15 • deprecated_member_use
+  error • The name 'ThemePreference' isn't a type, so it can't be used as a type argument. Try correcting the name to an existing type, or defining a type named 'ThemePreference' • lib/ui/screens/settings_screen.dart:55:44 • non_type_as_type_argument
+  error • Undefined name 'ThemePreference'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:58:23 • undefined_identifier
+  error • Undefined name 'ThemePreference'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:59:23 • undefined_identifier
+  error • Undefined name 'ThemePreference'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:60:23 • undefined_identifier
+  error • A value of type 'Object?' can't be assigned to a variable of type 'ThemePreference'. Try changing the type of the variable, or casting the right-hand type to 'ThemePreference' • lib/ui/screens/settings_screen.dart:62:81 • invalid_assignment
+  error • The name 'LanguagePreference' isn't a type, so it can't be used as a type argument. Try correcting the name to an existing type, or defining a type named 'LanguagePreference' • lib/ui/screens/settings_screen.dart:68:44 • non_type_as_type_argument
+  error • Undefined name 'LanguagePreference'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:71:23 • undefined_identifier
+  error • Undefined name 'LanguagePreference'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:72:23 • undefined_identifier
+  error • Undefined name 'LanguagePreference'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:73:23 • undefined_identifier
+  error • A value of type 'Object?' can't be assigned to a variable of type 'LanguagePreference'. Try changing the type of the variable, or casting the right-hand type to 'LanguagePreference' • lib/ui/screens/settings_screen.dart:75:84 • invalid_assignment
+  error • Undefined class 'RoutingMode'. Try changing the name to the name of an existing class, or creating a class with the name 'RoutingMode' • lib/ui/screens/settings_screen.dart:380:32 • undefined_class
+  error • Undefined name 'RoutingMode'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:382:7 • undefined_identifier
+  error • Undefined name 'RoutingMode'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:383:7 • undefined_identifier
+  error • Undefined name 'RoutingMode'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:384:7 • undefined_identifier
+  error • Undefined name 'RoutingMode'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:385:7 • undefined_identifier
+  error • Undefined class 'PerAppMode'. Try changing the name to the name of an existing class, or creating a class with the name 'PerAppMode' • lib/ui/screens/settings_screen.dart:389:34 • undefined_class
+  error • Undefined name 'PerAppMode'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:391:7 • undefined_identifier
+  error • Undefined name 'PerAppMode'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:392:7 • undefined_identifier
+  error • Undefined name 'PerAppMode'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/settings_screen.dart:393:7 • undefined_identifier
+  error • Undefined name 'p'. Try correcting the name to one that is defined, or defining the name • lib/ui/screens/stats_screen.dart:265:60 • undefined_identifier
+   info • Unnecessary use of multiple underscores. Try using '_' • lib/ui/screens/update_screen.dart:32:26 • unnecessary_underscores
+   info • Unnecessary use of multiple underscores. Try using '_' • lib/ui/screens/update_screen.dart:32:30 • unnecessary_underscores
+   info • Unnecessary use of multiple underscores. Try using '_' • lib/ui/screens/update_screen.dart:33:44 • unnecessary_underscores
+   info • Unnecessary use of multiple underscores. Try using '_' • lib/ui/screens/update_screen.dart:259:37 • unnecessary_underscores
+   info • Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?' • lib/ui/widgets/section_card.dart:49:15 • use_null_aware_elements
+
+51 issues found. (ran in 8.9s)
+analyze exit: 1
