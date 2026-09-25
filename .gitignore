@@ -1,0 +1,55 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Flutter/Dart/Pub
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication / obfuscation
+app.*.symbols
+app.*.map.json
+
+# Android
+/android/app/debug
+/android/app/profile
+/android/app/release
+/android/app/libs/*.aar
+/android/.gradle/
+/android/local.properties
+/android/captures/
+
+# Windows
+/windows/flutter/ephemeral/
+
+# Core binaries are downloaded at runtime, never committed
+/core/
+*.exe
+*.dll
+!windows/runner/resources/app_icon.ico
+
+# Preview server scratch
+/preview/.cache/

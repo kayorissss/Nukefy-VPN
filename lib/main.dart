@@ -1,0 +1,77 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
+
+import 'app.dart';
+import 'core/providers/nav_provider.dart';
+import 'core/providers/servers_provider.dart';
+import 'core/providers/settings_provider.dart';
+import 'core/providers/stats_provider.dart';
+import 'core/providers/vpn_provider.dart';
+import 'core/services/storage_service.dart';
+import 'core/services/subscription_service.dart';
+import 'core/services/vpn_platform.dart';
+import 'ui/desktop_shell.dart';
+import 'ui/screens/settings_screen.dart';
+
+final navigatorKey = GlobalKey<NavigatorState>();
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    await windowManager.ensureInitialized();
+    const options = WindowOptions(
+      size: Size(1100, 760),
+      minimumSize: Size(860, 640),
+      center: true,
+      title: 'Nukefy VPN',
+      backgroundColor: Color(0xFF0D0D0D),
+    );
+    windowManager.waitUntilReadyToShow(options, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
+
+  await StorageService.instance.init();
+  final settings = SettingsProvider(StorageService.instance);
+  final servers = ServersProvider(StorageService.instance, SubscriptionService());
+  final stats = StatsProvider(StorageService.instance);
+  final vpn = VpnProvider(VpnPlatform());
+  await Future.wait([
+    settings.load(),
+    servers.load(),
+    stats.load(),
+  ]);
+  vpn.bind(stats: stats, servers: servers, settings: settings);
+  await vpn.refreshCore();
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: settings),
+        ChangeNotifierProvider.value(value: servers),
+        ChangeNotifierProvider.value(value: stats),
+        ChangeNotifierProvider.value(value: vpn),
+        ChangeNotifierProvider(create: (_) => NavProvider()),
+      ],
+      child: DesktopShell(child: NukefyApp(navigatorKey: navigatorKey)),
+    ),
+  );
+
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    final action = await VpnPlatform().consumeLaunchAction();
+    final selected = servers.byId(settings.settings.selectedServerId);
+    if (action == 'toggle') {
+      await vpn.toggle();
+    } else if ((action == 'connect' || settings.settings.autoConnect) && selected != null) {
+      await vpn.connect(selected);
+    }
+    final context = navigatorKey.currentContext;
+    if (context != null && settings.settings.checkUpdatesOnStart) {
+      await checkUpdatesFlow(context, silentIfCurrent: true);
+    }
+  });
+}
