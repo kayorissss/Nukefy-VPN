@@ -29,8 +29,8 @@ class UpdateScreen extends StatefulWidget {
         fullscreenDialog: true,
         transitionDuration: const Duration(milliseconds: 380),
         reverseTransitionDuration: const Duration(milliseconds: 260),
-        pageBuilder: (_, __, ___) => UpdateScreen(info: info),
-        transitionsBuilder: (_, animation, __, child) {
+        pageBuilder: (_, _, _) => UpdateScreen(info: info),
+        transitionsBuilder: (_, animation, _, child) {
           final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
           return FadeTransition(
             opacity: curved,
@@ -256,7 +256,7 @@ class _Hero extends StatelessWidget {
                 tween: Tween(end: phase == _Phase.done ? 1 : fraction),
                 duration: const Duration(milliseconds: 400),
                 curve: Curves.easeOutCubic,
-                builder: (_, value, __) => CircularProgressIndicator(
+                builder: (_, value, _) => CircularProgressIndicator(
                   value: indeterminate ? null : value,
                   strokeWidth: 6,
                   strokeCap: StrokeCap.round,
