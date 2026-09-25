@@ -579,8 +579,12 @@ Future<void> _downloadCore(BuildContext context) async {
     showNukefySnack(context, _coreErrorText(s, result), error: true);
     return;
   }
-  // A successful install reports success — never the binary path.
-  showNukefySnack(context, s.t('coreInstalled'));
+  if (result == true) {
+    // A successful install reports success — never the binary path.
+    showNukefySnack(context, s.t('coreInstalled'));
+    return;
+  }
+  showNukefySnack(context, s.t('coreExtractFail'), error: true);
 }
 
 Future<void> checkUpdatesFlow(BuildContext context, {bool silentIfCurrent = false}) async {
