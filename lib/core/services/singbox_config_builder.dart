@@ -3,7 +3,6 @@ import 'dart:convert';
 import '../constants/app_constants.dart';
 import '../models/app_settings.dart';
 import '../models/server_model.dart';
-import '../models/vpn_status.dart';
 
 class SingboxConfigBuilder {
   static String buildJson({
@@ -389,7 +388,3 @@ class SingboxConfigBuilder {
     return jsonDecode(jsonEncode(source)) as Map<String, dynamic>;
   }
 }
-
-// Imported for the enum used above without a circular service import.
-// ignore: unused_import
-import '../models/vpn_status.dart';
