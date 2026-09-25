@@ -18,9 +18,9 @@ android {
 
     defaultConfig {
         applicationId = "com.nukefy.vpn"
-        // Product requirement is API 21. If the engine or a plugin merger rejects it,
-        // switch to maxOf(21, flutter.minSdkVersion) — the Flutter 3.47 engine floor is 24.
-        minSdk = 21
+        // The product asked for API 21. Flutter 3.47's engine and several plugins
+        // refuse anything below their own floor, so take the higher of the two.
+        minSdk = maxOf(21, flutter.minSdkVersion)
         targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
