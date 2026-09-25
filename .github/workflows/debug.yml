@@ -1,0 +1,38 @@
+name: Debug report
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [arena/01a0d977-nukefy-vpn]
+
+permissions:
+  contents: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: arena/01a0d977-nukefy-vpn
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.4
+          cache: true
+      - run: flutter pub get
+      - name: Run analyze and tests
+        run: |
+          set +e
+          flutter analyze > analyze-report.txt 2>&1
+          echo "analyze exit: $?" >> analyze-report.txt
+          echo "" >> analyze-report.txt
+          flutter test >> analyze-report.txt 2>&1
+          echo "test exit: $?" >> analyze-report.txt
+      - name: Push report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f analyze-report.txt
+          git diff --cached --quiet || git commit -m "chore: analyze report"
+          git push origin HEAD:arena/01a0d977-nukefy-vpn
