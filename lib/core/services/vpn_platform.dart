@@ -39,6 +39,17 @@ class CoreStartResult {
   final String? error;
 }
 
+/// Failure while fetching or unpacking the sing-box core. [code] is a stable
+/// key that the UI maps to a localized message.
+class CoreDownloadException implements Exception {
+  const CoreDownloadException(this.code);
+
+  final String code;
+
+  @override
+  String toString() => code;
+}
+
 class DownloadProgress {
   DownloadProgress({
     required this.received,
@@ -360,7 +371,7 @@ class VpnPlatform {
     final started = DateTime.now();
     await _dio.download(
       url,
-      archivePath,
+      archiveFile.path,
       options: Options(headers: const {'User-Agent': AppConstants.userAgent}),
       onReceiveProgress: (received, total) {
         onProgress?.call(DownloadProgress(
@@ -370,9 +381,16 @@ class VpnPlatform {
         ));
       },
     );
-    await _extractCore(File(archivePath), dir);
+    await _extractCore(archiveFile, dir);
+    if (archiveFile.existsSync()) {
+      try {
+        await archiveFile.delete();
+      } catch (_) {}
+    }
     final binary = await binaryPath();
-    if (binary == null) throw StateError('extract-failed');
+    if (binary == null) {
+      throw const CoreDownloadException('extract-failed');
+    }
     if (!Platform.isWindows) {
       await Process.run('chmod', ['755', binary]);
     }
@@ -384,49 +402,101 @@ class VpnPlatform {
     return binary;
   }
 
+  /// Picks the official sing-box CLI archive for this platform.
+  ///
+  /// The sing-box release also contains GUI apps (`SFA-1.x-arm64-v8a.apk`,
+  /// `SFW-1.x-x64.exe`) and Linux packages (`.deb`, `.rpm`). Matching only on
+  /// "android" + "arm64" used to pick the APK, which then failed to unpack with
+  /// `unsupported-archive`. Matching is done on full `-` separated segments of
+  /// the `sing-box-<version>-<os>-<arch>` name, so a 32-bit ARM device can
+  /// never be handed the `arm64` build.
   Map<String, dynamic>? _pickCoreAsset(List assets) {
-    final names = assets.whereType<Map>().map((e) {
-      return e.map((k, v) => MapEntry(k.toString(), v));
-    }).toList();
-    bool match(Map<String, dynamic> asset, List<String> needles) {
-      final name = '${asset['name']}'.toLowerCase();
-      return needles.every(name.contains);
-    }
+    final candidates = assets
+        .whereType<Map>()
+        .map((item) => item.map((k, v) => MapEntry(k.toString(), v)))
+        .where(_isSingboxCliAsset)
+        .toList(growable: false);
 
     if (Platform.isWindows) {
-      return names.cast<Map<String, dynamic>?>().firstWhere(
-            (asset) => match(asset!, ['windows', 'amd64', '.zip']),
-            orElse: () => null,
-          );
+      return _pickBySegments(candidates, const ['windows', 'amd64'], '.zip');
     }
     if (Platform.isAndroid) {
-      final abi = _androidAbi();
-      return names.cast<Map<String, dynamic>?>().firstWhere(
-            (asset) => match(asset!, ['android', abi]),
-            orElse: () => names.cast<Map<String, dynamic>?>().firstWhere(
-                  (asset) => match(asset!, ['android', 'arm64']),
-                  orElse: () => null,
-                ),
-          );
+      return _pickBySegments(
+        candidates,
+        ['android', _androidAssetArch()],
+        '.tar.gz',
+      );
     }
     if (Platform.isLinux) {
-      return names.cast<Map<String, dynamic>?>().firstWhere(
-            (asset) => match(asset!, ['linux', 'amd64']),
-            orElse: () => null,
-          );
+      return _pickBySegments(candidates, const ['linux', 'amd64'], '.tar.gz');
+    }
+    if (Platform.isMacOS) {
+      return _pickBySegments(candidates, const ['darwin', 'arm64'], '.tar.gz') ??
+          _pickBySegments(candidates, const ['darwin', 'amd64'], '.tar.gz');
     }
     return null;
   }
 
-  String _androidAbi() {
-    final arch = Abi.current();
-    switch (arch) {
+  /// Whether an asset is an unpackable sing-box CLI build.
+  static bool _isSingboxCliAsset(Map<String, dynamic> asset) {
+    final name = '${asset['name']}'.toLowerCase();
+    if (!name.startsWith('sing-box-')) return false;
+    for (final suffix in AppConstants.coreBlockedSuffixes) {
+      if (name.endsWith(suffix)) return false;
+    }
+    return name.endsWith('.tar.gz') || name.endsWith('.zip');
+  }
+
+  /// First asset whose name carries [segments] as whole `-` separated parts.
+  /// The shortest name wins, so `sing-box-1.14.2-windows-amd64.zip` beats
+  /// `sing-box-1.14.2-windows-amd64-legacy-windows-7.zip`.
+  static Map<String, dynamic>? _pickBySegments(
+    List<Map<String, dynamic>> assets,
+    List<String> segments,
+    String extension,
+  ) {
+    Map<String, dynamic>? picked;
+    var pickedLength = 1 << 30;
+    for (final asset in assets) {
+      final name = '${asset['name']}'.toLowerCase();
+      if (!name.endsWith(extension)) continue;
+      final stem = name.substring(0, name.length - extension.length);
+      if (!_hasSegments(stem, segments)) continue;
+      if (name.length < pickedLength) {
+        picked = asset;
+        pickedLength = name.length;
+      }
+    }
+    return picked;
+  }
+
+  static bool _hasSegments(String name, List<String> segments) {
+    final parts = name.split('-');
+    for (var i = 0; i + segments.length <= parts.length; i++) {
+      var matched = true;
+      for (var j = 0; j < segments.length; j++) {
+        if (parts[i + j] != segments[j]) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) return true;
+    }
+    return false;
+  }
+
+  /// Asset arch segment matching the device ABI. 32-bit ARM is `arm`, not
+  /// `armv7` and definitely not `arm64`.
+  static String _androidAssetArch() {
+    switch (Abi.current()) {
       case Abi.androidArm64:
         return 'arm64';
       case Abi.androidArm:
-        return 'armv7';
+        return 'arm';
       case Abi.androidX64:
         return 'amd64';
+      case Abi.androidIA32:
+        return '386';
       default:
         return 'arm64';
     }
@@ -442,7 +512,7 @@ class VpnPlatform {
       final tar = GZipDecoder().decodeBytes(bytes);
       archive = TarDecoder().decodeBytes(tar);
     } else {
-      throw StateError('unsupported-archive');
+      throw const CoreDownloadException('unsupported-archive');
     }
     for (final file in archive) {
       if (!file.isFile) continue;

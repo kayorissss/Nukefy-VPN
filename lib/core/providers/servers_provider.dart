@@ -113,13 +113,71 @@ class ServersProvider extends ChangeNotifier {
     return list;
   }
 
+  /// Pinned subscriptions first, everything else in the order the user set
+  /// with «Выше» / «Ниже». `List.sort` is not stable, so the stored index is
+  /// compared explicitly.
   List<SubscriptionModel> get orderedSubscriptions {
     final list = List<SubscriptionModel>.from(subscriptions);
+    final stored = <String, int>{
+      for (var i = 0; i < list.length; i++) list[i].id: i,
+    };
     list.sort((a, b) {
       if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      return (stored[a.id] ?? 0).compareTo(stored[b.id] ?? 0);
     });
     return list;
+  }
+
+  bool canMoveSubscriptionUp(String id) {
+    final list = orderedSubscriptions;
+    return list.indexWhere((e) => e.id == id) > 0;
+  }
+
+  bool canMoveSubscriptionDown(String id) {
+    final list = orderedSubscriptions;
+    final index = list.indexWhere((e) => e.id == id);
+    return index >= 0 && index < list.length - 1;
+  }
+
+  /// Swaps the subscription with its neighbour. Moving across the pinned
+  /// boundary swaps the pinned flag too, otherwise the sort would put the row
+  /// straight back where it was.
+  Future<void> moveSubscription(String id, {required bool up}) async {
+    final list = orderedSubscriptions;
+    final index = list.indexWhere((e) => e.id == id);
+    if (index < 0) return;
+    final target = up ? index - 1 : index + 1;
+    if (target < 0 || target >= list.length) return;
+    final moving = list[index];
+    final neighbour = list[target];
+    final pinned = moving.isPinned;
+    moving.isPinned = neighbour.isPinned;
+    neighbour.isPinned = pinned;
+    list.removeAt(index);
+    list.insert(target, moving);
+    subscriptions = list;
+    await _persist();
+    notifyListeners();
+  }
+
+  /// Pings only the servers of one subscription.
+  Future<void> pingSubscription(String id) async {
+    final targets = serversOf(id);
+    if (targets.isEmpty) return;
+    await PingUtils.pingAll(
+      targets.map((s) => (id: s.id, host: s.address, port: s.port)).toList(),
+      onEach: (serverId, ms) {
+        final server = byId(serverId);
+        if (server == null) return;
+        server
+          ..pingMs = ms
+          ..lastPingAt = DateTime.now()
+          ..isNew = false;
+        notifyListeners();
+      },
+    );
+    await _persist();
+    notifyListeners();
   }
 
   Future<int> addDrafts(

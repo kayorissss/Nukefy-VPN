@@ -37,6 +37,50 @@ class SettingsScreen extends StatelessWidget {
         children: [
           Text(s.t('settings'), style: AppTextStyles.title),
           const SizedBox(height: 14),
+          // The core has to be downloaded before anything else works, so it
+          // sits at the very top instead of hiding under MUX and Telegram.
+          SectionCard(
+            title: s.t('core'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  vpn.core == null
+                      ? s.t('checking')
+                      : vpn.core!.available
+                          ? '${s.t('coreReady')}${vpn.core!.version == null ? '' : ' · ${vpn.core!.version}'}'
+                          : s.t('coreMissing'),
+                  style: AppTextStyles.bodyRegular,
+                ),
+                const SizedBox(height: 6),
+                Text(Platform.isAndroid ? s.t('coreAndroid') : s.t('coreWindows'), style: AppTextStyles.bodySecondary),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: vpn.coreBusy ? null : () => _downloadCore(context),
+                    icon: vpn.coreBusy
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.download_rounded),
+                    label: Text(s.t('downloadCore')),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton(
+                    onPressed: () => vpn.refreshCore(),
+                    child: Text(s.t('refresh')),
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
+            ),
+          ),
           SectionCard(
             title: s.t('general'),
             child: Column(
@@ -137,18 +181,6 @@ class SettingsScreen extends StatelessWidget {
                     },
                   ),
                 ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('${s.t('mtu')}: ${value.mtu}', style: AppTextStyles.bodyRegular),
-                  subtitle: Slider(
-                    value: value.mtu.clamp(1280, 9000).toDouble(),
-                    min: 1280,
-                    max: 9000,
-                    divisions: 20,
-                    label: '${value.mtu}',
-                    onChanged: (next) => settings.update((item) => item.mtu = next.round()),
-                  ),
-                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(s.t('localProxy'), style: AppTextStyles.bodyRegular),
@@ -208,6 +240,28 @@ class SettingsScreen extends StatelessWidget {
                   value: value.preferBridge,
                   onChanged: (next) => settings.update((item) => item.preferBridge = next),
                 ),
+                const SizedBox(height: 4),
+              ],
+            ),
+          ),
+          // Knobs that almost nobody needs: MUX, TLS fragmentation, MTU.
+          _MoreCard(
+            title: s.t('more'),
+            child: Column(
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('${s.t('mtu')}: ${value.mtu}', style: AppTextStyles.bodyRegular),
+                  subtitle: Slider(
+                    value: value.mtu.clamp(1280, 9000).toDouble(),
+                    min: 1280,
+                    max: 9000,
+                    divisions: 20,
+                    label: '${value.mtu}',
+                    onChanged: (next) => settings.update((item) => item.mtu = next.round()),
+                  ),
+                ),
+                const Divider(height: 1),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(s.t('fragment'), style: AppTextStyles.bodyRegular),
@@ -231,6 +285,7 @@ class SettingsScreen extends StatelessWidget {
                     onChanged: (next) => settings.update((item) => item.fragmentFallbackMs = next.round()),
                   ),
                 ),
+                const Divider(height: 1),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(s.t('mux'), style: AppTextStyles.bodyRegular),
@@ -316,38 +371,6 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
             ),
-          SectionCard(
-            title: s.t('core'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  vpn.core == null
-                      ? s.t('checking')
-                      : vpn.core!.available
-                          ? '${s.t('coreReady')}${vpn.core!.version == null ? '' : ' · ${vpn.core!.version}'}'
-                          : s.t('coreMissing'),
-                  style: AppTextStyles.bodyRegular,
-                ),
-                const SizedBox(height: 6),
-                Text(Platform.isAndroid ? s.t('coreAndroid') : s.t('coreWindows'), style: AppTextStyles.bodySecondary),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    FilledButton(
-                      onPressed: vpn.coreBusy ? null : () => _downloadCore(context),
-                      child: Text(s.t('downloadCore')),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: () => vpn.refreshCore(),
-                      child: Text(s.t('refresh')),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
           SectionCard(
             title: s.t('advanced'),
             child: Column(
@@ -471,13 +494,80 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
+/// Collapsible block for the knobs most users never touch.
+class _MoreCard extends StatefulWidget {
+  const _MoreCard({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  State<_MoreCard> createState() => _MoreCardState();
+}
+
+class _MoreCardState extends State<_MoreCard> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+              child: Row(
+                children: [
+                  const Icon(Icons.tune_rounded, size: 18, color: AppColors.cyan),
+                  const SizedBox(width: 8),
+                  Text(widget.title.toUpperCase(), style: AppTextStyles.section),
+                  const Spacer(),
+                  Icon(
+                    _open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    size: 20,
+                    color: AppColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_open)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+              child: widget.child,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Maps a core download failure code to a readable, localized message.
+String _coreErrorText(S s, String raw) {
+  return switch (raw) {
+    'no-core-asset' => s.t('coreNoAsset'),
+    'unsupported-archive' => s.t('coreBadArchive'),
+    'extract-failed' => s.t('coreExtractFail'),
+    _ => raw,
+  };
+}
+
 Future<void> _downloadCore(BuildContext context) async {
   final s = context.read<SettingsProvider>().strings;
   final vpn = context.read<VpnProvider>();
-  final result = await showDialog<Object>(
+  final result = await showDialog<Object?>(
     context: context,
     barrierDismissible: false,
-    builder: (context) => _TaskProgressDialog(
+    builder: (context) => _TaskProgressDialog<bool>(
       title: s.t('downloadCore'),
       subtitle: s.t('downloading'),
       strings: s,
@@ -485,12 +575,12 @@ Future<void> _downloadCore(BuildContext context) async {
     ),
   );
   if (!context.mounted) return;
-  final failed = result is String;
-  showNukefySnack(
-    context,
-    failed ? result : s.t('coreInstalled'),
-    error: failed,
-  );
+  if (result is String) {
+    showNukefySnack(context, _coreErrorText(s, result), error: true);
+    return;
+  }
+  // A successful install reports success — never the binary path.
+  showNukefySnack(context, s.t('coreInstalled'));
 }
 
 Future<void> checkUpdatesFlow(BuildContext context, {bool silentIfCurrent = false}) async {
@@ -525,10 +615,10 @@ Future<void> checkUpdatesFlow(BuildContext context, {bool silentIfCurrent = fals
       ),
     );
     if (start != true || !context.mounted) return;
-    final file = await showDialog<Object>(
+    final file = await showDialog<Object?>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => _TaskProgressDialog(
+      builder: (context) => _TaskProgressDialog<File>(
         title: s.t('updateTitle'),
         subtitle: '${s.t('newVersion')} ${info.version}',
         strings: s,

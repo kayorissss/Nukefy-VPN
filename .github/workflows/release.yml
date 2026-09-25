@@ -4,10 +4,20 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag the built files belong to'
+        required: false
+        default: v1.0.1
 
 permissions:
   contents: write
   pull-requests: write
+
+env:
+  # Tag to attach the files to: the tag of the published release, or the one
+  # typed when the workflow is started by hand.
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || 'v1.0.1' }}
 
 jobs:
   android:
@@ -25,54 +35,27 @@ jobs:
           flutter-version: 3.47.4
           cache: true
       - name: Resolve packages
-        id: pub
-        run: |
-          set +e
-          flutter pub get > pub.txt 2>&1
-          code=$?
-          cat pub.txt
-          exit $code
-      - name: Report package error
-        if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          {
-            echo 'Android flutter pub get failed:'
-            echo '```'
-            tail -n 40 pub.txt
-            echo '```'
-          } > comment.md
-          gh pr comment 1 --body-file comment.md || true
+        run: flutter pub get
       - name: Build APK
-        run: |
-          set +e
-          flutter build apk --release > build.txt 2>&1
-          code=$?
-          tail -n 80 build.txt
-          exit $code
-      - name: Report build error
-        if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          {
-            echo 'Android build failed:'
-            echo '```'
-            tail -n 60 build.txt
-            echo '```'
-          } > comment.md
-          gh pr comment 1 --body-file comment.md || true
+        run: flutter build apk --release
       - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyVPN-android.apk
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          tag_name: v1.0.0
+          name: NukefyVPN-android
+          path: NukefyVPN-android.apk
+          if-no-files-found: error
+      - name: Attach APK to the release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: NukefyVPN-android.apk
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   windows:
-    name: Windows EXE
+    name: Windows ZIP
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,50 +67,24 @@ jobs:
       - run: flutter config --enable-windows-desktop
       - name: Resolve packages
         shell: pwsh
-        run: |
-          flutter pub get *> pub.txt
-          Get-Content pub.txt
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Report package error
-        if: failure()
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $tail = Get-Content pub.txt -Tail 40
-          @"
-          Windows flutter pub get failed:
-          ``````
-          $($tail -join "`n")
-          ``````
-          "@ | Set-Content comment.md
-          gh pr comment 1 --body-file comment.md
+        run: flutter pub get
       - name: Build Windows
         shell: pwsh
-        run: |
-          flutter build windows --release *> build.txt
-          Get-Content build.txt -Tail 80
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Report Windows build error
-        if: failure()
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $tail = Get-Content build.txt -Tail 60
-          @"
-          Windows build failed:
-          ``````
-          $($tail -join "`n")
-          ``````
-          "@ | Set-Content comment.md
-          gh pr comment 1 --body-file comment.md
+        run: flutter build windows --release
       - name: Zip Windows build
         shell: pwsh
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath NukefyVPN-windows-x64.zip
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          tag_name: v1.0.0
+          name: NukefyVPN-windows-x64
+          path: NukefyVPN-windows-x64.zip
+          if-no-files-found: error
+      - name: Attach ZIP to the release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: NukefyVPN-windows-x64.zip
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -31,6 +31,7 @@ class ServersScreen extends StatelessWidget {
     final settings = context.watch<SettingsProvider>();
     final s = settings.strings;
     final visible = _ordered(servers, settings.settings.antiblock && settings.settings.preferBridge);
+    final subs = servers.orderedSubscriptions;
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: () async {
@@ -46,7 +47,86 @@ class ServersScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(s.t('servers'), style: AppTextStyles.title),
+                    Row(
+                      children: [
+                        Expanded(child: Text(s.t('servers'), style: AppTextStyles.title)),
+                        // «Ввести вручную», «Импорт из файла» и «Проверить пинг»
+                        // live here, the two main actions stay on the surface.
+                        PopupMenuButton<String>(
+                          tooltip: s.t('actions'),
+                          icon: const Icon(Icons.more_vert_rounded),
+                          onSelected: (value) async {
+                            if (value == 'manual') {
+                              await ImportActions.manual(context);
+                            } else if (value == 'file') {
+                              await ImportActions.fromFile(context);
+                            } else if (value == 'ping') {
+                              await context.read<ServersProvider>().pingAll();
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: 'manual',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.edit_rounded, size: 18, color: AppColors.cyan),
+                                  const SizedBox(width: 10),
+                                  Text(s.t('enterManually')),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'file',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.folder_open_rounded, size: 18, color: AppColors.cyan),
+                                  const SizedBox(width: 10),
+                                  Text(s.t('importFile')),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'ping',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.network_ping_rounded, size: 18, color: AppColors.cyan),
+                                  const SizedBox(width: 10),
+                                  Text(s.t('checkPing')),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _BigAction(
+                            icon: Icons.content_paste_rounded,
+                            label: s.t('pasteClipboard'),
+                            onTap: () => ImportActions.paste(context),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _BigAction(
+                            icon: Icons.qr_code_scanner_rounded,
+                            label: s.t('qr'),
+                            onTap: () async {
+                              final text = await Navigator.push<String>(
+                                context,
+                                MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+                              );
+                              if (text != null && context.mounted) {
+                                await ImportActions.handleText(context, text);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 12),
                     TextField(
                       onChanged: servers.setQuery,
@@ -60,25 +140,6 @@ class ServersScreen extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _Action(icon: Icons.content_paste_rounded, label: s.t('paste'), onTap: () => ImportActions.paste(context)),
-                        _Action(icon: Icons.edit_rounded, label: s.t('manual'), onTap: () => ImportActions.manual(context)),
-                        _Action(icon: Icons.qr_code_scanner_rounded, label: s.t('qr'), onTap: () async {
-                          final text = await Navigator.push<String>(context, MaterialPageRoute(builder: (_) => const QrScannerScreen()));
-                          if (text != null && context.mounted) await ImportActions.handleText(context, text);
-                        }),
-                        _Action(icon: Icons.folder_open_rounded, label: s.t('importFile'), onTap: () => ImportActions.fromFile(context)),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        FilterChip(
-                          label: Text(servers.pinging ? s.t('pinging') : s.t('checkPing')),
-                          selected: servers.pinging,
-                          onSelected: (_) => servers.pingAll(),
-                        ),
                         FilterChip(
                           label: Text(s.t('sortPing')),
                           selected: servers.sort == 'ping',
@@ -151,11 +212,12 @@ class ServersScreen extends StatelessWidget {
                 ),
               )
             else ...[
-              for (final sub in servers.orderedSubscriptions)
+              for (var i = 0; i < subs.length; i++)
                 SliverToBoxAdapter(
                   child: _SubscriptionBlock(
-                    subscription: sub,
-                    servers: visible.where((e) => e.subscriptionId == sub.id).toList(),
+                    subscription: subs[i],
+                    number: i + 1,
+                    servers: visible.where((e) => e.subscriptionId == subs[i].id).toList(),
                     antiblock: settings.settings.antiblock,
                   ),
                 ),
@@ -184,51 +246,88 @@ class ServersScreen extends StatelessWidget {
   }
 }
 
-class _Action extends StatelessWidget {
-  const _Action({required this.icon, required this.label, required this.onTap});
+/// One of the two primary actions on the servers tab.
+class _BigAction extends StatelessWidget {
+  const _BigAction({required this.icon, required this.label, required this.onTap});
+
   final IconData icon;
   final String label;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Theme.of(context).dividerColor),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: AppColors.cyan),
-            const SizedBox(width: 6),
-            Text(label, style: AppTextStyles.bodySecondary.copyWith(color: Theme.of(context).colorScheme.onSurface)),
-          ],
+    return Material(
+      color: AppColors.cyan.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.cyan.withValues(alpha: 0.45)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 20, color: AppColors.cyan),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _SubscriptionBlock extends StatelessWidget {
+/// Subscription row: number, name, «Обновить» and a ping icon. The URL is
+/// deliberately not shown — it used to eat the whole row.
+class _SubscriptionBlock extends StatefulWidget {
   const _SubscriptionBlock({
     required this.subscription,
+    required this.number,
     required this.servers,
     required this.antiblock,
   });
 
   final SubscriptionModel subscription;
+  final int number;
   final List<ServerModel> servers;
   final bool antiblock;
 
   @override
+  State<_SubscriptionBlock> createState() => _SubscriptionBlockState();
+}
+
+class _SubscriptionBlockState extends State<_SubscriptionBlock> {
+  bool _open = true;
+  bool _pinging = false;
+
+  Future<void> _ping() async {
+    if (_pinging) return;
+    setState(() => _pinging = true);
+    await context.read<ServersProvider>().pingSubscription(widget.subscription.id);
+    if (mounted) setState(() => _pinging = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsProvider>().strings;
+    final provider = context.watch<ServersProvider>();
+    final sub = widget.subscription;
+    final updated = sub.lastUpdated == null
+        ? '—'
+        : FormatUtils.timeAgo(sub.lastUpdated!, ru: s.code == 'ru');
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Container(
@@ -237,35 +336,99 @@ class _SubscriptionBlock extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Theme.of(context).dividerColor),
         ),
-        child: Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            initiallyExpanded: true,
-            title: Text(subscription.name, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
-            subtitle: Text(
-              '${subscription.url}\n${s.t('updated')}: ${subscription.lastUpdated == null ? '—' : FormatUtils.timeAgo(subscription.lastUpdated!, ru: s.code == 'ru')} · ${s.t('serversCount')}: ${servers.length}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.bodySecondary,
-            ),
-            trailing: IconButton(
-              icon: const Icon(Icons.more_horiz_rounded),
-              onPressed: () => _subscriptionMenu(context, subscription),
-            ),
-            children: [
-              if (subscription.lastError != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(subscription.lastError!, style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => setState(() => _open = !_open),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+                child: Row(
+                  children: [
+                    Text(
+                      '${widget.number}.',
+                      style: AppTextStyles.monoValue.copyWith(color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(width: 8),
+                    // Long press opens the subscription settings.
+                    Expanded(
+                      child: GestureDetector(
+                        onLongPress: () => _subscriptionMenu(context, sub),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              sub.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${s.t('serversCount')}: ${widget.servers.length} · ${s.t('updated')}: $updated',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.bodySecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    SizedBox(
+                      height: 34,
+                      child: OutlinedButton(
+                        onPressed: provider.refreshing ? null : () => provider.refreshSubscription(sub.id),
+                        child: provider.refreshing
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Text(s.t('updateSub'), style: const TextStyle(fontSize: 12.5)),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: s.t('checkPing'),
+                      onPressed: _pinging ? null : _ping,
+                      icon: _pinging
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.network_ping_rounded, size: 20, color: AppColors.cyan),
+                    ),
+                    IconButton(
+                      tooltip: s.t('actions'),
+                      onPressed: () => setState(() => _open = !_open),
+                      icon: Icon(
+                        _open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
-              for (final server in servers)
-                ServerTile(server: server, antiblock: antiblock)
+              ),
+            ),
+            if (_open) ...[
+              if (sub.lastError != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+                  child: Text(
+                    sub.lastError!,
+                    style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error),
+                  ),
+                ),
+              for (final server in widget.servers)
+                ServerTile(server: server, antiblock: widget.antiblock)
                     .animate()
                     .fadeIn(duration: 220.ms)
                     .slideX(begin: 0.04),
               const SizedBox(height: 8),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -403,8 +566,10 @@ Future<void> _actions(BuildContext context, ServerModel server) async {
   }
 }
 
+/// Long-press menu of a subscription row.
 Future<void> _subscriptionMenu(BuildContext context, SubscriptionModel sub) async {
   final s = context.read<SettingsProvider>().strings;
+  final servers = context.read<ServersProvider>();
   final action = await showModalBottomSheet<String>(
     context: context,
     showDragHandle: true,
@@ -412,6 +577,33 @@ Future<void> _subscriptionMenu(BuildContext context, SubscriptionModel sub) asyn
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Row(
+              children: [
+                const Icon(Icons.link_rounded, size: 18, color: AppColors.cyan),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    s.t('subscriptionSettings'),
+                    style: AppTextStyles.headline,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.arrow_upward_rounded),
+            title: Text(s.t('moveUp')),
+            enabled: servers.canMoveSubscriptionUp(sub.id),
+            onTap: () => Navigator.pop(context, 'up'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.arrow_downward_rounded),
+            title: Text(s.t('moveDown')),
+            enabled: servers.canMoveSubscriptionDown(sub.id),
+            onTap: () => Navigator.pop(context, 'down'),
+          ),
           ListTile(leading: const Icon(Icons.refresh_rounded), title: Text(s.t('refresh')), onTap: () => Navigator.pop(context, 'refresh')),
           ListTile(leading: const Icon(Icons.push_pin_outlined), title: Text(sub.isPinned ? s.t('unpin') : s.t('pin')), onTap: () => Navigator.pop(context, 'pin')),
           ListTile(leading: const Icon(Icons.edit_outlined), title: Text(s.t('edit')), onTap: () => Navigator.pop(context, 'edit')),
@@ -422,8 +614,11 @@ Future<void> _subscriptionMenu(BuildContext context, SubscriptionModel sub) asyn
     ),
   );
   if (!context.mounted || action == null) return;
-  final servers = context.read<ServersProvider>();
   switch (action) {
+    case 'up':
+      await servers.moveSubscription(sub.id, up: true);
+    case 'down':
+      await servers.moveSubscription(sub.id, up: false);
     case 'refresh':
       await servers.refreshSubscription(sub.id);
     case 'pin':

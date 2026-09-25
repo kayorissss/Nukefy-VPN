@@ -54,6 +54,23 @@ class AppTextStyles {
     color: AppColors.textPrimary,
   );
 
+  static const TextStyle metric = TextStyle(
+    fontFamily: display,
+    fontWeight: FontWeight.w700,
+    fontSize: 28,
+    height: 1.1,
+    letterSpacing: -0.6,
+    color: AppColors.textPrimary,
+  );
+
+  static const TextStyle metricCaption = TextStyle(
+    fontFamily: display,
+    fontWeight: FontWeight.w700,
+    fontSize: 11.5,
+    letterSpacing: 1.2,
+    color: AppColors.textSecondary,
+  );
+
   static const TextStyle status = TextStyle(
     fontFamily: display,
     fontWeight: FontWeight.w700,

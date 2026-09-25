@@ -1,7 +1,7 @@
 class AppConstants {
   static const String appName = 'Nukefy VPN';
-  static const String version = '1.0.0';
-  static const int buildNumber = 1;
+  static const String version = '1.0.1';
+  static const int buildNumber = 2;
   static const String packageName = 'com.nukefy.vpn';
 
   static const String author = '@kayorisan';
@@ -16,6 +16,40 @@ class AppConstants {
   static const String singboxRepo = 'SagerNet/sing-box';
   static const String singboxReleasesApi =
       'https://api.github.com/repos/SagerNet/sing-box/releases/latest';
+
+  /// Only official CLI archives are unpackable. The same release also ships
+  /// GUI apps (SFA-*.apk, SFW-*.exe) and Linux packages — none of them are
+  /// archives with a sing-box binary inside, so they must never be picked.
+  static const List<String> coreBlockedSuffixes = [
+    '.apk',
+    '.exe',
+    '.deb',
+    '.rpm',
+    '.msi',
+    '.dmg',
+    '.pkg',
+    '.zst',
+  ];
+
+  /// Port used by the "jammers" probe: plain TCP connect, no payload.
+  static const int jammerProbePort = 443;
+
+  /// Sites that stay reachable behind Russian whitelists.
+  static const List<String> jammerTargetsRu = [
+    'yandex.ru',
+    'vk.com',
+    'www.gosuslugi.ru',
+    'mail.ru',
+  ];
+
+  /// Sites that a whitelist-based jammer blocks first.
+  static const List<String> jammerTargetsOther = [
+    'google.com',
+    'www.gstatic.com',
+    'update.miui.com',
+    'cloudflare.com',
+    'github.com',
+  ];
 
   /// Hardcoded MTProto proxy. Opens Telegram, which offers to enable it.
   static const String telegramProxyUrl =
@@ -43,7 +77,7 @@ class AppConstants {
 
   static const String defaultProxyDns = 'https://1.1.1.1/dns-query';
   static const String defaultDirectDns = '77.88.8.8';
-  static const String userAgent = 'NukefyVPN/1.0.0';
+  static const String userAgent = 'NukefyVPN/1.0.1';
 
   static const List<String> shareSchemes = [
     'vless',
