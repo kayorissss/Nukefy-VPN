@@ -310,6 +310,18 @@ class VpnPlatform {
     }
   }
 
+  /// Android 13+: asks the system to add the VPN tile to Quick Settings.
+  /// Returns the raw result code as a string ("2" added, "1" already there,
+  /// "0" declined) or "unsupported".
+  Future<String> requestAddTile() async {
+    if (!Platform.isAndroid) return 'unsupported';
+    try {
+      return (await _channel.invokeMethod<String>('requestAddTile')) ?? 'unknown';
+    } catch (error) {
+      return 'error:$error';
+    }
+  }
+
   Future<void> openVpnSettings() async {
     if (!Platform.isAndroid) return;
     try {

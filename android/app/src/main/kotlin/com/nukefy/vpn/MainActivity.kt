@@ -1,6 +1,9 @@
 package com.nukefy.vpn
 
 import android.app.Activity
+import android.app.StatusBarManager
+import android.content.ComponentName
+import android.graphics.drawable.Icon
 import android.content.Intent
 import android.net.Uri
 import android.net.VpnService
@@ -62,6 +65,7 @@ class MainActivity : FlutterActivity() {
                             .apply()
                         result.success(null)
                     }
+                    "requestAddTile" -> requestAddTile(result)
                     "openVpnSettings" -> {
                         startActivity(Intent(Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         result.success(null)
@@ -134,6 +138,25 @@ class MainActivity : FlutterActivity() {
             true
         } catch (_: Exception) {
             false
+        }
+    }
+
+    /** Asks Android 13+ to add the VPN tile to Quick Settings. Older systems return "unsupported". */
+    private fun requestAddTile(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            result.success("unsupported")
+            return
+        }
+        try {
+            val manager = getSystemService(StatusBarManager::class.java)
+            manager.requestAddTileService(
+                ComponentName(this, NukefyTileService::class.java),
+                "Nukefy VPN",
+                Icon.createWithResource(this, R.drawable.ic_stat_vpn),
+                mainExecutor,
+            ) { code -> runOnUiThread { result.success(code.toString()) } }
+        } catch (error: Exception) {
+            result.success("error:${error.message}")
         }
     }
 

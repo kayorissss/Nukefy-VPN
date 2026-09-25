@@ -294,6 +294,10 @@ class S {
     'perAppExplainOff': 'Сейчас через VPN идут все приложения. Выберите режим «Только выбранные», чтобы пускать через VPN лишь отмеченные приложения, или «Кроме выбранных», чтобы, например, Госуслуги, банки и ВК ходили напрямую.',
     'perAppExplainInclude': 'Через VPN идут только отмеченные приложения. Остальные работают напрямую.',
     'perAppExplainExclude': 'Отмеченные приложения идут мимо VPN (напрямую) — удобно для Госуслуг, банков и ВК. Остальные — через VPN.',
+    'qsTile': 'Кнопка в шторке',
+    'qsTileHint': 'Включать и выключать VPN из панели быстрых настроек',
+    'qsTileAdded': 'Кнопка добавлена в шторку',
+    'qsTileManual': 'Откройте шторку, нажмите «карандаш» и перетащите Nukefy VPN',
   };
 
   static const _en = {
@@ -587,6 +591,10 @@ class S {
     'perAppExplainOff': 'All apps currently use the VPN. Pick "Only selected" to route just the checked apps through the VPN, or "All except selected" so that e.g. government, banking and VK apps go direct.',
     'perAppExplainInclude': 'Only the checked apps use the VPN. Everything else goes direct.',
     'perAppExplainExclude': 'Checked apps bypass the VPN (go direct) — handy for government, banking and VK apps. Everything else uses the VPN.',
+    'qsTile': 'Quick Settings tile',
+    'qsTileHint': 'Toggle the VPN from the notification shade',
+    'qsTileAdded': 'Tile added to Quick Settings',
+    'qsTileManual': 'Open the shade, tap the pencil and drag Nukefy VPN in',
   };
 
   String t(String key) {

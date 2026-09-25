@@ -169,6 +169,23 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: s.t('alwaysOnHint'),
                     onTap: () => VpnPlatform().openVpnSettings(),
                   ),
+                  SettingsTile(
+                    icon: Icons.dashboard_customize_rounded,
+                    title: s.t('qsTile'),
+                    subtitle: s.t('qsTileHint'),
+                    onTap: () async {
+                      final result = await VpnPlatform().requestAddTile();
+                      if (!context.mounted) return;
+                      // TILE_ADD_REQUEST_RESULT_TILE_ADDED = 2, ALREADY_ADDED = 1,
+                      // NOT_ADDED = 0 (user declined — say nothing).
+                      final message = switch (result) {
+                        '2' || '1' || 'added' || 'already' => s.t('qsTileAdded'),
+                        '0' => null,
+                        _ => s.t('qsTileManual'),
+                      };
+                      if (message != null) showNukefySnack(context, message);
+                    },
+                  ),
                 ],
               ),
             ),
@@ -178,18 +195,6 @@ class SettingsScreen extends StatelessWidget {
             description: s.t('moreHint'),
             child: Column(
               children: [
-                SwitchTile(
-                  icon: Icons.shield_outlined,
-                  title: s.t('antiblockTitle'),
-                  subtitle: s.t('antiblockHint'),
-                  value: value.antiblock,
-                  onChanged: (next) => settings.update((item) => item.antiblock = next),
-                ),
-                SwitchTile(
-                  title: s.t('preferBridge'),
-                  value: value.preferBridge,
-                  onChanged: (next) => settings.update((item) => item.preferBridge = next),
-                ),
                 SwitchTile(
                   title: s.t('allowLan'),
                   value: value.allowLan,

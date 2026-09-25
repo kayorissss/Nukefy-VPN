@@ -77,7 +77,7 @@ class AppConstants {
 
   static const String defaultProxyDns = 'https://1.1.1.1/dns-query';
   static const String defaultDirectDns = '77.88.8.8';
-  static const String userAgent = 'NukefyVPN/1.0.1';
+  static const String userAgent = 'NukefyVPN/2.0.0';
 
   static const List<String> shareSchemes = [
     'vless',

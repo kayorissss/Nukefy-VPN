@@ -1,6 +1,8 @@
 name: Release
 
 on:
+  push:
+    tags: ['v*']
   release:
     types: [published]
   workflow_dispatch:
@@ -17,7 +19,7 @@ permissions:
 env:
   # Tag to attach the files to: the tag of the published release, or the one
   # typed when the workflow is started by hand.
-  RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || 'v2.0.0' }}
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || github.ref_name }}
   # sing-box line used for the embedded Android core (libbox). Keep it on the
   # 1.12 branch: 1.13+ replaced `Libbox.newService` with a gRPC command server.
   SINGBOX_VERSION: v1.12.25

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 
 import '../constants/app_constants.dart';
@@ -111,6 +112,15 @@ class SingboxConfigBuilder {
       {'action': 'sniff'},
       {'protocol': 'dns', 'action': 'hijack-dns'},
       {'ip_is_private': true, 'action': 'route', 'outbound': 'direct'},
+      // The app's own traffic (ping checks, subscription refresh, update
+      // check) must not loop through the tunnel — on desktop sing-box knows
+      // the process path, so route it direct.
+      if (!Platform.isAndroid)
+        {
+          'process_path': [Platform.resolvedExecutable],
+          'action': 'route',
+          'outbound': 'direct',
+        },
     ];
 
     if (settings.blockAds) {
