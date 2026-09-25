@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     name: Analyze and test
@@ -18,5 +21,20 @@ jobs:
           flutter-version: 3.47.4
           cache: true
       - run: flutter pub get
-      - run: flutter analyze --no-fatal-infos
+      - name: Analyze
+        id: analyze
+        continue-on-error: true
+        run: flutter analyze --no-fatal-infos 2>&1 | tee analyze.txt
+      - name: Publish analyzer output
+        if: steps.analyze.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '```'
+            grep -E ' • ' analyze.txt | head -80
+            echo '```'
+          } > body.md
+          gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" -F body=@body.md || true
+          exit 1
       - run: flutter test
