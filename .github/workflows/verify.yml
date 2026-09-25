@@ -1,0 +1,56 @@
+name: Verify
+
+on:
+  push:
+    branches:
+      - 'arena/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.4
+          cache: true
+      - name: Run pub get, analyze and tests
+        id: check
+        shell: bash
+        run: |
+          set +e
+          flutter pub get > pub.txt 2>&1
+          echo "pub get exit: $?" > summary.txt
+          flutter analyze > analyze.txt 2>&1
+          echo "analyze exit: $?" >> summary.txt
+          flutter test > test.txt 2>&1
+          echo "test exit: $?" >> summary.txt
+          cat summary.txt
+      - name: Report to issue 8
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "## Run $GITHUB_RUN_ID · $GITHUB_REF · $GITHUB_SHA"
+            echo '### summary'
+            echo '```'
+            cat summary.txt
+            echo '```'
+            echo '### flutter analyze'
+            echo '```'
+            tail -n 250 analyze.txt
+            echo '```'
+            echo '### flutter test'
+            echo '```'
+            tail -n 150 test.txt
+            echo '```'
+          } > report.md
+          gh issue comment 8 --body-file report.md
