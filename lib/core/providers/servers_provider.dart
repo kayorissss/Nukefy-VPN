@@ -175,6 +175,12 @@ class ServersProvider extends ChangeNotifier {
     if (index < 0) return;
     final target = index + delta;
     if (target < 0 || target >= ordered.length) return;
+    // Give every subscription its own slot first: lists restored from an
+    // older version all carry order 0, and swapping equal values would not
+    // move anything.
+    for (var i = 0; i < ordered.length; i++) {
+      ordered[i].order = i;
+    }
     final current = ordered[index];
     final other = ordered[target];
     final currentOrder = current.order;
