@@ -239,7 +239,7 @@ class S {
     'connectedTo': 'Подключено к',
     'duration': 'Время',
     'upload': 'Отдача',
-    'download': 'Загрузка',
+    'trafficDown': 'Загрузка',
   };
 
   static const _en = {
@@ -478,7 +478,7 @@ class S {
     'connectedTo': 'Connected to',
     'duration': 'Time',
     'upload': 'Upload',
-    'download': 'Download',
+    'trafficDown': 'Download',
   };
 
   String t(String key) {
