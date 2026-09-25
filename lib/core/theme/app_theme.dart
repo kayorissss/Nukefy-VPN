@@ -95,7 +95,6 @@ class AppTheme {
       splashFactory: NoSplash.splashFactory,
       splashColor: Colors.transparent,
       highlightColor: Colors.transparent,
-      hoverColor: Colors.transparent,
       hoverColor: p.accent.withValues(alpha: 0.05),
       focusColor: p.accent.withValues(alpha: 0.10),
       dividerColor: p.border,
