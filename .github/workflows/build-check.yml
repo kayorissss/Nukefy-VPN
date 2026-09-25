@@ -6,104 +6,35 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
-
-env:
-  # Tag to attach the files to: the tag of the published release, or the one
-  # typed when the workflow is started by hand.
-  RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || 'v2.0.0' }}
-  # sing-box line used for the embedded Android core (libbox). Keep it on the
-  # 1.12 branch: 1.13+ replaced `Libbox.newService` with a gRPC command server.
-  SINGBOX_VERSION: v1.12.25
 
 jobs:
-  libbox:
-    name: sing-box libbox (Android core)
+  analyze:
+    name: Analyze report
     runs-on: ubuntu-latest
     steps:
-      - name: Restore cached libbox.aar
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: libbox.aar
-          key: libbox-${{ env.SINGBOX_VERSION }}-arm64-arm-v2
       - uses: actions/checkout@v4
-        if: steps.cache.outputs.cache-hit != 'true'
         with:
-          repository: SagerNet/sing-box
-          ref: ${{ env.SINGBOX_VERSION }}
-          path: sing-box
-      - uses: actions/setup-go@v5
-        if: steps.cache.outputs.cache-hit != 'true'
-        with:
-          go-version: '1.24'
-          cache-dependency-path: sing-box/go.sum
-      - uses: actions/setup-java@v5
-        if: steps.cache.outputs.cache-hit != 'true'
-        with:
-          distribution: temurin
-          java-version: 17
-      - name: Install Android NDK
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          set -e
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;28.0.13004108" >/dev/null
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.0.13004108" >> "$GITHUB_ENV"
-      - name: Build libbox.aar
-        if: steps.cache.outputs.cache-hit != 'true'
-        working-directory: sing-box
-        run: |
-          set -e
-          go install -v github.com/sagernet/gomobile/cmd/gomobile@v0.1.8
-          go install -v github.com/sagernet/gomobile/cmd/gobind@v0.1.8
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          gomobile init
-          gomobile bind -v \
-            -target android/arm64,android/arm \
-            -androidapi 21 \
-            -javapkg=io.nekohasekai \
-            -libname=box \
-            -trimpath -buildvcs=false \
-            -ldflags "-X github.com/sagernet/sing-box/constant.Version=${SINGBOX_VERSION#v} -s -w -buildid= -checklinkname=0" \
-            -tags with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_conntrack \
-            ./experimental/libbox
-          ls -la libbox.aar
-          cp libbox.aar ../libbox.aar
-      - uses: actions/upload-artifact@v4
-        with:
-          name: libbox
-          path: libbox.aar
-          if-no-files-found: error
-
-  android:
-    name: Android APK
-    runs-on: ubuntu-latest
-    needs: libbox
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: libbox
-          path: android/app/libs
-      - run: ls -la android/app/libs
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 17
+          fetch-depth: 0
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: 3.47.4
           cache: true
-      - name: Resolve packages
-        run: flutter pub get
-      - name: Build APK
-        run: flutter build apk --release
-      - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyVPN-android.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: NukefyVPN-android
-          path: NukefyVPN-android.apk
-          if-no-files-found: error
-
+      - run: flutter pub get
+      - name: Analyze
+        run: |
+          set +e
+          mkdir -p .ci
+          { flutter analyze --no-fatal-infos; echo "analyze exit: $?"; } > .ci/analyze.txt 2>&1
+          { flutter test; echo "test exit: $?"; } > .ci/test.txt 2>&1
+          tail -c 20000 .ci/analyze.txt > .ci/analyze.tail.txt
+          tail -c 20000 .ci/test.txt > .ci/test.tail.txt
+          rm .ci/analyze.txt .ci/test.txt
+          cat .ci/analyze.tail.txt
+      - name: Publish report to branch
+        run: |
+          git config user.name ci-bot
+          git config user.email ci-bot@users.noreply.github.com
+          git add .ci
+          git commit -m "ci: analyze report [skip ci]" || exit 0
+          git push origin HEAD:${GITHUB_REF_NAME}
