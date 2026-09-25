@@ -22,10 +22,9 @@ Analyzing Nukefy-VPN...
    info • 'MenuItem' is deprecated and shouldn't be used. The 0.5.x compatible API will be removed in a future release. Use the native API from package:tray_manager/tray_manager.dart. Try replacing the use of the deprecated member with the replacement • lib/ui/desktop_shell.dart:93:28 • deprecated_member_use
    info • 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement • lib/ui/screens/routing_screen.dart:28:15 • deprecated_member_use
    info • 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement • lib/ui/screens/routing_screen.dart:31:15 • deprecated_member_use
-   info • Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?' • lib/ui/screens/servers_screen.dart:513:13 • use_null_aware_elements
    info • Use the null-aware marker '?' rather than a null check via an 'if'. Try using '?' • lib/ui/widgets/section_card.dart:36:15 • use_null_aware_elements
 
-24 issues found. (ran in 12.6s)
+23 issues found. (ran in 12.4s)
 analyze exit: 1
 
 
