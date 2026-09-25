@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../constants/app_constants.dart';
 import '../models/app_settings.dart';
 import '../models/server_model.dart';
+import '../models/vpn_status.dart';
 
 class SingboxConfigBuilder {
   static String buildJson({
