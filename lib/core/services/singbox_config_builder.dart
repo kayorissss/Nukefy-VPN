@@ -48,7 +48,8 @@ class SingboxConfigBuilder {
       if (detour != null && !detour.isWireGuard)
         _tagged(_cloneOutbound(detour), 'bridge'),
       {'type': 'direct', 'tag': 'direct'},
-      {'type': 'block', 'tag': 'block'},
+      // The legacy `block` outbound was removed in sing-box 1.13; blocking
+      // is done with `"action": "reject"` rules instead.
     ];
 
     final endpoints = <Map<String, dynamic>>[];
@@ -75,8 +76,6 @@ class SingboxConfigBuilder {
         'auto_route': true,
         'strict_route': true,
         'stack': _stack(settings.tunStack),
-        'sniff': true,
-        'sniff_override_destination': true,
         if (settings.perAppMode == PerAppMode.include &&
             settings.perAppPackages.isNotEmpty)
           'include_package': settings.perAppPackages,
@@ -103,6 +102,10 @@ class SingboxConfigBuilder {
 
     final ruleSets = <Map<String, dynamic>>[];
     final rules = <Map<String, dynamic>>[
+      // sing-box ≥ 1.11: sniffing / DNS hijack are rule actions, the legacy
+      // inbound fields (`sniff`, `sniff_override_destination`) were removed
+      // in 1.13 and make the core exit with "legacy inbound fields".
+      {'action': 'sniff'},
       {'protocol': 'dns', 'action': 'hijack-dns'},
       {'ip_is_private': true, 'action': 'route', 'outbound': 'direct'},
     ];

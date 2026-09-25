@@ -38,7 +38,12 @@ class MainActivity : FlutterActivity() {
                         val configPath = call.argument<String>("configPath") ?: ""
                         val configJson = call.argument<String>("configJson") ?: ""
                         val preferTun = call.argument<Boolean>("preferTun") ?: false
-                        NukefyVpnService.requestStart(this, configPath, configJson, preferTun) { payload ->
+                        val serverName = call.argument<String>("serverName") ?: ""
+                        val serverHost = call.argument<String>("serverHost") ?: ""
+                        val serverPort = call.argument<Int>("serverPort") ?: 0
+                        NukefyVpnService.requestStart(
+                            this, configPath, configJson, preferTun, serverName, serverHost, serverPort,
+                        ) { payload ->
                             runOnUiThread { result.success(payload) }
                         }
                     }

@@ -1,57 +1,72 @@
 package com.nukefy.vpn
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.IpPrefix
+import android.net.LinkProperties
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.net.ProxyInfo
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.util.Log
-import java.lang.reflect.InvocationHandler
-import java.lang.reflect.InvocationTargetException
-import java.lang.reflect.Method
-import java.lang.reflect.Proxy
+import io.nekohasekai.libbox.BoxService
+import io.nekohasekai.libbox.InterfaceUpdateListener
+import io.nekohasekai.libbox.Libbox
+import io.nekohasekai.libbox.LocalDNSTransport
+import io.nekohasekai.libbox.NetworkInterfaceIterator
+import io.nekohasekai.libbox.Notification
+import io.nekohasekai.libbox.PlatformInterface
+import io.nekohasekai.libbox.SetupOptions
+import io.nekohasekai.libbox.StringIterator
+import io.nekohasekai.libbox.TunOptions
+import io.nekohasekai.libbox.WIFIState
+import java.net.Inet6Address
 import java.net.InetAddress
+import java.net.InterfaceAddress
+import java.util.Enumeration
+import io.nekohasekai.libbox.NetworkInterface as LibboxInterface
 
 /**
- * Runtime bridge for a sing-box 1.12 `libbox.aar`.
- * Method names are resolved by reflection so a small API drift does not
- * require a rewrite, as long as `Libbox.setup` / `Libbox.newService` exist.
+ * Typed bridge to sing-box `libbox` (built from the v1.12 line, see
+ * `tool/build_libbox.sh` and `.github/workflows/release.yml`).
+ *
+ * This source set is compiled only when `android/app/libs/libbox.aar` exists;
+ * otherwise `src/nolibbox` provides a stub with `hasLibbox = false`.
  */
 object NukefyCore {
     const val hasLibbox: Boolean = true
 
-    private var box: Any? = null
+    private var box: BoxService? = null
     private var tun: ParcelFileDescriptor? = null
+    private var platform: Platform? = null
+    private var setupDone = false
 
-    fun version(): String? {
-        return try {
-            Class.forName("io.nekohasekai.libbox.Libbox")
-                .getMethod("version")
-                .invoke(null) as? String
-        } catch (error: Throwable) {
-            Log.w(TAG, "version", error)
-            null
-        }
+    fun version(): String? = try {
+        Libbox.version()
+    } catch (error: Throwable) {
+        Log.w(TAG, "version", error)
+        null
     }
 
+    /** Returns `null` on success or a human readable error. */
     fun start(service: NukefyVpnService, configJson: String): String? {
         stop()
         return try {
             setup(service)
-            val libbox = Class.forName("io.nekohasekai.libbox.Libbox")
-            val iface = Class.forName("io.nekohasekai.libbox.PlatformInterface")
-            val platform = Proxy.newProxyInstance(
-                iface.classLoader,
-                arrayOf(iface),
-                PlatformHandler(service),
-            )
-            val factory = libbox.methods.first { it.name == "newService" && it.parameterTypes.size == 2 }
-            val created = factory.invoke(null, configJson, platform)
-            created.javaClass.getMethod("start").invoke(created)
+            val platform = Platform(service)
+            this.platform = platform
+            val created = Libbox.newService(configJson, platform)
+            created.start()
             box = created
             null
         } catch (error: Throwable) {
-            val cause = (error as? InvocationTargetException)?.targetException ?: error
-            Log.e(TAG, "start", cause)
+            Log.e(TAG, "start", error)
             stop()
-            cause.message ?: cause.toString()
+            error.message ?: error.toString()
         }
     }
 
@@ -60,11 +75,13 @@ object NukefyCore {
         box = null
         if (current != null) {
             try {
-                current.javaClass.getMethod("close").invoke(current)
+                current.close()
             } catch (error: Throwable) {
                 Log.w(TAG, "close", error)
             }
         }
+        platform?.release()
+        platform = null
         try {
             tun?.close()
         } catch (_: Exception) {
@@ -72,173 +89,344 @@ object NukefyCore {
         tun = null
     }
 
-    private fun setup(service: NukefyVpnService) {
-        val libbox = Class.forName("io.nekohasekai.libbox.Libbox")
-        val optionsClass = Class.forName("io.nekohasekai.libbox.SetupOptions")
-        val options = optionsClass.getDeclaredConstructor().newInstance()
-        val base = service.filesDir.absolutePath
-        set(options, "basePath", base)
-        set(options, "workingPath", "$base/run")
-        set(options, "tempPath", service.cacheDir.absolutePath)
-        set(options, "fixAndroidStack", true)
-        libbox.getMethod("setup", optionsClass).invoke(null, options)
+    private fun setup(context: Context) {
+        if (setupDone) return
+        val base = context.filesDir.absolutePath
+        val options = SetupOptions()
+        options.basePath = base
+        options.workingPath = "$base/run"
+        options.tempPath = context.cacheDir.absolutePath
+        options.fixAndroidStack = true
+        Libbox.setup(options)
+        try {
+            Libbox.setLocale("ru")
+        } catch (_: Throwable) {
+        }
+        setupDone = true
     }
 
-    private fun set(target: Any, name: String, value: Any?) {
-        val field = target.javaClass.fields.firstOrNull { it.name.equals(name, true) }
-            ?: target.javaClass.declaredFields.firstOrNull { it.name.equals(name, true) }
-        if (field != null) {
-            field.isAccessible = true
-            field.set(target, value)
-            return
-        }
-        val setter = target.javaClass.methods.firstOrNull {
-            it.name.equals("set${name.replaceFirstChar { c -> c.uppercase() }}", true) && it.parameterTypes.size == 1
-        }
-        setter?.invoke(target, value)
-    }
+    // ------------------------------------------------------------------ //
 
-    private class PlatformHandler(private val service: NukefyVpnService) : InvocationHandler {
-        override fun invoke(proxy: Any, method: Method, args: Array<out Any>?): Any? {
-            val name = method.name
-            return try {
-                when (name) {
-                    "openTun" -> openTun(args?.firstOrNull())
-                    "usePlatformAutoDetectInterfaceControl" -> true
-                    "autoDetectInterfaceControl" -> {
-                        val fd = (args?.firstOrNull() as? Number)?.toInt() ?: return null
-                        service.protect(fd)
-                        null
-                    }
-                    "useProcFS" -> Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
-                    "underNetworkExtension", "includeAllNetworks" -> false
-                    "writeLog" -> {
-                        Log.i(TAG, args?.firstOrNull()?.toString() ?: "")
-                        null
-                    }
-                    "localDNSTransport" -> stub("io.nekohasekai.libbox.LocalDNSTransport")
-                    "systemCertificates", "getInterfaces" -> emptyIterator()
-                    "findConnectionOwner", "packageNameByUid", "uIDByPackageName" -> defaultReturn(method.returnType)
-                    else -> defaultReturn(method.returnType)
-                }
-            } catch (error: Throwable) {
-                Log.e(TAG, name, error)
-                if (name == "openTun") throw error
-                defaultReturn(method.returnType)
+    private class Platform(private val service: NukefyVpnService) : PlatformInterface {
+        private val connectivity =
+            service.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        private val handler = Handler(Looper.getMainLooper())
+        private var networkCallback: ConnectivityManager.NetworkCallback? = null
+        private var interfaceListener: InterfaceUpdateListener? = null
+
+        fun release() {
+            closeMonitor()
+        }
+
+        override fun localDNSTransport(): LocalDNSTransport? = null
+
+        override fun usePlatformAutoDetectInterfaceControl(): Boolean = true
+
+        override fun autoDetectInterfaceControl(fd: Int) {
+            if (!service.protect(fd)) {
+                Log.w(TAG, "protect($fd) failed")
             }
         }
 
-        private fun openTun(options: Any?): Int {
+        override fun openTun(options: TunOptions): Int {
+            if (android.net.VpnService.prepare(service) != null) {
+                error("VPN permission is missing")
+            }
             val builder = service.Builder()
-            builder.setSession("Nukefy VPN")
-            builder.setMtu(intProp(options, "getMTU", "mtu") ?: 9000)
-            val added = addPrefixes(builder, options, "getInet4Address") +
-                addPrefixes(builder, options, "getInet6Address")
-            if (added == 0) {
-                builder.addAddress("172.19.0.1", 30)
-                builder.addRoute("0.0.0.0", 0)
+                .setSession("Nukefy VPN")
+                .setMtu(options.getMTU())
+
+            var addresses = 0
+            options.getInet4Address().forEach { addr, prefix ->
+                builder.addAddress(addr, prefix)
+                addresses++
             }
-            builder.addDnsServer("172.19.0.2")
+            options.getInet6Address().forEach { addr, prefix ->
+                builder.addAddress(addr, prefix)
+                addresses++
+            }
+            if (addresses == 0) {
+                builder.addAddress("172.19.0.1", 30)
+            }
+
+            if (options.getAutoRoute()) {
+                val dns = try {
+                    options.getDNSServerAddress()?.getValue()
+                } catch (_: Throwable) {
+                    null
+                }
+                builder.addDnsServer(dns?.takeIf { it.isNotBlank() } ?: "172.19.0.2")
+
+                if (Build.VERSION.SDK_INT >= 33) {
+                    var v4 = 0
+                    options.getInet4RouteAddress().forEach { addr, prefix ->
+                        builder.addRoute(addr, prefix)
+                        v4++
+                    }
+                    if (v4 == 0) builder.addRoute("0.0.0.0", 0)
+                    var v6 = 0
+                    options.getInet6RouteAddress().forEach { addr, prefix ->
+                        builder.addRoute(addr, prefix)
+                        v6++
+                    }
+                    if (v6 == 0) builder.addRoute("::", 0)
+                    options.getInet4RouteExcludeAddress().forEach { addr, prefix ->
+                        builder.excludeRoute(IpPrefix(InetAddress.getByName(addr), prefix))
+                    }
+                    options.getInet6RouteExcludeAddress().forEach { addr, prefix ->
+                        builder.excludeRoute(IpPrefix(InetAddress.getByName(addr), prefix))
+                    }
+                } else {
+                    var v4 = 0
+                    options.getInet4RouteRange().forEach { addr, prefix ->
+                        builder.addRoute(addr, prefix)
+                        v4++
+                    }
+                    if (v4 == 0) builder.addRoute("0.0.0.0", 0)
+                    var v6 = 0
+                    options.getInet6RouteRange().forEach { addr, prefix ->
+                        builder.addRoute(addr, prefix)
+                        v6++
+                    }
+                    if (v6 == 0) builder.addRoute("::", 0)
+                }
+
+                val include = options.getIncludePackage().toList()
+                val exclude = options.getExcludePackage().toList()
+                if (include.isNotEmpty()) {
+                    for (pkg in include) {
+                        try {
+                            builder.addAllowedApplication(pkg)
+                        } catch (_: Exception) {
+                        }
+                    }
+                } else {
+                    for (pkg in exclude) {
+                        try {
+                            builder.addDisallowedApplication(pkg)
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+            }
+
+            if (options.isHTTPProxyEnabled() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val bypass = options.getHTTPProxyBypassDomain().toList()
+                builder.setHttpProxy(
+                    ProxyInfo.buildDirectProxy(
+                        options.getHTTPProxyServer(),
+                        options.getHTTPProxyServerPort(),
+                        bypass,
+                    ),
+                )
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 builder.setMetered(false)
-            }
-            val include = strings(options, "getIncludePackage")
-            val exclude = strings(options, "getExcludePackage")
-            if (include.isNotEmpty()) {
-                for (pkg in include) {
-                    try {
-                        builder.addAllowedApplication(pkg)
-                    } catch (_: Exception) {
-                    }
-                }
-            } else {
-                try {
-                    builder.addDisallowedApplication(service.packageName)
-                } catch (_: Exception) {
-                }
-                for (pkg in exclude) {
-                    try {
-                        builder.addDisallowedApplication(pkg)
-                    } catch (_: Exception) {
-                    }
-                }
             }
             val pfd = builder.establish() ?: error("VPN establish() returned null")
             tun = pfd
             return pfd.fd
         }
-    }
 
-    private fun addPrefixes(builder: VpnService.Builder, options: Any?, method: String): Int {
-        val iterator = call(options, method) ?: return 0
-        var count = 0
-        while (boolProp(iterator, "hasNext")) {
-            val prefix = call(iterator, "next") ?: break
-            val address = call(prefix, "address")?.toString() ?: call(prefix, "getAddress")?.toString() ?: continue
-            val bits = intProp(prefix, "prefix", "getPrefix") ?: 32
-            val inet = InetAddress.getByName(address.substringBefore("/"))
-            if (inet.address.size == 4) {
-                builder.addAddress(inet, bits)
-                builder.addRoute("0.0.0.0", 0)
+        override fun writeLog(message: String?) {
+            Log.i(TAG, message ?: "")
+        }
+
+        override fun useProcFS(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+
+        override fun findConnectionOwner(
+            ipProtocol: Int,
+            sourceAddress: String,
+            sourcePort: Int,
+            destinationAddress: String,
+            destinationPort: Int,
+        ): Int {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) error("unsupported")
+            val uid = connectivity.getConnectionOwnerUid(
+                ipProtocol,
+                java.net.InetSocketAddress(sourceAddress, sourcePort),
+                java.net.InetSocketAddress(destinationAddress, destinationPort),
+            )
+            if (uid == android.os.Process.INVALID_UID) error("connection owner not found")
+            return uid
+        }
+
+        override fun packageNameByUid(uid: Int): String {
+            val packages = service.packageManager.getPackagesForUid(uid)
+            if (packages.isNullOrEmpty()) error("unknown uid $uid")
+            return packages[0]
+        }
+
+        override fun uidByPackageName(packageName: String): Int {
+            return try {
+                if (Build.VERSION.SDK_INT >= 33) {
+                    service.packageManager.getPackageUid(
+                        packageName,
+                        android.content.pm.PackageManager.PackageInfoFlags.of(0),
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    service.packageManager.getPackageUid(packageName, 0)
+                }
+            } catch (error: Exception) {
+                error("package not found: $packageName")
+            }
+        }
+
+        override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
+            closeMonitor()
+            interfaceListener = listener
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+                .build()
+            val callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) = publish(network)
+                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) =
+                    publish(network)
+
+                override fun onLinkPropertiesChanged(network: Network, props: LinkProperties) =
+                    publish(network)
+
+                override fun onLost(network: Network) {
+                    interfaceListener?.updateDefaultInterface("", -1, false, false)
+                }
+            }
+            networkCallback = callback
+            try {
+                if (Build.VERSION.SDK_INT >= 31) {
+                    connectivity.registerBestMatchingNetworkCallback(request, callback, handler)
+                } else if (Build.VERSION.SDK_INT >= 28) {
+                    connectivity.requestNetwork(request, callback, handler)
+                } else {
+                    connectivity.requestNetwork(request, callback)
+                }
+            } catch (error: Exception) {
+                Log.w(TAG, "network callback", error)
+            }
+            connectivity.activeNetwork?.let { publish(it) }
+        }
+
+        private fun publish(network: Network) {
+            val listener = interfaceListener ?: return
+            val props = connectivity.getLinkProperties(network) ?: return
+            val name = props.interfaceName ?: return
+            val index = try {
+                java.net.NetworkInterface.getByName(name)?.index ?: return
+            } catch (_: Exception) {
+                return
+            }
+            val caps = connectivity.getNetworkCapabilities(network)
+            val expensive = caps != null &&
+                !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+            listener.updateDefaultInterface(name, index, expensive, false)
+        }
+
+        override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener?) {
+            closeMonitor()
+        }
+
+        private fun closeMonitor() {
+            val callback = networkCallback ?: return
+            networkCallback = null
+            interfaceListener = null
+            try {
+                connectivity.unregisterNetworkCallback(callback)
+            } catch (_: Exception) {
+            }
+        }
+
+        override fun getInterfaces(): NetworkInterfaceIterator {
+            val list = ArrayList<LibboxInterface>()
+            val enumeration: Enumeration<java.net.NetworkInterface>? = try {
+                java.net.NetworkInterface.getNetworkInterfaces()
+            } catch (_: Exception) {
+                null
+            }
+            enumeration?.let { all ->
+                for (iface in all) {
+                    val item = LibboxInterface()
+                    item.setName(iface.name)
+                    item.setIndex(iface.index)
+                    item.setMTU(try { iface.mtu } catch (_: Exception) { 1500 })
+                    item.setAddresses(StringList(iface.interfaceAddresses.map(::prefixOf)))
+                    item.setFlags(flagsOf(iface))
+                    item.setType(typeOf(iface.name))
+                    item.setDNSServer(StringList(emptyList()))
+                    item.setMetered(false)
+                    list.add(item)
+                }
+            }
+            return InterfaceList(list)
+        }
+
+        override fun underNetworkExtension(): Boolean = false
+
+        override fun includeAllNetworks(): Boolean = false
+
+        override fun readWIFIState(): WIFIState? = null
+
+        override fun systemCertificates(): StringIterator = StringList(emptyList())
+
+        override fun clearDNSCache() {}
+
+        override fun sendNotification(notification: Notification?) {}
+
+        private fun typeOf(name: String): Int = when {
+            name.startsWith("wlan") || name.startsWith("wifi") -> Libbox.InterfaceTypeWIFI
+            name.startsWith("rmnet") || name.startsWith("ccmni") || name.startsWith("pdp") -> Libbox.InterfaceTypeCellular
+            name.startsWith("eth") -> Libbox.InterfaceTypeEthernet
+            else -> Libbox.InterfaceTypeOther
+        }
+
+        private fun flagsOf(iface: java.net.NetworkInterface): Int {
+            var flags = 0
+            try {
+                if (iface.isUp) flags = flags or 0x1 or 0x40 // IFF_UP | IFF_RUNNING
+                if (iface.isLoopback) flags = flags or 0x8
+                if (iface.isPointToPoint) flags = flags or 0x10
+                if (iface.supportsMulticast()) flags = flags or 0x1000
+                if (!iface.isLoopback && !iface.isPointToPoint) flags = flags or 0x2 // IFF_BROADCAST
+            } catch (_: Exception) {
+            }
+            return flags
+        }
+
+        private fun prefixOf(address: InterfaceAddress): String {
+            val inet = address.address
+            val host = if (inet is Inet6Address) {
+                inet.hostAddress?.substringBefore('%') ?: "::"
             } else {
-                builder.addAddress(inet, bits)
-                builder.addRoute("::", 0)
+                inet.hostAddress ?: "0.0.0.0"
             }
-            count++
-        }
-        return count
-    }
-
-    private fun strings(options: Any?, method: String): List<String> {
-        val iterator = call(options, method) ?: return emptyList()
-        val values = mutableListOf<String>()
-        while (boolProp(iterator, "hasNext")) {
-            val next = call(iterator, "next") ?: break
-            values.add(next.toString())
-        }
-        return values
-    }
-
-    private fun call(target: Any?, name: String): Any? {
-        if (target == null) return null
-        val method = target.javaClass.methods.firstOrNull { it.name == name && it.parameterTypes.isEmpty() }
-            ?: return null
-        return method.invoke(target)
-    }
-
-    private fun intProp(target: Any?, vararg names: String): Int? {
-        for (name in names) {
-            val value = call(target, name)
-            if (value is Number) return value.toInt()
-        }
-        return null
-    }
-
-    private fun boolProp(target: Any?, name: String): Boolean {
-        return call(target, name) == true
-    }
-
-    private fun emptyIterator(): Any? = stub("io.nekohasekai.libbox.StringIterator")
-
-    private fun stub(className: String): Any? {
-        return try {
-            val type = Class.forName(className)
-            Proxy.newProxyInstance(type.classLoader, arrayOf(type)) { _, method, _ ->
-                defaultReturn(method.returnType)
-            }
-        } catch (_: Throwable) {
-            null
+            return "$host/${address.networkPrefixLength}"
         }
     }
 
-    private fun defaultReturn(type: Class<*>): Any? {
-        return when (type) {
-            java.lang.Boolean.TYPE, java.lang.Boolean::class.java -> false
-            java.lang.Integer.TYPE, Integer::class.java -> 0
-            java.lang.Long.TYPE, java.lang.Long::class.java -> 0L
-            java.lang.Void.TYPE, Void.TYPE -> null
-            else -> null
+    private class StringList(private val values: List<String>) : StringIterator {
+        private var index = 0
+        override fun len(): Int = values.size
+        override fun hasNext(): Boolean = index < values.size
+        override fun next(): String = values[index++]
+    }
+
+    private class InterfaceList(private val values: List<LibboxInterface>) : NetworkInterfaceIterator {
+        private var index = 0
+        override fun hasNext(): Boolean = index < values.size
+        override fun next(): LibboxInterface = values[index++]
+    }
+
+    private inline fun io.nekohasekai.libbox.RoutePrefixIterator.forEach(block: (String, Int) -> Unit) {
+        while (hasNext()) {
+            val prefix = next()
+            block(prefix.address(), prefix.prefix())
         }
+    }
+
+    private fun StringIterator.toList(): List<String> {
+        val out = ArrayList<String>()
+        while (hasNext()) out.add(next())
+        return out
     }
 
     private const val TAG = "NukefyCore"

@@ -109,6 +109,9 @@ class VpnProvider extends ChangeNotifier {
     final result = await _platform.start(
       configJson: json,
       preferTun: settings.settings.tunEnabled && info.libbox || !Platform.isAndroid,
+      serverName: server.name,
+      serverHost: server.address,
+      serverPort: server.port,
     );
     if (!result.ok) {
       status = VpnStatus.error;

@@ -150,6 +150,9 @@ class VpnPlatform {
   Future<CoreStartResult> start({
     required String configJson,
     required bool preferTun,
+    String serverName = '',
+    String serverHost = '',
+    int serverPort = 0,
   }) async {
     final dir = await configDirectory();
     final configFile = File(p.join(dir.path, 'config.json'));
@@ -160,6 +163,9 @@ class VpnPlatform {
           'configPath': configFile.path,
           'configJson': configJson,
           'preferTun': preferTun,
+          'serverName': serverName,
+          'serverHost': serverHost,
+          'serverPort': serverPort,
         });
         return CoreStartResult(
           ok: raw?['ok'] == true,

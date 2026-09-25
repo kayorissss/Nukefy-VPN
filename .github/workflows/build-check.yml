@@ -1,14 +1,8 @@
-name: Release
+name: Build check
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag the built files belong to'
-        required: false
-        default: v2.0.0
+  push:
+    branches: [arena/01a0d977-nukefy-vpn]
 
 permissions:
   contents: write
@@ -112,45 +106,4 @@ jobs:
           name: NukefyVPN-android
           path: NukefyVPN-android.apk
           if-no-files-found: error
-      - name: Attach APK to the release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: NukefyVPN-android.apk
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  windows:
-    name: Windows ZIP
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: 3.47.4
-          cache: true
-      - run: flutter config --enable-windows-desktop
-      - name: Resolve packages
-        shell: pwsh
-        run: flutter pub get
-      - name: Build Windows
-        shell: pwsh
-        run: flutter build windows --release
-      - name: Zip Windows build
-        shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath NukefyVPN-windows-x64.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: NukefyVPN-windows-x64
-          path: NukefyVPN-windows-x64.zip
-          if-no-files-found: error
-      - name: Attach ZIP to the release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: NukefyVPN-windows-x64.zip
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
