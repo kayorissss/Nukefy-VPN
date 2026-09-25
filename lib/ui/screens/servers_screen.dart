@@ -510,7 +510,7 @@ class ServerTile extends StatelessWidget {
         subtitle: Text(
           [
             FormatUtils.protocolLabel(server.protocol),
-            if (label != null) label,
+            ?label,
           ].join(' · '),
           style: AppTextStyles.bodySecondary,
         ),
