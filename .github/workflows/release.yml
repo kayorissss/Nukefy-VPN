@@ -44,7 +44,25 @@ jobs:
             echo '```'
           } > comment.md
           gh pr comment 1 --body-file comment.md || true
-      - run: flutter build apk --release
+      - name: Build APK
+        run: |
+          set +e
+          flutter build apk --release > build.txt 2>&1
+          code=$?
+          tail -n 80 build.txt
+          exit $code
+      - name: Report build error
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo 'Android build failed:'
+            echo '```'
+            tail -n 60 build.txt
+            echo '```'
+          } > comment.md
+          gh pr comment 1 --body-file comment.md || true
       - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyVPN-android.apk
       - uses: softprops/action-gh-release@v2
         with:
@@ -84,7 +102,26 @@ jobs:
           ``````
           "@ | Set-Content comment.md
           gh pr comment 1 --body-file comment.md
-      - run: flutter build windows --release
+      - name: Build Windows
+        shell: pwsh
+        run: |
+          flutter build windows --release *> build.txt
+          Get-Content build.txt -Tail 80
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Report Windows build error
+        if: failure()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tail = Get-Content build.txt -Tail 60
+          @"
+          Windows build failed:
+          ``````
+          $($tail -join "`n")
+          ``````
+          "@ | Set-Content comment.md
+          gh pr comment 1 --body-file comment.md
       - name: Zip Windows build
         shell: pwsh
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath NukefyVPN-windows-x64.zip
