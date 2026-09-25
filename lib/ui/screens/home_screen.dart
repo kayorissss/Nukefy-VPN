@@ -53,19 +53,32 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           children: [
             if (!desktop)
-              Row(
-                children: [
-                  const NukefyLogo(size: 34),
-                  const SizedBox(width: 12),
-                  Text(s.t('appTitle'), style: AppTextStyles.headline),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => context.read<NavProvider>().setIndex(4),
-                    icon: const Icon(Icons.settings_outlined),
-                  ),
-                ],
+              Padding(
+                padding: const EdgeInsets.only(left: 2),
+                child: Row(
+                  children: [
+                    const NukefyLogo(size: 32),
+                    const SizedBox(width: 12),
+                    Text(s.t('appTitle'), style: AppTextStyles.headline),
+                    const Spacer(),
+                    _RoundIcon(
+                      icon: Icons.tune_rounded,
+                      onTap: () => context.read<NavProvider>().setIndex(4),
+                    ),
+                  ],
+                ),
               ),
             const Spacer(),
+            // Speeds above the button, timer below — the button stays the hero.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _Metric(icon: Icons.arrow_upward_rounded, label: FormatUtils.speed(stats.upBps), color: p.accent),
+                const SizedBox(width: 28),
+                _Metric(icon: Icons.arrow_downward_rounded, label: FormatUtils.speed(stats.downBps), color: p.success),
+              ],
+            ),
+            const SizedBox(height: 30),
             ConnectButton(
               status: vpn.status,
               onPressed: () {
@@ -89,24 +102,18 @@ class HomeScreen extends StatelessWidget {
                   ? (controller) => controller.repeat(reverse: true)
                   : null,
             ).fade(begin: vpn.status == VpnStatus.connecting ? 0.4 : 1, end: 1),
+            const SizedBox(height: 10),
+            Text(
+              stats.sessionStarted == null ? '00:00:00' : FormatUtils.duration(stats.sessionDuration),
+              style: AppTextStyles.metric.copyWith(
+                fontSize: 22,
+                color: vpn.status == VpnStatus.connected ? p.text : p.textDisabled,
+              ),
+            ),
             if (vpn.errorMessage != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               _ErrorCard(message: _friendlyError(s, vpn.errorMessage!)),
             ],
-            const SizedBox(height: 22),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _Metric(
-                  icon: Icons.timer_outlined,
-                  label: stats.sessionStarted == null ? '00:00:00' : FormatUtils.duration(stats.sessionDuration),
-                ),
-                const SizedBox(width: 22),
-                _Metric(icon: Icons.arrow_upward_rounded, label: FormatUtils.speed(stats.upBps), color: p.accent),
-                const SizedBox(width: 22),
-                _Metric(icon: Icons.arrow_downward_rounded, label: FormatUtils.speed(stats.downBps), color: p.success),
-              ],
-            ),
             const Spacer(),
             _ServerCard(
               server: server,
@@ -376,3 +383,29 @@ class _ServerCard extends StatelessWidget {
 
 // Kept for the desktop tray menu which still refers to the platform label.
 String platformModeLabel(String mode) => mode == 'proxy' ? 'SOCKS / HTTP' : (Platform.isAndroid ? 'VPN' : 'TUN');
+
+
+class _RoundIcon extends StatelessWidget {
+  const _RoundIcon({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: p.card.withValues(alpha: p.isDark ? 0.9 : 0.96),
+          shape: BoxShape.circle,
+          border: Border.all(color: p.border),
+        ),
+        child: Icon(icon, size: 20, color: p.textSecondary),
+      ),
+    );
+  }
+}

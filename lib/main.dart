@@ -32,6 +32,7 @@ Future<void> main() async {
       minimumSize: Size(860, 640),
       center: true,
       title: 'Nukefy VPN',
+      titleBarStyle: TitleBarStyle.hidden,
       backgroundColor: Color(0xFF0D0D0D),
     );
     windowManager.waitUntilReadyToShow(options, () async {
@@ -40,18 +41,24 @@ Future<void> main() async {
     });
   }
 
-  await StorageService.instance.init();
+  // Every init step is bounded and non-fatal: a stuck storage read or a
+  // hanging `sing-box version` must never leave the user with a blank window.
+  Future<void> guard(String step, Future<void> Function() run, {int seconds = 8}) async {
+    try {
+      await run().timeout(Duration(seconds: seconds));
+    } catch (error) {
+      debugPrint('init: $step failed: $error');
+    }
+  }
+
+  await guard('storage', StorageService.instance.init);
   final settings = SettingsProvider(StorageService.instance);
   final servers = ServersProvider(StorageService.instance, SubscriptionService());
   final stats = StatsProvider(StorageService.instance);
   final vpn = VpnProvider(VpnPlatform());
-  await Future.wait([
-    settings.load(),
-    servers.load(),
-    stats.load(),
-  ]);
+  await guard('load', () => Future.wait([settings.load(), servers.load(), stats.load()]));
   vpn.bind(stats: stats, servers: servers, settings: settings);
-  await vpn.refreshCore();
+  await guard('core', vpn.refreshCore, seconds: 5);
 
   runApp(
     MultiProvider(
@@ -67,6 +74,12 @@ Future<void> main() async {
   );
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      // Safety net: if waitUntilReadyToShow never fired, show the window now.
+      try {
+        if (!await windowManager.isVisible()) await windowManager.show();
+      } catch (_) {}
+    }
     final action = await VpnPlatform().consumeLaunchAction();
     final selected = servers.byId(settings.settings.selectedServerId);
     if (action == 'toggle') {

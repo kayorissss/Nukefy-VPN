@@ -21,7 +21,7 @@ android {
         // The product asked for API 21. Flutter 3.47's engine and several plugins
         // refuse anything below their own floor, so take the higher of the two.
         minSdk = maxOf(21, flutter.minSdkVersion)
-        targetSdk = 34
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

@@ -34,9 +34,11 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     final dir = await getApplicationSupportDirectory();
     final asset = Platform.isWindows ? 'assets/icons/app_icon.ico' : 'assets/icons/app_icon.png';
     final icon = File('${dir.path}/${Platform.isWindows ? 'tray_icon.ico' : 'tray_icon.png'}');
-    if (!icon.existsSync()) {
+    try {
       final data = await rootBundle.load(asset);
-      await icon.writeAsBytes(data.buffer.asUint8List());
+      await icon.writeAsBytes(data.buffer.asUint8List(), flush: true);
+    } catch (_) {
+      if (!icon.existsSync()) return;
     }
     await trayManager.setIcon(icon.path);
     await trayManager.setToolTip('Nukefy VPN');

@@ -342,13 +342,10 @@ class SettingsScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SettingsTile(
-                  icon: Icons.tag_rounded,
-                  title: s.t('version'),
-                  subtitle: AppConstants.version,
-                  trailing: TextButton(
-                    onPressed: () => checkUpdatesFlow(context),
-                    child: Text(s.t('checkUpdates')),
-                  ),
+                  icon: Icons.system_update_alt_rounded,
+                  title: s.t('checkUpdates'),
+                  subtitle: '${s.t('version')} ${AppConstants.version}',
+                  onTap: () => checkUpdatesFlow(context),
                 ),
                 SettingsTile(
                   icon: Icons.person_outline_rounded,

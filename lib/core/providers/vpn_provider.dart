@@ -98,6 +98,11 @@ class VpnProvider extends ChangeNotifier {
       }
     }
     final dir = await _platform.configDirectory();
+    try {
+      SingboxConfigBuilder.rulesDir = (await _platform.ensureRuleSets()).path.replaceAll('\\', '/');
+    } catch (_) {
+      SingboxConfigBuilder.rulesDir = '';
+    }
     ServerModel? detour;
     if (server.detourServerId != null) {
       detour = servers.byId(server.detourServerId);

@@ -91,13 +91,22 @@ class _ConnectButtonState extends State<ConnectButton>
   Widget build(BuildContext context) {
     final p = context.palette;
     final color = _colorOf(p);
+    final off = widget.status == VpnStatus.disconnected;
+    final busy = widget.status == VpnStatus.connecting;
     return AnimatedBuilder(
       animation: Listenable.merge([_spin, _pulse, _shake]),
       builder: (context, _) {
         final shake = math.sin(_shake.value * math.pi * 6) * (1 - _shake.value) * 8;
-        final glow = widget.status == VpnStatus.disconnected
-            ? 0.0
-            : 0.35 + _pulse.value * 0.45;
+        final glow = off ? 0.0 : 0.35 + _pulse.value * 0.45;
+        // Disc gradient: brand gradient when on, quiet graphite when off.
+        final discColors = switch (widget.status) {
+          VpnStatus.connected => [p.success, const Color(0xFF0FA3B1)],
+          VpnStatus.connecting => [p.accent, AppColors.violet],
+          VpnStatus.error => [AppColors.error, const Color(0xFFB0244A)],
+          VpnStatus.disconnected => p.isDark
+              ? const [Color(0xFF232A36), Color(0xFF12161E)]
+              : const [Color(0xFFFFFFFF), Color(0xFFE3E8F0)],
+        };
         return Transform.translate(
           offset: Offset(shake, 0),
           child: GestureDetector(
@@ -107,55 +116,77 @@ class _ConnectButtonState extends State<ConnectButton>
             },
             child: AnimatedScale(
               duration: const Duration(milliseconds: 200),
-              scale: widget.status == VpnStatus.connecting ? 0.97 : 1,
+              scale: busy ? 0.97 : 1,
               child: SizedBox(
-              width: 188,
-              height: 188,
-              child: CustomPaint(
-                painter: _RingPainter(
-                  color: color,
-                  spin: _spin.value,
-                  glow: glow,
-                  connected: widget.status == VpnStatus.connected,
-                  connecting: widget.status == VpnStatus.connecting,
-                ),
-                child: Center(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 350),
-                    curve: Curves.easeOutCubic,
-                    width: 124,
-                    height: 124,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: p.isDark
-                            ? const [Color(0xFF171C25), Color(0xFF0E1218)]
-                            : const [Colors.white, Color(0xFFE9EDF3)],
-                      ),
-                      border: Border.all(color: color, width: 1.6),
-                      boxShadow: [
-                        BoxShadow(
-                          color: color.withValues(alpha: glow * 0.7),
-                          blurRadius: 30,
-                          spreadRadius: 1,
+                width: 212,
+                height: 212,
+                child: CustomPaint(
+                  painter: _RingPainter(
+                    color: off ? p.border : color,
+                    spin: _spin.value,
+                    glow: glow,
+                    connected: widget.status == VpnStatus.connected,
+                    connecting: busy,
+                  ),
+                  child: Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeOutCubic,
+                      width: 150,
+                      height: 150,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: discColors,
                         ),
-                        if (!p.isDark)
+                        border: Border.all(
+                          color: off ? p.border : Colors.white.withValues(alpha: 0.18),
+                          width: 1.2,
+                        ),
+                        boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08),
-                            blurRadius: 18,
-                            offset: const Offset(0, 8),
+                            color: color.withValues(alpha: off ? 0 : glow * 0.55),
+                            blurRadius: 40,
+                            spreadRadius: 2,
                           ),
-                      ],
-                    ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      child: Icon(
-                        Icons.power_settings_new_rounded,
-                        key: ValueKey(widget.status == VpnStatus.disconnected),
-                        size: 48,
-                        color: widget.status == VpnStatus.disconnected ? p.textSecondary : color,
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: p.isDark ? 0.45 : 0.10),
+                            blurRadius: 24,
+                            offset: const Offset(0, 12),
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Inner highlight for depth.
+                          Container(
+                            margin: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                center: const Alignment(-0.4, -0.5),
+                                radius: 1,
+                                colors: [
+                                  Colors.white.withValues(alpha: off ? 0.04 : 0.22),
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
+                          ),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 300),
+                            switchInCurve: Curves.easeOutBack,
+                            child: Icon(
+                              Icons.power_settings_new_rounded,
+                              key: ValueKey(off),
+                              size: 60,
+                              color: off ? p.textSecondary : (p.isDark ? const Color(0xFF07131A) : Colors.white),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -163,7 +194,6 @@ class _ConnectButtonState extends State<ConnectButton>
               ),
             ),
           ),
-        ),
         );
       },
     );
@@ -188,36 +218,50 @@ class _RingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
-    final radius = size.width / 2 - 6;
-    final base = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = color.withValues(alpha: connecting || connected ? 0.55 : 0.35);
-    canvas.drawCircle(center, radius, base);
+    final radius = size.width / 2 - 8;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    // Track.
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5
+        ..color = color.withValues(alpha: connected || connecting ? 0.22 : 0.6),
+    );
     if (glow > 0) {
       canvas.drawCircle(
         center,
         radius,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 6
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8)
-          ..color = color.withValues(alpha: glow * 0.55),
+          ..strokeWidth = 10
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
+          ..color = color.withValues(alpha: glow * 0.5),
+      );
+    }
+    if (connected) {
+      canvas.drawArc(
+        rect,
+        -math.pi / 2,
+        math.pi * 2,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5
+          ..color = color,
       );
     }
     if (connecting) {
+      // Two chasing arcs.
       final arc = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
+        ..strokeWidth = 5
         ..strokeCap = StrokeCap.round
         ..color = color;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        spin * math.pi * 2,
-        1.4,
-        false,
-        arc,
-      );
+      for (var i = 0; i < 2; i++) {
+        canvas.drawArc(rect, spin * math.pi * 2 + i * math.pi, 1.2, false, arc);
+      }
     }
   }
 

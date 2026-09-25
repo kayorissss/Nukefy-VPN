@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/providers/nav_provider.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -59,15 +63,22 @@ class MainShell extends StatelessWidget {
           extendBody: true,
           extendBodyBehindAppBar: true,
           body: desktop
-              ? Row(
+              ? Column(
                   children: [
-                    _SideRail(tabs: tabs, index: index),
+                    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) const DesktopTitleBar(),
                     Expanded(
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 760),
-                          child: body,
-                        ),
+                      child: Row(
+                        children: [
+                          _SideRail(tabs: tabs, index: index),
+                          Expanded(
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 760),
+                                child: body,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -100,7 +111,7 @@ class _BottomBar extends StatelessWidget {
       // Sits above the gesture bar; the background continues underneath.
       padding: EdgeInsets.fromLTRB(14, 0, 14, bottomInset + 10),
       child: Container(
-        height: 66,
+        height: 62,
         decoration: BoxDecoration(
           color: p.card.withValues(alpha: p.isDark ? 0.92 : 0.96),
           borderRadius: BorderRadius.circular(24),
@@ -143,31 +154,33 @@ class _Tab extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.palette;
     final color = selected ? p.accent : p.textSecondary;
+    // Icon-only: labels in five slots were being clipped. The tooltip keeps
+    // the name available on desktop / long press.
     return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
-              width: 44,
-              height: 28,
+      child: Tooltip(
+        message: spec.label,
+        waitDuration: const Duration(milliseconds: 600),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutBack,
+              width: selected ? 60 : 44,
+              height: 40,
               decoration: BoxDecoration(
-                color: selected ? p.accent.withValues(alpha: 0.14) : Colors.transparent,
-                borderRadius: BorderRadius.circular(14),
+                color: selected ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(selected ? spec.icon : spec.outlined, color: color, size: 21),
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutBack,
+                scale: selected ? 1.12 : 1,
+                child: Icon(selected ? spec.icon : spec.outlined, color: color, size: 24),
+              ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              spec.label.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.clip,
-              style: AppTextStyles.tab.copyWith(color: color, fontSize: 8.5),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -185,7 +198,7 @@ class _SideRail extends StatelessWidget {
     final s = context.watch<SettingsProvider>().strings;
     return Container(
       width: 220,
-      margin: const EdgeInsets.fromLTRB(16, 16, 0, 16),
+      margin: const EdgeInsets.fromLTRB(16, 4, 0, 16),
       padding: const EdgeInsets.fromLTRB(12, 18, 12, 14),
       decoration: BoxDecoration(
         color: p.card.withValues(alpha: p.isDark ? 0.9 : 0.96),
@@ -222,7 +235,7 @@ class _SideRail extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Text(
-              'v2.0.0',
+              'v${AppConstants.version}',
               style: AppTextStyles.metricCaption.copyWith(color: p.textDisabled),
             ),
           ),
@@ -245,12 +258,15 @@ class _RailItem extends StatelessWidget {
     final color = selected ? p.accent : p.textSecondary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: Material(
-        color: selected ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          decoration: BoxDecoration(
+            color: selected ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             child: Row(
@@ -312,6 +328,129 @@ class _TabFadeState extends State<_TabFade> with SingleTickerProviderStateMixin 
         child: Transform.translate(offset: Offset(0, (1 - curve.value) * 10), child: child),
       ),
       child: widget.child,
+    );
+  }
+}
+
+/// Frameless-window title bar: drag area, app name and window controls.
+class DesktopTitleBar extends StatefulWidget {
+  const DesktopTitleBar({super.key});
+
+  @override
+  State<DesktopTitleBar> createState() => _DesktopTitleBarState();
+}
+
+class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
+  bool _maximized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    windowManager.addListener(this);
+    windowManager.isMaximized().then((v) {
+      if (mounted) setState(() => _maximized = v);
+    });
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowMaximize() => setState(() => _maximized = true);
+
+  @override
+  void onWindowUnmaximize() => setState(() => _maximized = false);
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return SizedBox(
+      height: 40,
+      child: Row(
+        children: [
+          Expanded(
+            child: DragToMoveArea(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onDoubleTap: () async {
+                  if (await windowManager.isMaximized()) {
+                    await windowManager.unmaximize();
+                  } else {
+                    await windowManager.maximize();
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 20),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'NUKEFY VPN',
+                      style: AppTextStyles.tab.copyWith(fontSize: 10, color: p.textDisabled, letterSpacing: 2),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          _WindowButton(icon: Icons.remove_rounded, onTap: windowManager.minimize),
+          _WindowButton(
+            icon: _maximized ? Icons.filter_none_rounded : Icons.crop_square_rounded,
+            iconSize: _maximized ? 13 : 16,
+            onTap: () async {
+              if (await windowManager.isMaximized()) {
+                await windowManager.unmaximize();
+              } else {
+                await windowManager.maximize();
+              }
+            },
+          ),
+          _WindowButton(icon: Icons.close_rounded, danger: true, onTap: windowManager.close),
+        ],
+      ),
+    );
+  }
+}
+
+class _WindowButton extends StatefulWidget {
+  const _WindowButton({required this.icon, required this.onTap, this.danger = false, this.iconSize = 16});
+  final IconData icon;
+  final Future<void> Function() onTap;
+  final bool danger;
+  final double iconSize;
+
+  @override
+  State<_WindowButton> createState() => _WindowButtonState();
+}
+
+class _WindowButtonState extends State<_WindowButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final bg = !_hover
+        ? Colors.transparent
+        : widget.danger
+            ? AppColors.error.withValues(alpha: 0.85)
+            : p.text.withValues(alpha: 0.08);
+    final fg = _hover && widget.danger ? Colors.white : p.textSecondary;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          width: 46,
+          height: 40,
+          color: bg,
+          child: Icon(widget.icon, size: widget.iconSize, color: fg),
+        ),
+      ),
     );
   }
 }

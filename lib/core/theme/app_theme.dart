@@ -90,9 +90,12 @@ class AppTheme {
       fontFamily: AppTextStyles.body,
       textTheme: textTheme,
       primaryTextTheme: textTheme,
-      splashFactory: InkSparkle.splashFactory,
-      splashColor: p.accent.withValues(alpha: 0.10),
-      highlightColor: p.accent.withValues(alpha: 0.05),
+      // No material ink: rectangles were flashing behind rounded controls.
+      // Feedback comes from Pressable's scale animation instead.
+      splashFactory: NoSplash.splashFactory,
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: Colors.transparent,
       hoverColor: p.accent.withValues(alpha: 0.05),
       focusColor: p.accent.withValues(alpha: 0.10),
       dividerColor: p.border,

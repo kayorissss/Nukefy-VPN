@@ -5,6 +5,9 @@ import android.app.StatusBarManager
 import android.content.ComponentName
 import android.graphics.drawable.Icon
 import android.content.Intent
+import android.graphics.Color
+import android.view.WindowManager
+import androidx.core.view.WindowCompat
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
@@ -23,6 +26,19 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         launchAction = intent?.getStringExtra(EXTRA_ACTION)
         super.onCreate(savedInstanceState)
+        // Draw behind the status bar and the gesture/3-button bar: the
+        // Flutter backdrop continues under them instead of black/white strips.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+            window.isStatusBarContrastEnforced = false
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -56,7 +72,17 @@ class MainActivity : FlutterActivity() {
                     }
                     "status" -> result.success(mapOf("running" to NukefyVpnService.running))
                     "prepareVpn" -> prepareVpn(result)
-                    "listApps" -> result.success(listApps())
+                    "listApps" -> Thread {
+                        val apps = listApps()
+                        runOnUiThread { result.success(apps) }
+                    }.start()
+                    "appIcon" -> {
+                        val pkg = call.argument<String>("package") ?: ""
+                        Thread {
+                            val bytes = appIcon(pkg)
+                            runOnUiThread { result.success(bytes) }
+                        }.start()
+                    }
                     "setAutoStart" -> {
                         val enabled = call.argument<Boolean>("enabled") ?: false
                         getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -118,13 +144,40 @@ class MainActivity : FlutterActivity() {
 
     private fun listApps(): List<Map<String, Any>> {
         val pm = packageManager
-        return pm.getInstalledApplications(0).map { info ->
-            mapOf(
-                "package" to info.packageName,
-                "label" to pm.getApplicationLabel(info).toString(),
-                "system" to ((info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0),
-            )
-        }.sortedBy { it["label"] as String }
+        // Only apps that can use the network: everything else is noise.
+        val hasInternet = try {
+            pm.getPackagesHoldingPermissions(arrayOf(android.Manifest.permission.INTERNET), 0)
+                .map { it.packageName }.toHashSet()
+        } catch (_: Exception) {
+            null
+        }
+        return pm.getInstalledApplications(0)
+            .filter { info -> info.packageName != packageName && (hasInternet == null || hasInternet.contains(info.packageName)) }
+            .map { info ->
+                mapOf(
+                    "package" to info.packageName,
+                    "label" to pm.getApplicationLabel(info).toString(),
+                    "system" to ((info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0),
+                )
+            }.sortedBy { (it["label"] as String).lowercase() }
+    }
+
+    /** App icon as a small PNG (48px) for the per-app list; null when unavailable. */
+    private fun appIcon(pkg: String): ByteArray? {
+        return try {
+            val drawable = packageManager.getApplicationIcon(pkg)
+            val size = (48 * resources.displayMetrics.density).toInt().coerceAtLeast(48)
+            val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            drawable.setBounds(0, 0, size, size)
+            drawable.draw(canvas)
+            val out = java.io.ByteArrayOutputStream()
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, out)
+            bitmap.recycle()
+            out.toByteArray()
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun installApk(path: String): Boolean {

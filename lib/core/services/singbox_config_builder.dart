@@ -336,13 +336,27 @@ class SingboxConfigBuilder {
     }
   }
 
+  /// Rule sets ship inside the app (assets/rules) and are copied next to the
+  /// config: downloading them from GitHub at start-up fails on networks where
+  /// raw.githubusercontent.com is blocked, and the core refused to start.
+  static String rulesDir = '';
+
   static Map<String, dynamic> _remoteSet(String tag, String url) {
+    final file = url.split('/').last;
+    if (rulesDir.isNotEmpty) {
+      return {
+        'type': 'local',
+        'tag': tag,
+        'format': 'binary',
+        'path': '$rulesDir/$file',
+      };
+    }
     return {
       'type': 'remote',
       'tag': tag,
       'format': 'binary',
       'url': url,
-      'download_detour': 'proxy',
+      'download_detour': 'direct',
     };
   }
 

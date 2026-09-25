@@ -102,6 +102,27 @@ class VpnPlatform {
     return dir;
   }
 
+  static const List<String> bundledRuleSets = [
+    'geosite-category-ru.srs',
+    'geoip-ru.srs',
+    'geosite-category-ads-all.srs',
+  ];
+
+  /// Copies the bundled rule sets next to the config and returns the folder.
+  Future<Directory> ensureRuleSets() async {
+    final dir = Directory(p.join((await configDirectory()).path, 'rules'));
+    await dir.create(recursive: true);
+    for (final name in bundledRuleSets) {
+      final file = File(p.join(dir.path, name));
+      final data = await rootBundle.load('assets/rules/$name');
+      final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      if (!file.existsSync() || file.lengthSync() != bytes.length) {
+        await file.writeAsBytes(bytes, flush: true);
+      }
+    }
+    return dir;
+  }
+
   Future<Directory> configDirectory() async {
     final support = await getApplicationSupportDirectory();
     final dir = Directory(p.join(support.path, 'run'));
@@ -276,6 +297,19 @@ class VpnPlatform {
     } catch (_) {
       return const [];
     }
+  }
+
+  /// PNG bytes of an installed app's icon (Android), cached per package.
+  static final Map<String, Future<Uint8List?>> _iconCache = {};
+  Future<Uint8List?> appIcon(String package) {
+    if (!Platform.isAndroid) return Future.value(null);
+    return _iconCache.putIfAbsent(package, () async {
+      try {
+        return await _channel.invokeMethod<Uint8List>('appIcon', {'package': package});
+      } catch (_) {
+        return null;
+      }
+    });
   }
 
   Future<void> setAutoStart(bool enabled) async {

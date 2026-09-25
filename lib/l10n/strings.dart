@@ -298,6 +298,12 @@ class S {
     'qsTileHint': 'Включать и выключать VPN из панели быстрых настроек',
     'qsTileAdded': 'Кнопка добавлена в шторку',
     'qsTileManual': 'Откройте шторку, нажмите «карандаш» и перетащите Nukefy VPN',
+    'perAppExcludeShort': 'Без VPN',
+    'perAppIncludeShort': 'Только эти',
+    'showSystemApps': 'Системные приложения',
+    'perAppOffHint': 'Все приложения идут через VPN.',
+    'perAppExcludeHint': 'Отмеченные идут напрямую, мимо VPN (Госуслуги, банки, ВК).',
+    'perAppIncludeHint': 'Через VPN идут только отмеченные.',
   };
 
   static const _en = {
@@ -595,6 +601,12 @@ class S {
     'qsTileHint': 'Toggle the VPN from the notification shade',
     'qsTileAdded': 'Tile added to Quick Settings',
     'qsTileManual': 'Open the shade, tap the pencil and drag Nukefy VPN in',
+    'perAppExcludeShort': 'Bypass',
+    'perAppIncludeShort': 'Only these',
+    'showSystemApps': 'System apps',
+    'perAppOffHint': 'Every app goes through the VPN.',
+    'perAppExcludeHint': 'Checked apps connect directly, bypassing the VPN.',
+    'perAppIncludeHint': 'Only the checked apps go through the VPN.',
   };
 
   String t(String key) {

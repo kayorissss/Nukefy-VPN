@@ -18,6 +18,8 @@ import java.net.Socket
 import kotlin.concurrent.thread
 
 class NukefyVpnService : VpnService() {
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -45,18 +47,24 @@ class NukefyVpnService : VpnService() {
                 serverHost = intent.getStringExtra("serverHost").orEmpty()
                 serverPort = intent.getIntExtra("serverPort", 0)
                 lastPing = null
-                val error = startCore(configJson, configPath, preferTun)
-                if (error != null) {
-                    stopCore()
-                    finish(mapOf("ok" to false, "mode" to mode, "error" to error))
-                    demote()
-                    return START_NOT_STICKY
-                }
-                running = true
-                rememberSession(configJson, configPath)
-                promoteForeground()
-                requestTileUpdate()
-                finish(mapOf("ok" to true, "mode" to mode))
+                // Starting the core can take seconds (TUN setup, rule sets);
+                // doing it on the main thread froze the UI and triggered ANRs.
+                Thread {
+                    val error = startCore(configJson, configPath, preferTun)
+                    mainHandler.post {
+                        if (error != null) {
+                            stopCore()
+                            finish(mapOf("ok" to false, "mode" to mode, "error" to error))
+                            demote()
+                            return@post
+                        }
+                        running = true
+                        rememberSession(configJson, configPath)
+                        promoteForeground()
+                        requestTileUpdate()
+                        finish(mapOf("ok" to true, "mode" to mode))
+                    }
+                }.start()
                 return START_STICKY
             }
             else -> {
@@ -64,13 +72,20 @@ class NukefyVpnService : VpnService() {
                 promoteForeground()
                 val session = readSession()
                 if (session != null && (intent?.action == ACTION_RESUME || shouldRevive())) {
-                    val error = startCore(session.first, session.second, NukefyCore.hasLibbox)
-                    if (error == null) {
-                        running = true
-                        promoteForeground()
-                        requestTileUpdate()
-                        return START_STICKY
-                    }
+                    Thread {
+                        val error = startCore(session.first, session.second, NukefyCore.hasLibbox)
+                        mainHandler.post {
+                            if (error == null) {
+                                running = true
+                                promoteForeground()
+                                requestTileUpdate()
+                            } else {
+                                stopCore()
+                                demote()
+                            }
+                        }
+                    }.start()
+                    return START_STICKY
                 }
                 demote()
                 return START_NOT_STICKY
