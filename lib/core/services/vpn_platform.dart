@@ -362,12 +362,12 @@ class VpnPlatform {
     final assets = (data['assets'] as List?) ?? const [];
     final asset = _pickCoreAsset(assets);
     if (asset == null) {
-      throw StateError('no-core-asset');
+      throw const CoreDownloadException('no-core-asset');
     }
     final url = asset['browser_download_url'] as String;
     final name = asset['name'] as String;
     final dir = await coreDirectory();
-    final archivePath = p.join(dir.path, name);
+    final archiveFile = File(p.join(dir.path, name));
     final started = DateTime.now();
     await _dio.download(
       url,
