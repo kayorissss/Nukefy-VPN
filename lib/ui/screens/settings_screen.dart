@@ -11,7 +11,6 @@ import '../../core/providers/settings_provider.dart';
 import '../../core/providers/vpn_provider.dart';
 import '../../core/services/update_service.dart';
 import '../../core/services/vpn_platform.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../l10n/strings.dart';
 import '../dialogs/progress_dialog.dart';
