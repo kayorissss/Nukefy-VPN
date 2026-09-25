@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  issues: write
   pull-requests: write
 
 jobs:
@@ -29,10 +28,9 @@ jobs:
         id: pub
         run: |
           set +e
-          flutter --version > pub.txt
-          flutter pub get -v >> pub.txt 2>&1
+          flutter pub get > pub.txt 2>&1
           code=$?
-          tail -n 60 pub.txt
+          cat pub.txt
           exit $code
       - name: Report package error
         if: failure()
@@ -42,13 +40,12 @@ jobs:
           {
             echo 'Android flutter pub get failed:'
             echo '```'
-            tail -n 80 pub.txt
+            tail -n 40 pub.txt
             echo '```'
           } > comment.md
           gh pr comment 1 --body-file comment.md || true
       - run: flutter build apk --release
-      - name: Rename APK
-        run: cp build/app/outputs/flutter-apk/app-release.apk NukefyVPN-android.apk
+      - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyVPN-android.apk
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
@@ -68,19 +65,18 @@ jobs:
           cache: true
       - run: flutter config --enable-windows-desktop
       - name: Resolve packages
-        id: pub
         shell: pwsh
         run: |
-          flutter --version *> pub.txt
-          flutter pub get -v *>> pub.txt
-          if ($LASTEXITCODE -ne 0) { Get-Content pub.txt -Tail 60; exit $LASTEXITCODE }
+          flutter pub get *> pub.txt
+          Get-Content pub.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Report package error
         if: failure()
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tail = Get-Content pub.txt -Tail 80
+          $tail = Get-Content pub.txt -Tail 40
           @"
           Windows flutter pub get failed:
           ``````
