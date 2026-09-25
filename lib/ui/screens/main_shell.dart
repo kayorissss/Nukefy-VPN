@@ -25,7 +25,6 @@ class MainShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final index = context.watch<NavProvider>().index;
     final s = context.watch<SettingsProvider>().strings;
-    final p = context.palette;
     final width = MediaQuery.sizeOf(context).width;
     final desktop = width >= kDesktopBreakpoint;
 

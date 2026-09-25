@@ -262,7 +262,7 @@ class _TrafficCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '↑ ${FormatUtils.bytes(up)}',
-            style: AppTextStyles.monoValue.copyWith(color: p.accent, fontSize: 15),
+            style: AppTextStyles.monoValue.copyWith(color: context.palette.accent, fontSize: 15),
           ),
           const SizedBox(height: 6),
           Text('${s.t('received')} / ${s.t('sent')}', style: AppTextStyles.bodySecondary),
