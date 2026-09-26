@@ -47,6 +47,10 @@ class NukefyVpnService : VpnService() {
                 serverHost = intent.getStringExtra("serverHost").orEmpty()
                 serverPort = intent.getIntExtra("serverPort", 0)
                 lastPing = null
+                // Remember the config *before* starting: the quick tile can
+                // then always restart the last server silently, even if the
+                // first attempt failed or the app was killed mid-connect.
+                if (configJson.isNotBlank()) rememberSession(configJson, configPath)
                 // Starting the core can take seconds (TUN setup, rule sets);
                 // doing it on the main thread froze the UI and triggered ANRs.
                 Thread {

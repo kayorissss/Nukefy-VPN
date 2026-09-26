@@ -45,20 +45,37 @@ class NukefyTileService : TileService() {
             }
             return
         }
+        // No saved session or VPN permission not granted yet: the app has to
+        // be opened once. MIUI/HyperOS block background activity starts from
+        // tiles unless done through the system collapse API from an unlocked
+        // state, so go through unlockAndRun + startActivityAndCollapse.
+        unlockAndRun { openApp() }
+    }
+
+    private fun openApp() {
         val intent = Intent(this, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .setAction(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             .putExtra(MainActivity.EXTRA_ACTION, "connect")
-        val pending = PendingIntent.getActivity(
-            this,
-            7,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        if (Build.VERSION.SDK_INT >= 34) {
-            startActivityAndCollapse(pending)
-        } else {
-            @Suppress("DEPRECATION")
-            startActivityAndCollapse(intent)
+        try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                val pending = PendingIntent.getActivity(
+                    this,
+                    7,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                startActivityAndCollapse(pending)
+            } else {
+                @Suppress("DEPRECATION")
+                startActivityAndCollapse(intent)
+            }
+        } catch (_: Exception) {
+            try {
+                startActivity(intent)
+            } catch (_: Exception) {
+            }
         }
     }
 }
