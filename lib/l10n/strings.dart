@@ -304,6 +304,12 @@ class S {
     'perAppOffHint': 'Все приложения идут через VPN.',
     'perAppExcludeHint': 'Отмеченные идут напрямую, мимо VPN (Госуслуги, банки, ВК).',
     'perAppIncludeHint': 'Через VPN идут только отмеченные.',
+    'subscriptionsSection': 'Подписки',
+    'sendHwid': 'Передавать HWID устройства',
+    'sendHwidHint': 'Анонимный ID устройства для панелей с лимитом устройств (Remnawave, Marzban). Без него вместо серверов приходит «Включите передачу HWID».',
+    'clientIdentity': 'Представляться как',
+    'clientIdentityHint': 'Если панель отдаёт серверы только «разрешённым» приложениям — выберите то, что указано на сайте провайдера, и обновите подписку.',
+    'copyHwid': 'Скопировать HWID',
   };
 
   static const _en = {
@@ -607,6 +613,12 @@ class S {
     'perAppOffHint': 'Every app goes through the VPN.',
     'perAppExcludeHint': 'Checked apps connect directly, bypassing the VPN.',
     'perAppIncludeHint': 'Only the checked apps go through the VPN.',
+    'subscriptionsSection': 'Subscriptions',
+    'sendHwid': 'Send device HWID',
+    'sendHwidHint': 'Anonymous device id for panels with device limits (Remnawave, Marzban). Without it they return “enable HWID” instead of servers.',
+    'clientIdentity': 'Identify as',
+    'clientIdentityHint': 'If a panel only serves whitelisted apps, pick the one named on your provider’s site and refresh the subscription.',
+    'copyHwid': 'Copy HWID',
   };
 
   String t(String key) {

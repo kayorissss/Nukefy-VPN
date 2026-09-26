@@ -36,6 +36,20 @@ class SubscriptionService {
 
   final Dio _dio;
 
+  /// Global switches, mirrored from AppSettings by SettingsProvider.
+  static bool sendHwid = true;
+  static String clientIdentity = 'nukefy';
+
+  /// User-Agent strings panels recognise. Some panels only serve clients
+  /// from their whitelist, so the user can pick who we look like.
+  static const Map<String, String> clientUserAgents = {
+    'nukefy': AppConstants.userAgent,
+    'happ': 'Happ/2.6.0',
+    'v2rayng': 'v2rayNG/1.9.16',
+    'hiddify': 'HiddifyNext/2.5.7',
+    'streisand': 'Streisand/1.6.8',
+  };
+
   Future<SubscriptionFetch> fetch(
     SubscriptionModel subscription, {
     String? userAgent,
@@ -46,16 +60,20 @@ class SubscriptionService {
       options: Options(
         responseType: ResponseType.plain,
         headers: {
-          'User-Agent':
-              subscription.userAgent ?? userAgent ?? AppConstants.userAgent,
+          'User-Agent': subscription.userAgent ??
+              userAgent ??
+              clientUserAgents[clientIdentity] ??
+              AppConstants.userAgent,
           'Accept': '*/*',
           // Remnawave/Marzban panels with device limits refuse clients that
           // do not identify themselves ("Включите передачу HWID"). The id is
           // a random UUID generated once per install — nothing personal.
-          'x-hwid': device.hwid,
-          'x-device-os': device.os,
-          'x-ver-os': device.osVersion,
-          'x-device-model': device.model,
+          if (sendHwid) ...{
+            'x-hwid': device.hwid,
+            'x-device-os': device.os,
+            'x-ver-os': device.osVersion,
+            'x-device-model': device.model,
+          },
         },
         validateStatus: (code) => code != null && code < 500,
       ),

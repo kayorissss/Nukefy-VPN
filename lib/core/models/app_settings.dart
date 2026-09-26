@@ -41,6 +41,8 @@ class AppSettings {
     this.notifications = true,
     this.minimizeToTray = true,
     this.checkUpdatesOnStart = true,
+    this.sendHwid = true,
+    this.clientIdentity = 'nukefy',
     this.lastUpdateCheck,
     this.skippedVersion,
     this.routingMode = RoutingMode.bypassRu,
@@ -83,6 +85,10 @@ class AppSettings {
   bool notifications;
   bool minimizeToTray;
   bool checkUpdatesOnStart;
+  /// Send an anonymous device id to subscription panels with device limits.
+  bool sendHwid;
+  /// Which client to present to subscription panels: nukefy | happ | v2rayng | hiddify | streisand.
+  String clientIdentity;
   DateTime? lastUpdateCheck;
   String? skippedVersion;
   RoutingMode routingMode;
@@ -125,6 +131,8 @@ class AppSettings {
         'notifications': notifications,
         'minimizeToTray': minimizeToTray,
         'checkUpdatesOnStart': checkUpdatesOnStart,
+        'sendHwid': sendHwid,
+        'clientIdentity': clientIdentity,
         'lastUpdateCheck': lastUpdateCheck?.toIso8601String(),
         'skippedVersion': skippedVersion,
         'routingMode': routingMode.name,
@@ -173,6 +181,8 @@ class AppSettings {
       notifications: json['notifications'] != false,
       minimizeToTray: json['minimizeToTray'] != false,
       checkUpdatesOnStart: json['checkUpdatesOnStart'] != false,
+      sendHwid: json['sendHwid'] != false,
+      clientIdentity: (json['clientIdentity'] as String?) ?? 'nukefy',
       lastUpdateCheck: _date(json['lastUpdateCheck']),
       skippedVersion: json['skippedVersion'] as String?,
       routingMode: _enum(

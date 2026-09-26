@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
 import '../models/vpn_status.dart';
 import '../services/storage_service.dart';
+import '../services/subscription_service.dart';
 import '../../l10n/strings.dart';
 
 class SettingsProvider extends ChangeNotifier {
@@ -44,6 +45,7 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> load() async {
     final json = _storage.readJson('settings');
     if (json != null) settings = AppSettings.fromJson(json);
+    _mirror();
     await _storage.setBootFlags(
       launchOnBoot: settings.launchOnBoot,
       autoConnect: settings.autoConnect,
@@ -51,8 +53,14 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _mirror() {
+    SubscriptionService.sendHwid = settings.sendHwid;
+    SubscriptionService.clientIdentity = settings.clientIdentity;
+  }
+
   Future<void> update(void Function(AppSettings settings) change) async {
     change(settings);
+    _mirror();
     await _storage.writeJson('settings', settings.toJson());
     await _storage.setBootFlags(
       launchOnBoot: settings.launchOnBoot,

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -9,6 +10,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/vpn_provider.dart';
+import '../../core/services/subscription_service.dart';
 import '../../core/services/update_service.dart';
 import '../../core/services/vpn_platform.dart';
 import '../../core/theme/app_colors.dart';
@@ -105,6 +107,47 @@ class SettingsScreen extends StatelessWidget {
                     value: value.minimizeToTray,
                     onChanged: (next) => settings.update((item) => item.minimizeToTray = next),
                   ),
+              ],
+            ),
+          ),
+          SectionCard(
+            title: s.t('subscriptionsSection'),
+            icon: Icons.rss_feed_rounded,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchTile(
+                  icon: Icons.fingerprint_rounded,
+                  title: s.t('sendHwid'),
+                  subtitle: s.t('sendHwidHint'),
+                  value: value.sendHwid,
+                  onChanged: (next) => settings.update((item) => item.sendHwid = next),
+                ),
+                SettingsTile(
+                  icon: Icons.badge_outlined,
+                  title: s.t('clientIdentity'),
+                  subtitle: s.t('clientIdentityHint'),
+                  trailing: NukefyDropdown<String>(
+                    value: SubscriptionService.clientUserAgents.containsKey(value.clientIdentity) ? value.clientIdentity : 'nukefy',
+                    items: const {
+                      'nukefy': 'Nukefy VPN',
+                      'happ': 'Happ',
+                      'v2rayng': 'v2rayNG',
+                      'hiddify': 'Hiddify',
+                      'streisand': 'Streisand',
+                    },
+                    onChanged: (next) => settings.update((item) => item.clientIdentity = next),
+                  ),
+                ),
+                SettingsTile(
+                  icon: Icons.copy_rounded,
+                  title: s.t('copyHwid'),
+                  onTap: () async {
+                    final id = await DeviceIdentity.load();
+                    await Clipboard.setData(ClipboardData(text: id.hwid));
+                    if (context.mounted) showNukefySnack(context, s.t('copied'));
+                  },
+                ),
               ],
             ),
           ),
