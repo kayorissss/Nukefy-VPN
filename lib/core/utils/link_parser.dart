@@ -928,6 +928,9 @@ class LinkParser {
     final fp = q['fp'] ?? q['fingerprint'];
     if (fp != null && fp.isNotEmpty && fp != 'none') {
       tls['utls'] = {'enabled': true, 'fingerprint': fp};
+    } else if (reality) {
+      // sing-box refuses Reality without uTLS; links often omit `fp`.
+      tls['utls'] = {'enabled': true, 'fingerprint': 'chrome'};
     }
     if (reality) {
       tls['reality'] = {
@@ -974,6 +977,12 @@ class LinkParser {
         };
       case 'quic':
         return {'type': 'quic'};
+      case 'xhttp':
+      case 'splithttp':
+        // Not implemented by sing-box. Emit the type as-is so the core fails
+        // loudly at config check instead of silently speaking plain TCP to an
+        // XHTTP server ("connected" with no traffic).
+        return {'type': type, 'path': _path(q['path'])};
       default:
         return null;
     }

@@ -135,6 +135,8 @@ class HomeScreen extends StatelessWidget {
     if (raw == 'CORE_MISSING') return s.t('coreMissing');
     if (raw == 'LIBBOX_MISSING') return s.t('libboxMissing');
     if (raw == 'need-server') return s.t('needServer');
+    if (raw == 'XHTTP_UNSUPPORTED') return s.t('xhttpUnsupported');
+    if (raw.startsWith('NO_TRAFFIC:')) return '${s.t('noTraffic')}\n${raw.substring(11)}';
     if (raw.contains('Permission denied') && raw.contains('sing-box')) return s.t('libboxMissing');
     if (raw.contains('legacy inbound fields')) return s.t('coreOutdatedConfig');
     // Strip ANSI colour codes and the timestamp prefix from core logs.

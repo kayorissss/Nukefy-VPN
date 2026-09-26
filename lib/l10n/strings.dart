@@ -310,6 +310,8 @@ class S {
     'clientIdentity': 'Представляться как',
     'clientIdentityHint': 'Если панель отдаёт серверы только «разрешённым» приложениям — выберите то, что указано на сайте провайдера, и обновите подписку.',
     'copyHwid': 'Скопировать HWID',
+    'xhttpUnsupported': 'Этот сервер использует транспорт XHTTP (SplitHTTP). Ядро sing-box его не поддерживает — такие серверы работают только в Xray-клиентах (Happ, v2rayNG). Выберите сервер с TCP/Reality, WebSocket, gRPC или HTTPUpgrade.',
+    'noTraffic': 'VPN включён, но трафик через сервер не идёт. Проверьте сервер или смените его.',
   };
 
   static const _en = {
@@ -619,6 +621,8 @@ class S {
     'clientIdentity': 'Identify as',
     'clientIdentityHint': 'If a panel only serves whitelisted apps, pick the one named on your provider’s site and refresh the subscription.',
     'copyHwid': 'Copy HWID',
+    'xhttpUnsupported': 'This server uses the XHTTP (SplitHTTP) transport, which sing-box does not support — it only works in Xray clients (Happ, v2rayNG). Pick a TCP/Reality, WebSocket, gRPC or HTTPUpgrade server.',
+    'noTraffic': 'VPN is on, but no traffic passes through the server. Check or change the server.',
   };
 
   String t(String key) {

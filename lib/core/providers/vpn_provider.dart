@@ -125,7 +125,8 @@ class VpnProvider extends ChangeNotifier {
     );
     if (!result.ok) {
       status = VpnStatus.error;
-      errorMessage = result.error ?? 'core-failed';
+      final raw = result.error ?? 'core-failed';
+      errorMessage = RegExp(r'xhttp|splithttp', caseSensitive: true).hasMatch(raw) ? 'XHTTP_UNSUPPORTED' : raw;
       mode = result.mode;
       await _stats?.addLog(server.name, 'error', message: errorMessage);
       notifyListeners();
@@ -133,6 +134,7 @@ class VpnProvider extends ChangeNotifier {
     }
     status = VpnStatus.connected;
     mode = result.mode;
+    _verifyTraffic(server.id);
     _sessionUp = 0;
     _sessionDown = 0;
     _stats?.startSession();
@@ -150,6 +152,31 @@ class VpnProvider extends ChangeNotifier {
         if (!alive && status == VpnStatus.connected) await _onExternalStop();
       }
     });
+    notifyListeners();
+  }
+
+  /// A lit VPN icon says nothing about whether packets actually get through.
+  /// A few seconds after connecting, fetch a tiny page through the tunnel
+  /// and tell the user plainly when the server accepts the handshake but
+  /// passes no traffic (wrong transport, dead server, DNS through proxy…).
+  Future<void> _verifyTraffic(String serverId) async {
+    if (!Platform.isAndroid) return; // desktop routes the app itself direct.
+    await Future.delayed(const Duration(seconds: 4));
+    if (status != VpnStatus.connected || activeServerId != serverId) return;
+    String? failure;
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    try {
+      final request = await client.getUrl(Uri.parse('http://cp.cloudflare.com/generate_204')).timeout(const Duration(seconds: 10));
+      final response = await request.close().timeout(const Duration(seconds: 10));
+      await response.drain<void>();
+      if (response.statusCode >= 500) failure = 'HTTP ${response.statusCode}';
+    } catch (error) {
+      failure = error.toString().split('\n').first;
+    } finally {
+      client.close(force: true);
+    }
+    if (status != VpnStatus.connected || activeServerId != serverId) return;
+    errorMessage = failure == null ? null : 'NO_TRAFFIC:$failure';
     notifyListeners();
   }
 
