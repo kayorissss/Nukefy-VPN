@@ -10,7 +10,7 @@ on:
       tag:
         description: 'Tag the built files belong to'
         required: false
-        default: v2.2.0
+        default: v2.2.1
 
 permissions:
   contents: write
@@ -159,9 +159,24 @@ jobs:
           Get-ChildItem $root.FullName -Filter 'general*.bat' | Copy-Item -Destination $dest -Force
           $zip.Name | Out-File -FilePath (Join-Path $dest 'VERSION.txt')
           Get-ChildItem $dest
-      - name: Zip Windows build
+      - name: Build portable single exe
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath NukefyVPN-windows-x64.zip
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = "${{ env.RELEASE_TAG }}".TrimStart('v')
+          if ($ver -notmatch '^\d+\.\d+\.\d+$') { $ver = '0.0.0' }
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath payload.zip -CompressionLevel Optimal
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          $info = "using System.Reflection; [assembly: AssemblyTitle(""Nukefy VPN"")] [assembly: AssemblyProduct(""Nukefy VPN"")] [assembly: AssemblyCompany(""@kayorisan"")] [assembly: AssemblyVersion(""$ver.0"")] [assembly: AssemblyFileVersion(""$ver.0"")]"
+          Set-Content -Path AssemblyInfo.cs -Value $info
+          & $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:NukefyVPN.exe `
+            /win32icon:windows/runner/resources/app_icon.ico `
+            /win32manifest:windows/portable/launcher.manifest `
+            /resource:payload.zip,payload.zip `
+            /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /reference:System.Windows.Forms.dll `
+            windows/portable/Launcher.cs AssemblyInfo.cs
+          if ($LASTEXITCODE -ne 0) { throw "csc failed" }
+          Get-Item NukefyVPN.exe | Format-List Name,Length
       - name: Build installer (Inno Setup)
         shell: pwsh
         run: |
@@ -173,16 +188,16 @@ jobs:
         with:
           name: NukefyVPN-windows-x64
           path: |
+            NukefyVPN.exe
             NukefyVPN-Setup-x64.exe
-            NukefyVPN-windows-x64.zip
           if-no-files-found: error
-      - name: Attach installer and ZIP to the release
+      - name: Attach portable exe and installer to the release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
+            NukefyVPN.exe
             NukefyVPN-Setup-x64.exe
-            NukefyVPN-windows-x64.zip
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

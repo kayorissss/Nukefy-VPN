@@ -87,11 +87,15 @@ class UpdateService {
           );
     }
     if (Platform.isWindows) {
-      return maps.cast<Map<String, dynamic>?>().firstWhere(
-            (asset) =>
-                nameHas(asset!, '.exe') ||
-                (nameHas(asset, 'windows') && nameHas(asset, '.zip')),
-            orElse: () => null,
+      final list = maps.cast<Map<String, dynamic>?>();
+      return list.firstWhere(
+            (asset) => nameHas(asset!, '.exe') && !nameHas(asset, 'setup'),
+            orElse: () => list.firstWhere(
+              (asset) =>
+                  nameHas(asset!, '.exe') ||
+                  (nameHas(asset, 'windows') && nameHas(asset, '.zip')),
+              orElse: () => null,
+            ),
           );
     }
     return maps.isEmpty ? null : maps.first;
