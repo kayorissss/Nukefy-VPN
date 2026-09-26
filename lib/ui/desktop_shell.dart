@@ -9,11 +9,13 @@ import 'package:window_manager/window_manager.dart';
 
 import '../core/providers/settings_provider.dart';
 import '../core/providers/vpn_provider.dart';
+import '../core/services/zapret_service.dart';
 
 class DesktopShell extends StatefulWidget {
-  const DesktopShell({super.key, required this.child});
+  const DesktopShell({super.key, required this.child, this.navigatorKey});
 
   final Widget child;
+  final GlobalKey<NavigatorState>? navigatorKey;
 
   @override
   State<DesktopShell> createState() => _DesktopShellState();
@@ -71,14 +73,77 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     super.dispose();
   }
 
+  bool _asking = false;
+
   @override
   void onWindowClose() async {
-    final hide = context.read<SettingsProvider>().settings.minimizeToTray;
-    if (hide) {
-      await windowManager.hide();
-      return;
+    final settings = context.read<SettingsProvider>();
+    var action = settings.settings.closeAction;
+    if (action == 'ask') {
+      if (_asking) return;
+      _asking = true;
+      action = await _askClose(settings) ?? 'cancel';
+      _asking = false;
     }
-    await _quit();
+    switch (action) {
+      case 'tray':
+        await windowManager.hide();
+      case 'exit':
+        await _quit();
+      default:
+        return;
+    }
+  }
+
+  /// Close (X / Alt+F4): minimize to tray or exit, with "remember".
+  Future<String?> _askClose(SettingsProvider settings) async {
+    final s = settings.strings;
+    var remember = false;
+    final dialogContext = widget.navigatorKey?.currentContext;
+    if (dialogContext == null) return 'tray';
+    await windowManager.show();
+    await windowManager.focus();
+    return showDialog<String>(
+      context: dialogContext,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(s.t('closeTitle')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(s.t('closeBody')),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: remember,
+                onChanged: (v) => setState(() => remember = v ?? false),
+                title: Text(s.t('closeRemember')),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(s.t('cancel'))),
+            TextButton(
+              onPressed: () async {
+                if (remember) await settings.update((v) => v.closeAction = 'exit');
+                if (context.mounted) Navigator.pop(context, 'exit');
+              },
+              child: Text(s.t('closeExit')),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (remember) await settings.update((v) => v.closeAction = 'tray');
+                if (context.mounted) Navigator.pop(context, 'tray');
+              },
+              child: Text(s.t('closeTray')),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -106,6 +171,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   }
 
   Future<void> _quit() async {
+    await ZapretService.instance.stop();
     await context.read<VpnProvider>().disconnect();
     await windowManager.setPreventClose(false);
     await windowManager.destroy();

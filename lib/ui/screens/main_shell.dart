@@ -17,6 +17,7 @@ import 'jammers_screen.dart';
 import 'servers_screen.dart';
 import 'settings_screen.dart';
 import 'stats_screen.dart';
+import 'zapret_screen.dart';
 
 /// Width from which the app switches to the desktop layout: a side rail and
 /// content centred with a comfortable maximum width.
@@ -32,20 +33,23 @@ class MainShell extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width;
     final desktop = width >= kDesktopBreakpoint;
 
+    final zapret = Platform.isWindows;
     final tabs = <_TabSpec>[
       _TabSpec(Icons.home_rounded, Icons.home_outlined, s.t('home')),
       _TabSpec(Icons.public_rounded, Icons.public_outlined, s.t('servers')),
+      if (zapret) _TabSpec(Icons.shield_rounded, Icons.shield_outlined, s.t('zapret')),
       _TabSpec(Icons.radar_rounded, Icons.radar_outlined, s.t('jammers')),
       _TabSpec(Icons.insights_rounded, Icons.insights_outlined, s.t('stats')),
       _TabSpec(Icons.settings_rounded, Icons.settings_outlined, s.t('settings')),
     ];
 
-    const pages = [
-      HomeScreen(),
-      ServersScreen(),
-      JammersScreen(),
-      StatsScreen(),
-      SettingsScreen(),
+    final pages = <Widget>[
+      const HomeScreen(),
+      const ServersScreen(),
+      if (zapret) const ZapretScreen(),
+      const JammersScreen(),
+      const StatsScreen(),
+      const SettingsScreen(),
     ];
 
     // IndexedStack keeps every tab alive (jammer results, scroll offsets);

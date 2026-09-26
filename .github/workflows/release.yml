@@ -10,7 +10,7 @@ on:
       tag:
         description: 'Tag the built files belong to'
         required: false
-        default: v2.1.2
+        default: v2.2.0
 
 permissions:
   contents: write
@@ -124,7 +124,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   windows:
-    name: Windows ZIP
+    name: Windows installer
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -140,19 +140,49 @@ jobs:
       - name: Build Windows
         shell: pwsh
         run: flutter build windows --release
+      - name: Bundle zapret (Flowseal/zapret-discord-youtube)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path zapret-src | Out-Null
+          gh release download -R Flowseal/zapret-discord-youtube --pattern '*.zip' --dir zapret-src
+          $zip = Get-ChildItem zapret-src -Filter *.zip | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath zapret-src/unpacked -Force
+          $root = Get-ChildItem zapret-src/unpacked -Directory -Recurse | Where-Object { Test-Path (Join-Path $_.FullName 'bin/winws.exe') } | Select-Object -First 1
+          if (-not $root) { if (Test-Path 'zapret-src/unpacked/bin/winws.exe') { $root = Get-Item 'zapret-src/unpacked' } else { throw 'winws.exe not found in zapret archive' } }
+          $dest = 'build/windows/x64/runner/Release/zapret'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item -Recurse -Force (Join-Path $root.FullName 'bin') $dest
+          Copy-Item -Recurse -Force (Join-Path $root.FullName 'lists') $dest
+          Get-ChildItem $root.FullName -Filter 'general*.bat' | Copy-Item -Destination $dest -Force
+          $zip.Name | Out-File -FilePath (Join-Path $dest 'VERSION.txt')
+          Get-ChildItem $dest
       - name: Zip Windows build
         shell: pwsh
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath NukefyVPN-windows-x64.zip
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = "${{ env.RELEASE_TAG }}".TrimStart('v')
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$ver" windows\installer.iss
+          if (-not (Test-Path NukefyVPN-Setup-x64.exe)) { throw 'installer not produced' }
       - uses: actions/upload-artifact@v4
         with:
           name: NukefyVPN-windows-x64
-          path: NukefyVPN-windows-x64.zip
+          path: |
+            NukefyVPN-Setup-x64.exe
+            NukefyVPN-windows-x64.zip
           if-no-files-found: error
-      - name: Attach ZIP to the release
+      - name: Attach installer and ZIP to the release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          files: NukefyVPN-windows-x64.zip
+          files: |
+            NukefyVPN-Setup-x64.exe
+            NukefyVPN-windows-x64.zip
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -63,7 +63,7 @@ class HomeScreen extends StatelessWidget {
                     const Spacer(),
                     _RoundIcon(
                       icon: Icons.tune_rounded,
-                      onTap: () => context.read<NavProvider>().setIndex(4),
+                      onTap: () => context.read<NavProvider>().setIndex(Platform.isWindows ? 5 : 4),
                     ),
                   ],
                 ),

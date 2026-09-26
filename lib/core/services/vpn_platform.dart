@@ -331,27 +331,19 @@ class VpnPlatform {
     }
     if (!Platform.isWindows) return;
     final exe = Platform.resolvedExecutable;
-    if (enabled) {
-      await Process.run('reg', [
-        'add',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
-        '/v',
-        'NukefyVPN',
-        '/t',
-        'REG_SZ',
-        '/d',
-        exe,
-        '/f',
-      ]);
-    } else {
-      await Process.run('reg', [
-        'delete',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run',
-        '/v',
-        'NukefyVPN',
-        '/f',
-      ]);
-    }
+    // The app runs elevated (TUN + WinDivert need it); a plain HKCU\Run entry
+    // for an elevated exe is silently dropped by UAC at logon, so use a
+    // scheduled task with highest privileges instead.
+    try {
+      await Process.run('schtasks', ['/Delete', '/TN', 'NukefyVPN', '/F']);
+      await Process.run('reg', ['delete', r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run', '/v', 'NukefyVPN', '/f']);
+      if (enabled) {
+        await Process.run('schtasks', [
+          '/Create', '/TN', 'NukefyVPN', '/SC', 'ONLOGON', '/RL', 'HIGHEST', '/F',
+          '/TR', '"$exe" --autostart',
+        ]);
+      }
+    } catch (_) {}
   }
 
   /// Android 13+: asks the system to add the VPN tile to Quick Settings.

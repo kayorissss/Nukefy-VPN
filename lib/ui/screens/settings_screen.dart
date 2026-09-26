@@ -10,6 +10,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/vpn_provider.dart';
+import '../../core/services/app_log.dart';
 import '../../core/services/subscription_service.dart';
 import '../../core/services/update_service.dart';
 import '../../core/services/vpn_platform.dart';
@@ -144,11 +145,18 @@ class SettingsScreen extends StatelessWidget {
                   onChanged: (next) => settings.update((item) => item.notifications = next),
                 ),
                 if (Platform.isWindows)
-                  SwitchTile(
-                    icon: Icons.minimize_rounded,
-                    title: s.t('minimizeToTray'),
-                    value: value.minimizeToTray,
-                    onChanged: (next) => settings.update((item) => item.minimizeToTray = next),
+                  SettingsTile(
+                    icon: Icons.close_rounded,
+                    title: s.t('closeAction'),
+                    trailing: NukefyDropdown<String>(
+                      value: const ['ask', 'tray', 'exit'].contains(value.closeAction) ? value.closeAction : 'ask',
+                      items: {
+                        'ask': s.t('closeAsk'),
+                        'tray': s.t('closeTray'),
+                        'exit': s.t('closeExit'),
+                      },
+                      onChanged: (next) => settings.update((item) => item.closeAction = next),
+                    ),
                   ),
               ],
             ),
@@ -438,6 +446,18 @@ class SettingsScreen extends StatelessWidget {
                   title: s.t('checkUpdates'),
                   subtitle: '${s.t('version')} ${AppConstants.version}',
                   onTap: () => checkUpdatesFlow(context),
+                ),
+                SettingsTile(
+                  icon: Icons.bug_report_outlined,
+                  title: s.t('diagnostics'),
+                  subtitle: s.t('diagnosticsHint'),
+                  onTap: () async {
+                    final text = AppLog.read();
+                    await Clipboard.setData(ClipboardData(text: text.isEmpty ? '(empty)' : text));
+                    if (context.mounted) showNukefySnack(context, s.t('copied'));
+                    final path = AppLog.path;
+                    if (path != null && !Platform.isAndroid) await VpnPlatform().revealFile(path);
+                  },
                 ),
                 SettingsTile(
                   icon: Icons.person_outline_rounded,

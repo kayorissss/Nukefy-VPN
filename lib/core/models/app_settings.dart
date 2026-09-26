@@ -36,6 +36,10 @@ class AppSettings {
     this.theme = ThemePreference.dark,
     this.accent = 'cyan',
     this.appIcon = 'default',
+    this.zapretStrategy = 'general',
+    this.zapretAutoStart = false,
+    this.zapretGameFilter = false,
+    this.closeAction = 'ask',
     this.language = LanguagePreference.ru,
     this.seenWelcome = false,
     this.autoConnect = false,
@@ -82,6 +86,11 @@ class AppSettings {
   ThemePreference theme;
   String accent;
   String appIcon;
+  String zapretStrategy;
+  bool zapretAutoStart;
+  bool zapretGameFilter;
+  /// Desktop close button: ask | tray | exit.
+  String closeAction;
   LanguagePreference language;
   bool seenWelcome;
   bool autoConnect;
@@ -130,6 +139,10 @@ class AppSettings {
         'theme': theme.name,
         'accent': accent,
         'appIcon': appIcon,
+        'zapretStrategy': zapretStrategy,
+        'zapretAutoStart': zapretAutoStart,
+        'zapretGameFilter': zapretGameFilter,
+        'closeAction': closeAction,
         'language': language.name,
         'seenWelcome': seenWelcome,
         'autoConnect': autoConnect,
@@ -178,6 +191,10 @@ class AppSettings {
       theme: _enum(ThemePreference.values, json['theme'], ThemePreference.dark),
       accent: (json['accent'] as String?) ?? 'cyan',
       appIcon: (json['appIcon'] as String?) ?? 'default',
+      zapretStrategy: (json['zapretStrategy'] as String?) ?? 'general',
+      zapretAutoStart: json['zapretAutoStart'] == true,
+      zapretGameFilter: json['zapretGameFilter'] == true,
+      closeAction: (json['closeAction'] as String?) ?? 'ask',
       language: _enum(
         LanguagePreference.values,
         json['language'],

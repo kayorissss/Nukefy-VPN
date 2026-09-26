@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -10,18 +11,32 @@ import 'core/providers/nav_provider.dart';
 import 'core/providers/servers_provider.dart';
 import 'core/providers/settings_provider.dart';
 import 'core/providers/stats_provider.dart';
+import 'core/constants/app_constants.dart';
 import 'core/models/vpn_status.dart';
 import 'core/providers/vpn_provider.dart';
+import 'core/services/app_log.dart';
 import 'core/services/storage_service.dart';
 import 'core/services/subscription_service.dart';
 import 'core/services/vpn_platform.dart';
+import 'core/services/zapret_service.dart';
 import 'ui/desktop_shell.dart';
 import 'ui/screens/settings_screen.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
+  runZonedGuarded(_main, (error, stack) => AppLog.log('uncaught: $error\n$stack'));
+}
+
+Future<void> _main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    AppLog.log('flutter: ${details.exceptionAsString()}');
+  };
+  final startedAt = DateTime.now();
+  await AppLog.init();
+  AppLog.log('start ${AppConstants.version} ${Platform.operatingSystem} ${Platform.operatingSystemVersion} args=${Platform.executableArguments}');
   if (Platform.isAndroid || Platform.isIOS) {
     // Draw behind the status and gesture bars; colours come from AppTheme.overlay.
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -37,19 +52,24 @@ Future<void> main() async {
       backgroundColor: Color(0xFF0D0D0D),
     );
     windowManager.waitUntilReadyToShow(options, () async {
-      await windowManager.maximize();
+      // Show first, then maximize: maximizing a hidden window on some
+      // Windows builds left it painted but not receiving input.
       await windowManager.show();
       await windowManager.focus();
+      await windowManager.maximize();
+      AppLog.log('window shown');
     });
   }
 
   // Every init step is bounded and non-fatal: a stuck storage read or a
   // hanging `sing-box version` must never leave the user with a blank window.
   Future<void> guard(String step, Future<void> Function() run, {int seconds = 8}) async {
+    final sw = Stopwatch()..start();
     try {
       await run().timeout(Duration(seconds: seconds));
+      AppLog.log('init $step ok ${sw.elapsedMilliseconds}ms');
     } catch (error) {
-      debugPrint('init: $step failed: $error');
+      AppLog.log('init $step FAILED after ${sw.elapsedMilliseconds}ms: $error');
     }
   }
 
@@ -71,7 +91,7 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: vpn),
         ChangeNotifierProvider(create: (_) => NavProvider()),
       ],
-      child: DesktopShell(child: NukefyApp(navigatorKey: navigatorKey)),
+      child: DesktopShell(navigatorKey: navigatorKey, child: NukefyApp(navigatorKey: navigatorKey)),
     ),
   );
 
@@ -89,6 +109,15 @@ Future<void> main() async {
   }));
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
+    AppLog.log('first frame after ${DateTime.now().difference(startedAt).inMilliseconds}ms');
+    if (Platform.isWindows && settings.settings.zapretAutoStart) {
+      final list = ZapretService.instance.strategies();
+      final chosen = list.where((e) => e.id == settings.settings.zapretStrategy).firstOrNull ?? list.firstOrNull;
+      if (chosen != null) {
+        ZapretService.instance.gameFilter = settings.settings.zapretGameFilter;
+        unawaited(ZapretService.instance.start(chosen).then((ok) => AppLog.log('zapret autostart ok=$ok ${ZapretService.instance.lastError ?? ''}')));
+      }
+    }
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       // Safety net: if waitUntilReadyToShow never fired, show the window now.
       try {
