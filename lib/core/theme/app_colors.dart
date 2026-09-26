@@ -101,7 +101,26 @@ class NukefyPalette extends ThemeExtension<NukefyPalette> {
   }
 
   @override
-  NukefyPalette copyWith() => this;
+  NukefyPalette copyWith({Color? accent, Color? accent2}) => NukefyPalette(
+        background: background,
+        card: card,
+        surface: surface,
+        border: border,
+        text: text,
+        textSecondary: textSecondary,
+        textDisabled: textDisabled,
+        accent: accent ?? this.accent,
+        accent2: accent2 ?? this.accent2,
+        success: success,
+        isDark: isDark,
+      );
+
+  /// Palette with one of the user-selectable accent pairs applied.
+  NukefyPalette withAccent(String key) {
+    final pair = AccentThemes.of(key);
+    if (pair == null) return this;
+    return copyWith(accent: isDark ? pair.dark : pair.light, accent2: pair.secondary);
+  }
 
   @override
   NukefyPalette lerp(ThemeExtension<NukefyPalette>? other, double t) =>
@@ -111,4 +130,26 @@ class NukefyPalette extends ThemeExtension<NukefyPalette> {
 extension NukefyPaletteContext on BuildContext {
   NukefyPalette get palette =>
       Theme.of(this).extension<NukefyPalette>() ?? NukefyPalette.dark;
+}
+
+class AccentPair {
+  const AccentPair(this.dark, this.light, this.secondary);
+  final Color dark;
+  final Color light;
+  final Color secondary;
+}
+
+/// User-selectable accent colours (Settings → Accent colour).
+class AccentThemes {
+  static const Map<String, AccentPair> all = {
+    'cyan': AccentPair(AppColors.cyan, AppColors.lightCyan, AppColors.violet),
+    'violet': AccentPair(Color(0xFFA78BFA), Color(0xFF6D4AFF), Color(0xFF22D3EE)),
+    'crimson': AccentPair(Color(0xFFFF5C7A), Color(0xFFD9224A), Color(0xFFFF9F43)),
+    'pink': AccentPair(Color(0xFFFF7AC6), Color(0xFFDB2777), Color(0xFF8B5CF6)),
+    'blue': AccentPair(Color(0xFF60A5FA), Color(0xFF2563EB), Color(0xFF22D3EE)),
+    'emerald': AccentPair(Color(0xFF34D399), Color(0xFF059669), Color(0xFF38BDF8)),
+    'amber': AccentPair(Color(0xFFFBBF24), Color(0xFFD97706), Color(0xFFF97316)),
+  };
+
+  static AccentPair? of(String key) => all[key];
 }

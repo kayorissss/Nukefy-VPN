@@ -10,6 +10,7 @@ import 'core/providers/nav_provider.dart';
 import 'core/providers/servers_provider.dart';
 import 'core/providers/settings_provider.dart';
 import 'core/providers/stats_provider.dart';
+import 'core/models/vpn_status.dart';
 import 'core/providers/vpn_provider.dart';
 import 'core/services/storage_service.dart';
 import 'core/services/subscription_service.dart';
@@ -74,6 +75,19 @@ Future<void> main() async {
     ),
   );
 
+  // Quick tile / notification can bring an already running app to front with
+  // an action attached; pick it up on every resume, not only at cold start.
+  WidgetsBinding.instance.addObserver(_ResumeActions(() async {
+    final action = await VpnPlatform().consumeLaunchAction();
+    if (action == null) return;
+    final selected = servers.byId(settings.settings.selectedServerId);
+    if (action == 'toggle') {
+      await vpn.toggle();
+    } else if (action == 'connect' && selected != null && vpn.status != VpnStatus.connected) {
+      await vpn.connect(selected);
+    }
+  }));
+
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       // Safety net: if waitUntilReadyToShow never fired, show the window now.
@@ -93,4 +107,14 @@ Future<void> main() async {
       await checkUpdatesFlow(context, silentIfCurrent: true);
     }
   });
+}
+
+class _ResumeActions extends WidgetsBindingObserver {
+  _ResumeActions(this.onResume);
+  final Future<void> Function() onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) onResume();
+  }
 }

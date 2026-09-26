@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/stats_provider.dart';
 import '../../core/theme/app_colors.dart';
+import 'speed_test_screen.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
 
@@ -21,6 +22,8 @@ class StatsScreen extends StatelessWidget {
       child: ListView(
         padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.paddingOf(context).bottom + 100),
         children: [
+          _SpeedTestButton(label: s.t('speedTest'), hint: s.t('speedTestHint')),
+          const SizedBox(height: 12),
           // Current speed, large.
           Container(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
@@ -350,4 +353,56 @@ class _SpeedChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SpeedChartPainter oldDelegate) => true;
+}
+
+
+class _SpeedTestButton extends StatelessWidget {
+  const _SpeedTestButton({required this.label, required this.hint});
+  final String label;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SpeedTestScreen())),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [p.accent.withValues(alpha: p.isDark ? 0.22 : 0.16), p.accent2.withValues(alpha: 0.12)],
+          ),
+          border: Border.all(color: p.accent.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(colors: [p.accent, p.accent2]),
+              ),
+              child: Icon(Icons.speed_rounded, color: p.isDark ? const Color(0xFF07131A) : Colors.white, size: 26),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: AppTextStyles.headline.copyWith(fontSize: 15)),
+                  const SizedBox(height: 3),
+                  Text(hint, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: p.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
 }

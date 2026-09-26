@@ -45,6 +45,7 @@ class VpnProvider extends ChangeNotifier {
     _servers = servers;
     _settings = settings;
     activeServerId = settings.settings.selectedServerId;
+    _startWatch();
   }
 
   Future<void> refreshCore() async {
@@ -139,19 +140,54 @@ class VpnProvider extends ChangeNotifier {
     _sessionDown = 0;
     _stats?.startSession();
     await _stats?.addLog(server.name, 'connected', message: mode);
-    _listenTraffic();
+    _startTicker();
+    notifyListeners();
+  }
+
+  void _startTicker() {
     _ticker?.cancel();
-    var tick = 0;
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) async {
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       _stats?.tickDuration();
       notifyListeners();
-      // The service can be stopped from outside (notification action, quick
-      // tile, system "disconnect", VPN revoked): re-sync every 2 seconds.
-      if (Platform.isAndroid && ++tick % 2 == 0 && status == VpnStatus.connected) {
+    });
+  }
+
+  Timer? _watch;
+  bool _syncing = false;
+
+  /// Android: the service lives its own life (quick tile, notification
+  /// action, revive after boot, system "disconnect"). Poll it every 2 s and
+  /// keep the UI truthful in both directions.
+  void _startWatch() {
+    if (!Platform.isAndroid) return;
+    _watch?.cancel();
+    _watch = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (_syncing || status == VpnStatus.connecting) return;
+      _syncing = true;
+      try {
         final alive = await _platform.isRunning();
-        if (!alive && status == VpnStatus.connected) await _onExternalStop();
+        if (!alive && status == VpnStatus.connected) {
+          await _onExternalStop();
+        } else if (alive && status != VpnStatus.connected) {
+          await _onExternalStart();
+        }
+      } finally {
+        _syncing = false;
       }
     });
+  }
+
+  /// Service was started outside the app (tile / boot): adopt the session.
+  Future<void> _onExternalStart() async {
+    activeServerId ??= _settings?.settings.selectedServerId;
+    status = VpnStatus.connected;
+    errorMessage = null;
+    mode = 'tun';
+    _sessionUp = 0;
+    _sessionDown = 0;
+    _stats?.startSession();
+    _listenTraffic();
+    _startTicker();
     notifyListeners();
   }
 

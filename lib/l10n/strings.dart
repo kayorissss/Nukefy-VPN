@@ -312,6 +312,18 @@ class S {
     'copyHwid': 'Скопировать HWID',
     'xhttpUnsupported': 'Этот сервер использует транспорт XHTTP (SplitHTTP). Ядро sing-box его не поддерживает — такие серверы работают только в Xray-клиентах (Happ, v2rayNG). Выберите сервер с TCP/Reality, WebSocket, gRPC или HTTPUpgrade.',
     'noTraffic': 'VPN включён, но трафик через сервер не идёт. Проверьте сервер или смените его.',
+    'accentColor': 'Цвет акцента',
+    'appIcon': 'Иконка приложения',
+    'speedTestStart': 'Запустить тест',
+    'speedTestHistory': 'История тестов',
+    'ping': 'Пинг',
+    'jitter': 'Джиттер',
+    'noHistory': 'Пока нет результатов',
+    'clearHistory': 'Очистить историю',
+    'speedTesting': 'Измеряем…',
+    'viaVpn': 'через VPN',
+    'showMore': 'Показать ещё',
+    'speedTestHint': 'Загрузка, отдача, пинг и джиттер — как в Speedtest',
   };
 
   static const _en = {
@@ -623,6 +635,18 @@ class S {
     'copyHwid': 'Copy HWID',
     'xhttpUnsupported': 'This server uses the XHTTP (SplitHTTP) transport, which sing-box does not support — it only works in Xray clients (Happ, v2rayNG). Pick a TCP/Reality, WebSocket, gRPC or HTTPUpgrade server.',
     'noTraffic': 'VPN is on, but no traffic passes through the server. Check or change the server.',
+    'accentColor': 'Accent colour',
+    'appIcon': 'App icon',
+    'speedTestStart': 'Start test',
+    'speedTestHistory': 'Test history',
+    'ping': 'Ping',
+    'jitter': 'Jitter',
+    'noHistory': 'No results yet',
+    'clearHistory': 'Clear history',
+    'speedTesting': 'Measuring…',
+    'viaVpn': 'via VPN',
+    'showMore': 'Show more',
+    'speedTestHint': 'Download, upload, ping and jitter — Speedtest style',
   };
 
   String t(String key) {

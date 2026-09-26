@@ -34,6 +34,8 @@ class RoutingRule {
 class AppSettings {
   AppSettings({
     this.theme = ThemePreference.dark,
+    this.accent = 'cyan',
+    this.appIcon = 'default',
     this.language = LanguagePreference.ru,
     this.seenWelcome = false,
     this.autoConnect = false,
@@ -78,6 +80,8 @@ class AppSettings {
   });
 
   ThemePreference theme;
+  String accent;
+  String appIcon;
   LanguagePreference language;
   bool seenWelcome;
   bool autoConnect;
@@ -124,6 +128,8 @@ class AppSettings {
 
   Map<String, dynamic> toJson() => {
         'theme': theme.name,
+        'accent': accent,
+        'appIcon': appIcon,
         'language': language.name,
         'seenWelcome': seenWelcome,
         'autoConnect': autoConnect,
@@ -170,6 +176,8 @@ class AppSettings {
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     return AppSettings(
       theme: _enum(ThemePreference.values, json['theme'], ThemePreference.dark),
+      accent: (json['accent'] as String?) ?? 'cyan',
+      appIcon: (json['appIcon'] as String?) ?? 'default',
       language: _enum(
         LanguagePreference.values,
         json['language'],

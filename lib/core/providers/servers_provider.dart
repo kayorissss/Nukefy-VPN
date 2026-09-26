@@ -173,7 +173,7 @@ class ServersProvider extends ChangeNotifier {
           ..pingMs = ms
           ..lastPingAt = DateTime.now()
           ..isNew = false;
-        notifyListeners();
+        _notifyThrottled();
       },
     );
     await _persist();
@@ -356,6 +356,14 @@ class ServersProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Mass ping produces hundreds of updates per second; coalesce them so the
+  // list repaints at most ~6 times a second instead of freezing.
+  Timer? _notifyTimer;
+  void _notifyThrottled() {
+    if (_notifyTimer?.isActive ?? false) return;
+    _notifyTimer = Timer(const Duration(milliseconds: 160), notifyListeners);
+  }
+
   Future<void> pingAll({void Function(String id, int ms)? onEach}) async {
     if (pinging || servers.isEmpty) return;
     pinging = true;
@@ -371,7 +379,7 @@ class ServersProvider extends ChangeNotifier {
           ..pingMs = ms
           ..lastPingAt = DateTime.now();
         onEach?.call(id, ms);
-        notifyListeners();
+        _notifyThrottled();
       },
     );
     pinging = false;

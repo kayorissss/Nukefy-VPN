@@ -5,8 +5,8 @@ import 'app_colors.dart';
 import 'app_text_styles.dart';
 
 class AppTheme {
-  static ThemeData dark() => _build(NukefyPalette.dark);
-  static ThemeData light() => _build(NukefyPalette.light);
+  static ThemeData dark([String accent = 'cyan']) => _build(NukefyPalette.dark.withAccent(accent));
+  static ThemeData light([String accent = 'cyan']) => _build(NukefyPalette.light.withAccent(accent));
 
   /// Transparent system bars so the app background continues under the
   /// status bar and the gesture bar.

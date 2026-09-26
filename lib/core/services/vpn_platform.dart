@@ -312,6 +312,16 @@ class VpnPlatform {
     });
   }
 
+  /// Android: switch the launcher icon (activity-alias). No-op elsewhere.
+  Future<bool> setAppIcon(String name) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return (await _channel.invokeMethod<bool>('setAppIcon', {'icon': name})) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> setAutoStart(bool enabled) async {
     if (Platform.isAndroid) {
       try {

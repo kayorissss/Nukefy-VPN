@@ -277,6 +277,9 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
   bool _open = true;
   bool _pinging = false;
 
+  static const _page = 40;
+  int _shown = _page;
+
   Future<void> _ping() async {
     if (_pinging) return;
     setState(() => _pinging = true);
@@ -387,8 +390,19 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
                     style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error),
                   ),
                 ),
-              for (final server in widget.servers)
-                ServerTile(server: server, antiblock: widget.antiblock),
+              // Big subscriptions (100+ servers) are rendered in pages so
+              // opening a card never builds hundreds of tiles at once.
+              for (final server in widget.servers.take(_shown))
+                RepaintBoundary(child: ServerTile(server: server, antiblock: widget.antiblock)),
+              if (widget.servers.length > _shown)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _shown += _page),
+                    icon: const Icon(Icons.expand_more_rounded, size: 18),
+                    label: Text('${s.t('showMore')} (${widget.servers.length - _shown})'),
+                  ),
+                ),
               const SizedBox(height: 8),
                 ],
               ),

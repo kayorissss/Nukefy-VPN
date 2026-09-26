@@ -66,6 +66,49 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ),
                 SettingsTile(
+                  icon: Icons.palette_outlined,
+                  title: s.t('accentColor'),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(52, 0, 2, 12),
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final entry in AccentThemes.all.entries)
+                        _Swatch(
+                          color: Theme.of(context).brightness == Brightness.dark ? entry.value.dark : entry.value.light,
+                          selected: value.accent == entry.key,
+                          onTap: () => settings.update((item) => item.accent = entry.key),
+                        ),
+                    ],
+                  ),
+                ),
+                if (Platform.isAndroid) ...[
+                  SettingsTile(
+                    icon: Icons.apps_rounded,
+                    title: s.t('appIcon'),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(52, 0, 2, 12),
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        for (final name in const ['default', 'violet', 'pink', 'crimson', 'emerald'])
+                          _IconChoice(
+                            name: name,
+                            selected: value.appIcon == name,
+                            onTap: () async {
+                              await settings.update((item) => item.appIcon = name);
+                              await VpnPlatform().setAppIcon(name);
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+                SettingsTile(
                   icon: Icons.language_rounded,
                   title: s.t('language'),
                   trailing: NukefyDropdown<LanguagePreference>(
@@ -127,16 +170,22 @@ class SettingsScreen extends StatelessWidget {
                   icon: Icons.badge_outlined,
                   title: s.t('clientIdentity'),
                   subtitle: s.t('clientIdentityHint'),
-                  trailing: NukefyDropdown<String>(
-                    value: SubscriptionService.clientUserAgents.containsKey(value.clientIdentity) ? value.clientIdentity : 'nukefy',
-                    items: const {
-                      'nukefy': 'Nukefy VPN',
-                      'happ': 'Happ',
-                      'v2rayng': 'v2rayNG',
-                      'hiddify': 'Hiddify',
-                      'streisand': 'Streisand',
-                    },
-                    onChanged: (next) => settings.update((item) => item.clientIdentity = next),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(52, 0, 2, 10),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: NukefyDropdown<String>(
+                      value: SubscriptionService.clientUserAgents.containsKey(value.clientIdentity) ? value.clientIdentity : 'nukefy',
+                      items: const {
+                        'nukefy': 'Nukefy VPN',
+                        'happ': 'Happ',
+                        'v2rayng': 'v2rayNG',
+                        'hiddify': 'Hiddify',
+                        'streisand': 'Streisand',
+                      },
+                      onChanged: (next) => settings.update((item) => item.clientIdentity = next),
+                    ),
                   ),
                 ),
                 SettingsTile(
@@ -457,6 +506,7 @@ class _TelegramCard extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(22),
           onTap: () => launchUrl(Uri.parse(AppConstants.telegramProxyUrl), mode: LaunchMode.externalApplication),
+          onLongPress: () => _copyProxy(context),
           child: Ink(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -487,7 +537,12 @@ class _TelegramCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: strings.t('copyLink'),
+                  onPressed: () => _copyProxy(context),
+                  icon: Icon(Icons.copy_rounded, color: p.textSecondary, size: 20),
+                ),
                 Icon(Icons.open_in_new_rounded, color: p.textSecondary, size: 20),
               ],
             ),
@@ -495,6 +550,12 @@ class _TelegramCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _copyProxy(BuildContext context) async {
+    HapticFeedback.mediumImpact();
+    await Clipboard.setData(const ClipboardData(text: AppConstants.telegramProxyUrl));
+    if (context.mounted) showNukefySnack(context, strings.t('copied'));
   }
 }
 
@@ -773,6 +834,62 @@ class _TaskProgressDialogState<T> extends State<_TaskProgressDialog<T>> {
       subtitle: widget.subtitle,
       progress: _progress,
       strings: widget.strings,
+    );
+  }
+}
+
+
+class _Swatch extends StatelessWidget {
+  const _Swatch({required this.color, required this.selected, required this.onTap});
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color,
+          border: Border.all(color: selected ? p.text : Colors.transparent, width: 2.5),
+          boxShadow: selected ? [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 12)] : null,
+        ),
+        child: selected ? Icon(Icons.check_rounded, size: 18, color: p.isDark ? Colors.black : Colors.white) : null,
+      ),
+    );
+  }
+}
+
+class _IconChoice extends StatelessWidget {
+  const _IconChoice({required this.name, required this.selected, required this.onTap});
+  final String name;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final asset = name == 'default' ? 'assets/icons/app_icon.png' : 'assets/icons/app_icon_$name.png';
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: selected ? p.accent : p.border, width: selected ? 2 : 1),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(13),
+          child: Image.asset(asset, width: 48, height: 48, filterQuality: FilterQuality.medium),
+        ),
+      ),
     );
   }
 }
