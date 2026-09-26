@@ -139,10 +139,33 @@ class VpnProvider extends ChangeNotifier {
     await _stats?.addLog(server.name, 'connected', message: mode);
     _listenTraffic();
     _ticker?.cancel();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+    var tick = 0;
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) async {
       _stats?.tickDuration();
       notifyListeners();
+      // The service can be stopped from outside (notification action, quick
+      // tile, system "disconnect", VPN revoked): re-sync every 2 seconds.
+      if (Platform.isAndroid && ++tick % 2 == 0 && status == VpnStatus.connected) {
+        final alive = await _platform.isRunning();
+        if (!alive && status == VpnStatus.connected) await _onExternalStop();
+      }
     });
+    notifyListeners();
+  }
+
+  /// Core died or was stopped outside the app: clean up without calling stop.
+  Future<void> _onExternalStop() async {
+    final name = activeServer?.name ?? '';
+    await _traffic?.sink.close();
+    _traffic = null;
+    _ticker?.cancel();
+    final settings = _settings;
+    if (settings != null && (_sessionUp > 0 || _sessionDown > 0)) {
+      await settings.addTraffic(_sessionUp, _sessionDown);
+    }
+    status = VpnStatus.disconnected;
+    _stats?.resetSession();
+    if (name.isNotEmpty) await _stats?.addLog(name, 'disconnected');
     notifyListeners();
   }
 

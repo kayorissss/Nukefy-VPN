@@ -243,7 +243,11 @@ class SingboxConfigBuilder {
         'rules': rules,
         if (ruleSets.isNotEmpty) 'rule_set': ruleSets,
         'final': finalOutbound,
-        'auto_detect_interface': desktopTun && useTun,
+        // Must be on whenever TUN is on. On Android this is what makes
+        // libbox call VpnService.protect() for every outbound socket — without
+        // it the proxy connection itself is routed back into the tunnel and
+        // nothing loads while the VPN icon is happily lit.
+        'auto_detect_interface': useTun,
         'default_domain_resolver': 'direct-dns',
       },
       'experimental': {
