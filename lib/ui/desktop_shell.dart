@@ -32,8 +32,9 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   Future<void> _init() async {
     await windowManager.setPreventClose(true);
     final dir = await getApplicationSupportDirectory();
-    final asset = Platform.isWindows ? 'assets/icons/app_icon.ico' : 'assets/icons/app_icon.png';
-    final icon = File('${dir.path}/${Platform.isWindows ? 'tray_icon.ico' : 'tray_icon.png'}');
+    final asset = Platform.isWindows ? 'assets/icons/app_icon.ico' : 'assets/icons/tray_icon.png';
+    // New file name per icon revision so a stale cached copy is never reused.
+    final icon = File('${dir.path}/${Platform.isWindows ? 'tray_icon_v2.ico' : 'tray_icon_v2.png'}');
     try {
       final data = await rootBundle.load(asset);
       await icon.writeAsBytes(data.buffer.asUint8List(), flush: true);

@@ -36,6 +36,7 @@ Future<void> main() async {
       backgroundColor: Color(0xFF0D0D0D),
     );
     windowManager.waitUntilReadyToShow(options, () async {
+      await windowManager.maximize();
       await windowManager.show();
       await windowManager.focus();
     });

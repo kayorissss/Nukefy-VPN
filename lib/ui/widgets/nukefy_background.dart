@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -15,28 +16,54 @@ class NukefyBackground extends StatefulWidget {
   State<NukefyBackground> createState() => _NukefyBackgroundState();
 }
 
-class _NukefyBackgroundState extends State<NukefyBackground> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 24),
-  )..repeat();
+class _NukefyBackgroundState extends State<NukefyBackground> {
+  // A full-screen gradient repainted 60 times a second on every screen was
+  // the single biggest CPU/GPU cost of the app. The orbs now move in ~12 fps
+  // steps (imperceptible for a 40-second drift) and only the outermost
+  // background animates — nested ones paint once and stay still.
+  static const _period = Duration(seconds: 40);
+  static const _tick = Duration(milliseconds: 80);
+  Timer? _timer;
+  double _progress = 0;
+  bool _nested = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _nested = context.findAncestorWidgetOfExactType<NukefyBackground>() != null;
+    if (_nested) {
+      _timer?.cancel();
+      _timer = null;
+    } else {
+      _timer ??= Timer.periodic(_tick, (_) {
+        if (!mounted) return;
+        setState(() {
+          _progress = (_progress + _tick.inMilliseconds / _period.inMilliseconds) % 1;
+        });
+      });
+    }
+  }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) => CustomPaint(
-        painter: _OrbsPainter(progress: _controller.value, palette: p),
-        child: child,
+    if (_nested) {
+      // Transparent: the outer background already shows through.
+      return widget.child;
+    }
+    return RepaintBoundary(
+      child: CustomPaint(
+        isComplex: true,
+        willChange: true,
+        painter: _OrbsPainter(progress: _progress, palette: p),
+        child: RepaintBoundary(child: widget.child),
       ),
-      child: widget.child,
     );
   }
 }
