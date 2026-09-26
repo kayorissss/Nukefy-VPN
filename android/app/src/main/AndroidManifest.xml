@@ -43,6 +43,18 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
+            android:name=".IconStealth"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_stealth"
+            android:label="Notes">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
             android:name=".IconViolet"
             android:targetActivity=".MainActivity"
             android:enabled="false"

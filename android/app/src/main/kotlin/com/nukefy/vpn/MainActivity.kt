@@ -186,7 +186,7 @@ class MainActivity : FlutterActivity() {
 
     /** Switches the launcher icon by enabling one activity-alias and disabling the rest. */
     private fun setAppIcon(name: String): Boolean {
-        val aliases = listOf("Default", "Violet", "Pink", "Crimson", "Emerald")
+        val aliases = listOf("Default", "Stealth", "Violet", "Pink", "Crimson", "Emerald")
         val wanted = aliases.firstOrNull { it.equals(name, ignoreCase = true) } ?: "Default"
         val pm = packageManager
         return try {

@@ -95,7 +95,7 @@ class SettingsScreen extends StatelessWidget {
                       spacing: 12,
                       runSpacing: 12,
                       children: [
-                        for (final name in const ['default', 'violet', 'pink', 'crimson', 'emerald'])
+                        for (final name in const ['default', 'stealth', 'violet', 'pink', 'crimson', 'emerald'])
                           _IconChoice(
                             name: name,
                             selected: value.appIcon == name,

@@ -1,7 +1,7 @@
 name: nukefy_vpn
 description: Nukefy VPN — клиент sing-box для VLESS Reality, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, WireGuard и AmneziaWG.
 publish_to: "none"
-version: 2.1.0+5
+version: 2.1.1+6
 
 environment:
   sdk: ">=3.13.0 <4.0.0"

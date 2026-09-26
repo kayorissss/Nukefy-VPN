@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -82,7 +83,11 @@ class SubscriptionService {
       throw SubscriptionException('HTTP ${response.statusCode}');
     }
     final body = response.data ?? '';
-    final parsed = LinkParser.parseSubscriptionBody(body);
+    // Parsing a 1000-server subscription is pure CPU: keep it off the UI
+    // thread. Small bodies are parsed inline (isolate spawn costs more).
+    final parsed = body.length > 20000
+        ? await compute(LinkParser.parseSubscriptionBody, body)
+        : LinkParser.parseSubscriptionBody(body);
     if (parsed.servers.isEmpty) {
       throw SubscriptionException(
         parsed.warnings.isEmpty ? 'empty-subscription' : parsed.warnings.first,

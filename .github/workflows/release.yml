@@ -10,7 +10,7 @@ on:
       tag:
         description: 'Tag the built files belong to'
         required: false
-        default: v2.1.0
+        default: v2.1.1
 
 permissions:
   contents: write
