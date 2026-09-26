@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../constants/app_constants.dart';
 import '../models/subscription_model.dart';
@@ -36,6 +40,7 @@ class SubscriptionService {
     SubscriptionModel subscription, {
     String? userAgent,
   }) async {
+    final device = await DeviceIdentity.load();
     final response = await _dio.get<String>(
       subscription.url,
       options: Options(
@@ -44,6 +49,13 @@ class SubscriptionService {
           'User-Agent':
               subscription.userAgent ?? userAgent ?? AppConstants.userAgent,
           'Accept': '*/*',
+          // Remnawave/Marzban panels with device limits refuse clients that
+          // do not identify themselves ("Включите передачу HWID"). The id is
+          // a random UUID generated once per install — nothing personal.
+          'x-hwid': device.hwid,
+          'x-device-os': device.os,
+          'x-ver-os': device.osVersion,
+          'x-device-model': device.model,
         },
         validateStatus: (code) => code != null && code < 500,
       ),
@@ -102,4 +114,42 @@ class SubscriptionException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+
+/// Anonymous per-install identity sent to subscription panels that enforce
+/// device limits. Created once, stored locally, never sent anywhere else.
+class DeviceIdentity {
+  DeviceIdentity._(this.hwid, this.os, this.osVersion, this.model);
+
+  final String hwid;
+  final String os;
+  final String osVersion;
+  final String model;
+
+  static DeviceIdentity? _cached;
+
+  static Future<DeviceIdentity> load() async {
+    final cached = _cached;
+    if (cached != null) return cached;
+    final prefs = await SharedPreferences.getInstance();
+    var hwid = prefs.getString('device_hwid');
+    if (hwid == null || hwid.isEmpty) {
+      hwid = const Uuid().v4();
+      await prefs.setString('device_hwid', hwid);
+    }
+    final os = Platform.isAndroid
+        ? 'Android'
+        : Platform.isIOS
+            ? 'iOS'
+            : Platform.isWindows
+                ? 'Windows'
+                : Platform.isMacOS
+                    ? 'macOS'
+                    : 'Linux';
+    final version = Platform.operatingSystemVersion.replaceAll(RegExp(r'[^\x20-\x7E]'), '').trim();
+    final identity = DeviceIdentity._(hwid, os, version.isEmpty ? os : version, 'Nukefy VPN ${AppConstants.version}');
+    _cached = identity;
+    return identity;
+  }
 }
