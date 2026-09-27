@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/providers/settings_provider.dart';
 import '../../core/services/music_service.dart';
-import '../../core/theme/app_colors.dart;
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
 import '../../l10n/strings.dart';

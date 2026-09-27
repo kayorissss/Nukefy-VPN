@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/providers/settings_provider.dart';
 import '../../core/services/game_blocklist_service.dart';
 import '../../core/theme/app_colors.dart;
 import '../../core/theme/app_text_styles.dart';
+import '../../l10n/strings.dart';
 
 class DomainManagerDialog extends StatefulWidget {
   const DomainManagerDialog({super.key, required this.game, required this.initial, required this.games});
@@ -162,7 +164,7 @@ class _DomainManagerDialogState extends State<DomainManagerDialog> {
                           dense: true,
                           leading: Text('${index + 1}', style: p.captionStyle),
                           title: SelectableText(domain, style: AppTextStyles.bodyRegular.copyWith(fontFamily: 'JetBrainsMono', fontSize: 12)),
-                          trailing: Wrap(mainAxisSize: MainAxisSize.min, children: [IconButton(tooltip: s.t('copyDomain'), onPressed: _busy ? null : () => _copy(domain), icon: const Icon(Icons.copy_rounded, size: 18)), IconButton(tooltip: s.t('zRemoveDomain'), onPressed: _busy ? null : () => _remove(domain), icon: Icon(Icons.remove_circle_outline_rounded, color: p.error, size: 19))]),
+                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [IconButton(tooltip: s.t('copyDomain'), onPressed: _busy ? null : () => _copy(domain), icon: const Icon(Icons.copy_rounded, size: 18)), IconButton(tooltip: s.t('zRemoveDomain'), onPressed: _busy ? null : () => _remove(domain), icon: Icon(Icons.remove_circle_outline_rounded, color: p.error, size: 19))]),
                         );
                       },
                     ),
