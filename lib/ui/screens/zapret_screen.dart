@@ -15,7 +15,6 @@ import '../../core/theme/app_text_styles.dart';
 import '../../l10n/strings.dart';
 import '../widgets/section_card.dart';
 import '../widgets/game_mark.dart';
-import 'zapret_games_screen.dart';
 
 class ZapretScreen extends StatefulWidget {
   const ZapretScreen({super.key, this.active = true});
