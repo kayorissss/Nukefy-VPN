@@ -5,8 +5,16 @@ import 'package:nukefy_vpn/core/models/app_settings.dart';
 import 'package:nukefy_vpn/core/services/game_blocklist_service.dart';
 import 'package:nukefy_vpn/core/services/zapret_probe.dart';
 import 'package:nukefy_vpn/core/services/zapret_service.dart';
+import 'package:nukefy_vpn/core/services/zapret_update_service.dart';
 
 void main() {
+  test('release extraction rejects traversal and Windows alternate streams', () {
+    expect(ZapretUpdateService.safeArchivePath('zapret/bin/winws.exe'), isTrue);
+    for (final path in ['../outside', 'bin/../../outside', r'bin\..\outside', '/tmp/a', 'C:/Windows/a', 'bin/file:stream', 'bin/a.', 'bin/a ']) {
+      expect(ZapretUpdateService.safeArchivePath(path), isFalse, reason: path);
+    }
+  });
+
   test('game mode migrates legacy settings, targets survive save/load', () {
     final settings = AppSettings.fromJson({'zapretGameFilter': true});
     expect(settings.zapretGameMode, 'all');

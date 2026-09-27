@@ -47,10 +47,17 @@ class ZapretUpdateService {
     return ZapretUpdateInfo(version: tag, notes: data['body'] as String? ?? '', url: url.toString(), digest: digest.substring(7), size: asset['size'] as int);
   }
 
+  static bool safeArchivePath(String path) {
+    final value = path.replaceAll('\\', '/');
+    return value.isNotEmpty && !value.startsWith('/') && !value.contains(':') && !value.contains('\u0000') &&
+        !value.split('/').any((s) => s == '..' || s == '.' || s.endsWith(' ') || s.endsWith('.'));
+  }
+
   Future<void> install(ZapretUpdateInfo info, void Function(DownloadProgress) progress) async {
     final service = ZapretService.instance;
     final target = service.root;
     if (target == null) throw StateError('zapret-missing');
+    if (service.isRunning && service.runningStrategyId == null) throw StateError('Select a strategy before updating an external zapret service');
     final support = await getApplicationSupportDirectory();
     final download = File(p.join(support.path, 'zapret-update.zip'));
     final started = DateTime.now();
@@ -75,7 +82,7 @@ class ZapretUpdateService {
       var expanded = 0;
       for (final entry in archive.files) {
         final name = entry.name.replaceAll('\\', '/');
-        if (name.startsWith('/') || name.contains(':') || name.split('/').any((s) => s == '..') || (entry.mode & 0xf000) == 0xa000) {
+        if (!safeArchivePath(name) || (entry.mode & 0xf000) == 0xa000) {
           throw const FormatException('Unsafe archive path');
         }
         if (!entry.isFile || !name.startsWith(prefix)) continue;

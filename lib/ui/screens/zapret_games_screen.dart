@@ -6,6 +6,7 @@ import '../../core/services/game_blocklist_service.dart';
 import '../../core/services/zapret_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../widgets/game_mark.dart';
 
 class ZapretGamesScreen extends StatefulWidget {
   const ZapretGamesScreen({super.key, this.active = true, this.embedded = false});
@@ -35,7 +36,7 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
   @override
   void didUpdateWidget(covariant ZapretGamesScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.active && !oldWidget.active) _refresh();
+    if (widget.active && !oldWidget.active) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && widget.active) _refresh(); });
   }
 
   @override
@@ -127,7 +128,7 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
     final s = context.read<SettingsProvider>().strings;
     final installed = _games.installed().where((g) => g.id == game.id).firstOrNull;
     final enabled = !_loading && !_zapret.busy;
-    final heading = Row(children: [Container(width: 44, height: 44, decoration: BoxDecoration(color: p.accent.withValues(alpha: .12), borderRadius: BorderRadius.circular(12)), child: Icon(Icons.sports_esports_outlined, color: p.accent)),
+    final heading = Row(children: [Container(width: 44, height: 44, decoration: BoxDecoration(color: p.accent.withValues(alpha: .12), borderRadius: BorderRadius.circular(12)), child: Center(child: GameMark(id: game.id))),
       const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(game.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
         Text(installed == null ? s.t('zNotAdded') : '${installed.count} ${s.t('zDomains')}', style: p.captionStyle)]))]);
     final actions = Wrap(spacing: 8, children: installed == null

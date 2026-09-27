@@ -13,6 +13,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../l10n/strings.dart';
 import '../widgets/section_card.dart';
+import '../widgets/game_mark.dart';
 import 'zapret_games_screen.dart';
 
 class ZapretScreen extends StatefulWidget {
@@ -50,7 +51,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
   @override
   void didUpdateWidget(covariant ZapretScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.active && !oldWidget.active) _enter();
+    if (widget.active && !oldWidget.active) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && widget.active) _enter(); });
   }
 
   Future<void> _enter() async {
@@ -99,7 +100,8 @@ class _ZapretScreenState extends State<ZapretScreen> {
 
   Future<void> _analyze() async {
     if (_zapret.busy) return;
-    await _loadTargets();
+    try { await _loadTargets(); }
+    catch (e) { if (mounted) setState(() => _error = '$e'); return; }
     if (!mounted) return;
     final settings = context.read<SettingsProvider>();
     final selected = _targets.where((t) => settings.settings.zapretCheckTargets.contains(t.id)).toList();
@@ -337,7 +339,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
               ActionChip(label: Text(s.t('add')), avatar: const Icon(Icons.add), onPressed: busy ? null : _addDomain)]),
           ])),
           OutlinedButton.icon(onPressed: () => setState(() => _showLog = !_showLog), icon: const Icon(Icons.terminal), label: Text(s.t('logs'))),
-          if (_showLog) Container(padding: const EdgeInsets.all(16), color: p.surface, child: SelectableText(_zapret.log.join('\n'), style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12))),
+          if (_showLog) Container(padding: const EdgeInsets.all(16), color: p.surface, child: SizedBox(height: 260, child: SingleChildScrollView(child: ValueListenableBuilder<int>(valueListenable: _zapret.logRevision, builder: (context, _, child) => SelectableText(_zapret.log.join('\n'), style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12)))))),
         ],
       ]),
     )));
@@ -384,5 +386,5 @@ class ZapretTargetIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) => id == 'youtube' || id == 'discord'
       ? Image.asset('assets/brands/$id.png', width: 20, height: 20)
-      : const Icon(Icons.sports_esports_outlined, size: 20);
+      : GameMark(id: id.replaceFirst('game:', ''), size: 20);
 }

@@ -1,0 +1,7 @@
+Platform marks: Simple Icons (https://github.com/simple-icons/simple-icons)
+Downloaded 2026-09-27 from icons/{steam,epicgames,riotgames,battledotnet,ubisoft,roblox,ea}.svg.
+Converted to 96x96 PNG with no changes to geometry. Runtime tint follows the app palette.
+Simple Icons artwork is released under CC0-1.0:
+https://creativecommons.org/publicdomain/zero/1.0/
+Brand names and logos may be trademarks of their respective owners.
+They identify services in third-party community domain lists, not affiliation or endorsement.

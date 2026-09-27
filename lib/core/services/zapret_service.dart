@@ -40,6 +40,7 @@ class ZapretService extends ChangeNotifier {
   String? _runningStrategyId;
   String? lastError;
   final List<String> _log = [];
+  final ValueNotifier<int> logRevision = ValueNotifier(0);
   /// Flowseal game filter: off | all | tcp | udp.
   String gameMode = 'off';
   /// Port ranges used for the game filter (Flowseal default: 1024-65535).
@@ -439,6 +440,9 @@ class ZapretService extends ChangeNotifier {
     final state = await _serviceState();
     servicePresent = state != null;
     serviceRunning = state == 4;
+    if (serviceRunning && _runningStrategyId == null) {
+      _runningStrategyId = StorageService.instance.read('zapret_service_strategy');
+    }
     notifyListeners();
     return servicePresent;
   }
@@ -478,11 +482,13 @@ class ZapretService extends ChangeNotifier {
     await _sc(['start', 'zapret']);
     await serviceInstalled();
     _runningStrategyId = strategy.id;
+    await StorageService.instance.write('zapret_service_strategy', strategy.id);
   }
 
   Future<void> removeService() async {
     await _stopService();
     await _sc(['delete', 'zapret']);
+    await StorageService.instance.remove('zapret_service_strategy');
     servicePresent = false;
     serviceRunning = false;
     _runningStrategyId = null;
@@ -649,7 +655,7 @@ class ZapretService extends ChangeNotifier {
     if (!isSupported) return false;
     await stop();
     lastError = null;
-    _log.clear();
+    _append('> ${strategy.id}');
     try {
       _ensureUserLists();
       _writeUserList(loadDomains());
@@ -659,6 +665,7 @@ class ZapretService extends ChangeNotifier {
         await _sc(['start', 'zapret']);
         await serviceInstalled();
         _runningStrategyId = strategy.id;
+        await StorageService.instance.write('zapret_service_strategy', strategy.id);
         return serviceRunning;
       }
       final args = parseArgs(strategy);
@@ -700,6 +707,7 @@ class ZapretService extends ChangeNotifier {
   void _append(String line) {
     _log.add(line);
     if (_log.length > 200) _log.removeAt(0);
+    logRevision.value++;
   }
 
   /// Stops only our process or the explicitly managed zapret service.
