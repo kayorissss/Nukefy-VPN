@@ -14,10 +14,14 @@ import '../widgets/nukefy_background.dart';
 import '../widgets/nukefy_logo.dart';
 import 'home_screen.dart';
 import 'jammers_screen.dart';
+import 'music_screen.dart';
 import 'servers_screen.dart';
 import 'settings_screen.dart';
+import 'speed_test_screen.dart';
 import 'stats_screen.dart';
+import 'telegram_proxy_screen.dart';
 import 'zapret_screen.dart';
+import 'zapret_games_screen.dart';
 
 /// Width from which the app switches to the desktop layout: a side rail and
 /// content centred with a comfortable maximum width.
@@ -28,35 +32,51 @@ class MainShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final index = context.watch<NavProvider>().index;
+    final nav = context.watch<NavProvider>();
+    final destination = nav.destination;
     final s = context.watch<SettingsProvider>().strings;
     final width = MediaQuery.sizeOf(context).width;
-    final desktop = width >= kDesktopBreakpoint;
-
+    final desktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS || width >= kDesktopBreakpoint;
     final zapret = Platform.isWindows;
+
     final tabs = <_TabSpec>[
-      _TabSpec(Icons.home_rounded, Icons.home_outlined, s.t('home')),
-      _TabSpec(Icons.public_rounded, Icons.public_outlined, s.t('servers')),
-      if (zapret) _TabSpec(Icons.shield_rounded, Icons.shield_outlined, s.t('zapret')),
-      _TabSpec(Icons.radar_rounded, Icons.radar_outlined, s.t('jammers')),
-      _TabSpec(Icons.insights_rounded, Icons.insights_outlined, s.t('stats')),
-      _TabSpec(Icons.settings_rounded, Icons.settings_outlined, s.t('settings')),
+      _TabSpec(Icons.home_rounded, Icons.home_outlined, s.t('home'), NavDestination.home),
+      _TabSpec(Icons.public_rounded, Icons.public_outlined, s.t('servers'), NavDestination.servers),
+      if (zapret) _TabSpec(Icons.shield_rounded, Icons.shield_outlined, s.t('zapret'), NavDestination.zapret),
+      _TabSpec(Icons.speed_rounded, Icons.speed_outlined, s.t('speedTest'), NavDestination.speedTest),
+      _TabSpec(Icons.library_music_rounded, Icons.library_music_outlined, s.t('music'), NavDestination.music),
+      if (zapret) _TabSpec(Icons.send_rounded, Icons.send_outlined, s.t('tgProxy'), NavDestination.telegramProxy),
+      _TabSpec(Icons.radar_rounded, Icons.radar_outlined, s.t('jammers'), NavDestination.jammers),
+      _TabSpec(Icons.insights_rounded, Icons.insights_outlined, s.t('stats'), NavDestination.stats),
+      _TabSpec(Icons.settings_rounded, Icons.settings_outlined, s.t('settings'), NavDestination.settings),
     ];
 
     final pages = <Widget>[
-      const HomeScreen(),
-      const ServersScreen(),
-      if (zapret) const ZapretScreen(),
-      const JammersScreen(),
-      const StatsScreen(),
-      const SettingsScreen(),
+      for (final tab in tabs) _pageFor(tab.destination, destination),
+      if (zapret) ZapretGamesScreen(active: destination == NavDestination.zapretApps, embedded: true),
+      if (zapret) ZapretScreen(active: destination == NavDestination.zapretSettings, settingsOnly: true),
     ];
-
-    // IndexedStack keeps every tab alive (jammer results, scroll offsets);
-    // _TabFade adds a soft cross-fade on each switch without rebuilding them.
-    final body = _TabFade(
-      index: index,
-      child: IndexedStack(index: index, children: pages),
+    final pageIndex = switch (destination) {
+      NavDestination.zapretApps => tabs.length,
+      NavDestination.zapretSettings => tabs.length + 1,
+      _ => tabs.indexWhere((tab) => tab.destination == destination),
+    };
+    final activeTab = switch (destination) {
+      NavDestination.zapretApps || NavDestination.zapretSettings => tabs.indexWhere((tab) => tab.destination == NavDestination.zapret),
+      _ => pageIndex,
+    };
+    final body = AnimatedSwitcher(
+      duration: const Duration(milliseconds: 260),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(.018, 0), end: Offset.zero).animate(animation),
+          child: child,
+        ),
+      ),
+      child: KeyedSubtree(key: ValueKey(destination), child: IndexedStack(index: pageIndex, children: pages)),
     );
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -73,33 +93,40 @@ class MainShell extends StatelessWidget {
                     Expanded(
                       child: Row(
                         children: [
-                          _SideRail(tabs: tabs, index: index),
-                          Expanded(
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 760),
-                                child: body,
-                              ),
-                            ),
-                          ),
+                          _SideRail(tabs: tabs, index: activeTab, destination: destination),
+                          Expanded(child: body),
                         ],
                       ),
                     ),
                   ],
                 )
               : body,
-          bottomNavigationBar: desktop ? null : _BottomBar(tabs: tabs, index: index),
+          bottomNavigationBar: desktop ? null : _BottomBar(tabs: tabs, index: activeTab),
         ),
       ),
     );
   }
+
+  Widget _pageFor(NavDestination tab, NavDestination active) => switch (tab) {
+        NavDestination.home => const HomeScreen(),
+        NavDestination.servers => const ServersScreen(),
+        NavDestination.zapret => ZapretScreen(active: active == NavDestination.zapret),
+        NavDestination.speedTest => const SpeedTestScreen(),
+        NavDestination.music => const MusicScreen(),
+        NavDestination.telegramProxy => const TelegramProxyScreen(),
+        NavDestination.jammers => const JammersScreen(),
+        NavDestination.stats => const StatsScreen(),
+        NavDestination.settings => const SettingsScreen(),
+        _ => const SizedBox.shrink(),
+      };
 }
 
 class _TabSpec {
-  const _TabSpec(this.icon, this.outlined, this.label);
+  const _TabSpec(this.icon, this.outlined, this.label, this.destination);
   final IconData icon;
   final IconData outlined;
   final String label;
+  final NavDestination destination;
 }
 
 class _BottomBar extends StatelessWidget {
@@ -137,7 +164,7 @@ class _BottomBar extends StatelessWidget {
                 selected: index == i,
                 onTap: () {
                   HapticFeedback.selectionClick();
-                  context.read<NavProvider>().setIndex(i);
+                  context.read<NavProvider>().go(tabs[i].destination);
                 },
               ),
           ],
@@ -192,57 +219,116 @@ class _Tab extends StatelessWidget {
 }
 
 class _SideRail extends StatelessWidget {
-  const _SideRail({required this.tabs, required this.index});
+  const _SideRail({required this.tabs, required this.index, required this.destination});
   final List<_TabSpec> tabs;
   final int index;
+  final NavDestination destination;
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
     final s = context.watch<SettingsProvider>().strings;
-    return Container(
-      width: 220,
-      margin: const EdgeInsets.fromLTRB(16, 4, 0, 16),
-      padding: const EdgeInsets.fromLTRB(12, 18, 12, 14),
+    final nav = context.watch<NavProvider>();
+    final collapsed = nav.collapsed;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      width: collapsed ? 76 : 244,
+      margin: const EdgeInsets.fromLTRB(12, 4, 0, 16),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
       decoration: BoxDecoration(
-        color: p.card.withValues(alpha: p.isDark ? 0.9 : 0.96),
-        borderRadius: BorderRadius.circular(26),
+        color: p.card,
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: p.border),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 22),
+          SizedBox(
+            height: 38,
             child: Row(
+              mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
               children: [
-                const NukefyLogo(size: 34),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    s.t('appTitle'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.headline.copyWith(fontSize: 15),
-                  ),
+                if (!collapsed) ...[
+                  const NukefyLogo(size: 32),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text('Nukefy', style: AppTextStyles.headline.copyWith(fontSize: 14))),
+                ],
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 38, height: 38),
+                  tooltip: s.t(collapsed ? 'zExpandMenu' : 'zCollapseMenu'),
+                  onPressed: nav.toggleRail,
+                  icon: Icon(collapsed ? Icons.menu_rounded : Icons.menu_open_rounded),
                 ),
               ],
             ),
           ),
-          for (var i = 0; i < tabs.length; i++)
-            _RailItem(
-              spec: tabs[i],
-              selected: i == index,
-              onTap: () => context.read<NavProvider>().setIndex(i),
-            ),
-          const Spacer(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              'v${AppConstants.version}',
-              style: AppTextStyles.metricCaption.copyWith(color: p.textDisabled),
+          const SizedBox(height: 18),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (var i = 0; i < tabs.length; i++) ...[
+                    _RailItem(
+                      spec: tabs[i],
+                      selected: i == index,
+                      collapsed: collapsed,
+                      onTap: () => nav.go(tabs[i].destination),
+                      onDoubleTap: Platform.isWindows && tabs[i].destination == NavDestination.zapret ? nav.toggleZapret : null,
+                      trailing: Platform.isWindows && tabs[i].destination == NavDestination.zapret && !collapsed
+                          ? IconButton(
+                              tooltip: s.t('zApps'),
+                              onPressed: nav.toggleZapret,
+                              icon: Icon(
+                                nav.zapretExpanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded,
+                                size: 20,
+                              ),
+                            )
+                          : null,
+                    ),
+                    if (Platform.isWindows && tabs[i].destination == NavDestination.zapret && !collapsed)
+                      ClipRect(
+                        child: AnimatedCrossFade(
+                          duration: const Duration(milliseconds: 180),
+                          firstCurve: Curves.easeOutCubic,
+                          secondCurve: Curves.easeInCubic,
+                          sizeCurve: Curves.easeOutCubic,
+                          crossFadeState: nav.zapretExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+                          firstChild: Padding(
+                            padding: const EdgeInsetsDirectional.only(start: 22),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                border: BorderDirectional(start: BorderSide(color: p.accent.withValues(alpha: .35), width: 1)),
+                              ),
+                              child: Column(
+                                children: [
+                                  _RailItem(
+                                    spec: _TabSpec(Icons.sports_esports_rounded, Icons.sports_esports_outlined, s.t('zApps'), NavDestination.zapretApps),
+                                    selected: destination == NavDestination.zapretApps,
+                                    collapsed: false,
+                                    nested: true,
+                                    onTap: () => nav.go(NavDestination.zapretApps),
+                                  ),
+                                  _RailItem(
+                                    spec: _TabSpec(Icons.settings_suggest_rounded, Icons.settings_suggest_outlined, s.t('zSettings'), NavDestination.zapretSettings),
+                                    selected: destination == NavDestination.zapretSettings,
+                                    collapsed: false,
+                                    nested: true,
+                                    onTap: () => nav.go(NavDestination.zapretSettings),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          secondChild: const SizedBox.shrink(),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
             ),
           ),
+          if (!collapsed) Text('v${AppConstants.version}', style: p.captionStyle),
         ],
       ),
     );
@@ -250,8 +336,20 @@ class _SideRail extends StatelessWidget {
 }
 
 class _RailItem extends StatelessWidget {
-  const _RailItem({required this.spec, required this.selected, required this.onTap});
+  const _RailItem({
+    required this.spec,
+    required this.selected,
+    required this.onTap,
+    this.collapsed = false,
+    this.onDoubleTap,
+    this.trailing,
+    this.nested = false,
+  });
 
+  final bool collapsed;
+  final VoidCallback? onDoubleTap;
+  final Widget? trailing;
+  final bool nested;
   final _TabSpec spec;
   final bool selected;
   final VoidCallback onTap;
@@ -262,76 +360,41 @@ class _RailItem extends StatelessWidget {
     final color = selected ? p.accent : p.textSecondary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          decoration: BoxDecoration(
-            color: selected ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            child: Row(
-              children: [
-                Icon(selected ? spec.icon : spec.outlined, size: 20, color: color),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    spec.label.toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.tab.copyWith(color: selected ? p.text : p.textSecondary, fontSize: 10.5),
-                  ),
-                ),
-              ],
+      child: Tooltip(
+        message: spec.label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          onDoubleTap: onDoubleTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: double.infinity,
+            height: nested ? 42 : 48,
+            decoration: BoxDecoration(
+              color: selected ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
+              borderRadius: BorderRadius.circular(nested ? 12 : 16),
             ),
+            padding: EdgeInsets.symmetric(horizontal: collapsed ? 0 : (nested ? 10 : 12)),
+            child: collapsed
+                ? Center(child: Icon(selected ? spec.icon : spec.outlined, size: 22, color: color))
+                : Row(
+                    children: [
+                      Icon(selected ? spec.icon : spec.outlined, size: 21, color: color),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          spec.label.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.tab.copyWith(color: selected ? p.text : p.textSecondary, fontSize: nested ? 10 : 10.5),
+                        ),
+                      ),
+                      if (trailing != null) trailing!,
+                    ],
+                  ),
           ),
         ),
       ),
-    );
-  }
-}
-
-class _TabFade extends StatefulWidget {
-  const _TabFade({required this.index, required this.child});
-  final int index;
-  final Widget child;
-
-  @override
-  State<_TabFade> createState() => _TabFadeState();
-}
-
-class _TabFadeState extends State<_TabFade> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 280),
-    value: 1,
-  );
-
-  @override
-  void didUpdateWidget(covariant _TabFade oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.index != widget.index) _c.forward(from: 0);
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final curve = CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
-    return AnimatedBuilder(
-      animation: curve,
-      builder: (context, child) => Opacity(
-        opacity: 0.5 + 0.5 * curve.value,
-        child: Transform.translate(offset: Offset(0, (1 - curve.value) * 10), child: child),
-      ),
-      child: widget.child,
     );
   }
 }

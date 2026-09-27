@@ -33,7 +33,6 @@ class AppTextStyles {
     fontWeight: FontWeight.w600,
     fontSize: 11,
     letterSpacing: 1.6,
-    color: AppColors.textSecondary,
   );
 
   static const TextStyle button = TextStyle(
@@ -62,7 +61,6 @@ class AppTextStyles {
     fontWeight: FontWeight.w500,
     fontSize: 13,
     height: 1.35,
-    color: AppColors.textSecondary,
   );
 
   static const TextStyle monoValue = TextStyle(
@@ -93,7 +91,6 @@ class AppTextStyles {
     fontWeight: FontWeight.w600,
     fontSize: 10.5,
     letterSpacing: 1.4,
-    color: AppColors.textSecondary,
   );
 
   static const TextStyle status = TextStyle(
@@ -101,6 +98,17 @@ class AppTextStyles {
     fontWeight: FontWeight.w700,
     fontSize: 14,
     letterSpacing: 2.4,
-    color: AppColors.textSecondary,
   );
+}
+
+/// Muted variants resolved against the active palette.
+///
+/// The base styles carry no colour so they inherit the theme's text colour —
+/// the hardcoded greys they used to bake in stayed dark-theme grey in the
+/// light theme and made half the screen look washed out.
+extension AppTextStylesPalette on NukefyPalette {
+  TextStyle get sectionStyle => AppTextStyles.section.copyWith(color: textSecondary);
+  TextStyle get captionStyle => AppTextStyles.metricCaption.copyWith(color: textSecondary);
+  TextStyle get secondaryStyle => AppTextStyles.bodySecondary.copyWith(color: textSecondary);
+  TextStyle get statusStyle => AppTextStyles.status.copyWith(color: text);
 }

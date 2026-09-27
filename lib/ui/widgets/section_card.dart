@@ -164,37 +164,40 @@ class NukefyDropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return PopupMenuButton<T>(
-      initialValue: value,
-      tooltip: '',
-      position: PopupMenuPosition.under,
-      onSelected: onChanged,
-      itemBuilder: (context) => [
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, 6),
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(p.card),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(10),
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 5)),
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: BorderSide(color: p.border))),
+      ),
+      menuChildren: [
         for (final entry in items.entries)
-          PopupMenuItem<T>(
-            value: entry.key,
-            child: Row(
-              children: [
-                Expanded(child: Text(entry.value)),
-                if (entry.key == value) Icon(Icons.check_rounded, size: 18, color: p.accent),
-              ],
+          MenuItemButton(
+            onPressed: () => onChanged(entry.key),
+            child: SizedBox(
+              width: 190,
+              child: Row(children: [Expanded(child: Text(entry.value)), if (entry.key == value) Icon(Icons.check_rounded, size: 18, color: p.accent)]),
             ),
           ),
       ],
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-        decoration: BoxDecoration(
-          color: p.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: p.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      builder: (context, controller, child) => GestureDetector(
+        onTap: () => controller.isOpen ? controller.close() : controller.open(),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+          decoration: BoxDecoration(
+            color: p.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: controller.isOpen ? p.accent : p.border, width: controller.isOpen ? 1.3 : 1),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
             Text(items[value] ?? '', style: AppTextStyles.bodyRegular.copyWith(fontSize: 13.5, fontWeight: FontWeight.w600)),
             const SizedBox(width: 4),
-            Icon(Icons.expand_more_rounded, size: 18, color: p.textSecondary),
-          ],
+            AnimatedRotation(turns: controller.isOpen ? .5 : 0, duration: const Duration(milliseconds: 180), child: Icon(Icons.expand_more_rounded, size: 18, color: p.textSecondary)),
+          ]),
         ),
       ),
     );

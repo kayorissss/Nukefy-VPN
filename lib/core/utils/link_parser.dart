@@ -4,6 +4,7 @@ import '../constants/app_constants.dart';
 import 'base64_utils.dart';
 import 'clash_parser.dart';
 import 'geo_utils.dart';
+import 'server_identity.dart';
 
 class ServerDraft {
   ServerDraft({
@@ -17,6 +18,8 @@ class ServerDraft {
     this.countryCode,
     this.tags = const [],
   });
+
+  String get fingerprint => ServerIdentity.of(protocol, address, port, outbound, endpoint, rawLink);
 
   final String name;
   final String address;
@@ -979,10 +982,25 @@ class LinkParser {
         return {'type': 'quic'};
       case 'xhttp':
       case 'splithttp':
-        // Not implemented by sing-box. Emit the type as-is so the core fails
-        // loudly at config check instead of silently speaking plain TCP to an
-        // XHTTP server ("connected" with no traffic).
-        return {'type': type, 'path': _path(q['path'])};
+        // XHTTP/SplitHTTP is normalized to Xray's current transport name. Do
+        // not downgrade it to TCP: the core selector uses this marker.
+        final result = <String, dynamic>{
+          'type': 'xhttp',
+          'path': _path(q['path']),
+          if ((q['host'] ?? '').isNotEmpty) 'host': q['host'],
+          if ((q['mode'] ?? '').isNotEmpty) 'mode': q['mode'],
+        };
+        final rawExtra = q['extra'];
+        if (rawExtra != null && rawExtra.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(Uri.decodeComponent(rawExtra));
+            if (decoded is Map) result['extra'] = Map<String, dynamic>.from(decoded);
+          } catch (_) {
+            // Ignore malformed optional metadata; the required XHTTP path
+            // remains explicit and the Xray validator reports real errors.
+          }
+        }
+        return result;
       default:
         return null;
     }

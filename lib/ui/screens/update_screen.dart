@@ -12,6 +12,7 @@ import '../../core/services/vpn_platform.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
+import '../../core/utils/network_diagnostics.dart';
 import '../widgets/nukefy_background.dart';
 import '../widgets/nukefy_logo.dart';
 
@@ -69,24 +70,29 @@ class _UpdateScreenState extends State<UpdateScreen> {
         _file = file;
         _phase = _Phase.done;
       });
-      await _install();
     } on Exception catch (error) {
       if (!mounted) return;
       setState(() {
         _phase = _Phase.failed;
-        _error = '$error';
+        _error = NetworkDiagnostics.textOrRaw(error, context.read<SettingsProvider>().strings.t);
       });
     }
   }
 
   Future<void> _install() async {
+    final s = context.read<SettingsProvider>().strings;
     final file = _file;
     if (file == null) return;
     if (Platform.isAndroid && file.path.endsWith('.apk')) {
-      await VpnPlatform().installApk(file.path);
-    } else {
-      await VpnPlatform().revealFile(file.path);
+      final launched = await VpnPlatform().installApk(file.path);
+      if (!launched && mounted) setState(() { _phase = _Phase.failed; _error = s.t('updateInstallFailed'); });
+      return;
     }
+    if (Platform.isWindows && file.path.toLowerCase().endsWith('.exe')) {
+      await VpnPlatform().installUpdate(file.path);
+      return;
+    }
+    await VpnPlatform().revealFile(file.path);
   }
 
   @override
@@ -194,7 +200,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
                         ),
                       if (_phase == _Phase.done)
                         Text(
-                          Platform.isAndroid ? s.t('updateInstallHint') : s.t('updateRevealHint'),
+                          Platform.isAndroid || Platform.isWindows ? s.t('updateInstallHint') : s.t('updateRevealHint'),
                           textAlign: TextAlign.center,
                           style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary),
                         ),
@@ -349,7 +355,7 @@ class _Actions extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: onInstall,
                 icon: const Icon(Icons.install_mobile_rounded),
-                label: Text(Platform.isAndroid ? s.t('install') : s.t('openFolder')),
+                label: Text(Platform.isAndroid || Platform.isWindows ? s.t('install') : s.t('openFolder')),
               ),
             ),
             const SizedBox(height: 8),

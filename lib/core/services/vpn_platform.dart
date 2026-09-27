@@ -4,6 +4,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -25,6 +26,22 @@ class CoreInfo {
   final String? version;
 
   bool get available => libbox || binary;
+}
+
+class XrayCoreInfo {
+  XrayCoreInfo({required this.binary, this.binaryPath, this.version});
+
+  final bool binary;
+  final String? binaryPath;
+  final String? version;
+
+  bool get available => binary;
+}
+
+class XrayStartResult {
+  const XrayStartResult({required this.ok, this.error});
+  final bool ok;
+  final String? error;
 }
 
 class CoreStartResult {
@@ -76,11 +93,18 @@ class DownloadProgress {
 }
 
 class VpnPlatform {
-  VpnPlatform({Dio? dio}) : _dio = dio ?? Dio();
+  VpnPlatform({Dio? dio})
+      : _dio = dio ??
+            Dio(BaseOptions(
+              connectTimeout: const Duration(seconds: 15),
+              receiveTimeout: const Duration(minutes: 2),
+              sendTimeout: const Duration(seconds: 30),
+            ));
 
   static const _channel = MethodChannel('com.nukefy.vpn/core');
   final Dio _dio;
   Process? _process;
+  Process? _xrayProcess;
   final _log = StringBuffer();
 
   String get logText => _log.toString();
@@ -100,6 +124,143 @@ class VpnPlatform {
     final dir = Directory(p.join(support.path, 'core'));
     if (!dir.existsSync()) dir.createSync(recursive: true);
     return dir;
+  }
+
+  Future<Directory> xrayDirectory() async {
+    final support = await getApplicationSupportDirectory();
+    final dir = Directory(p.join(support.path, 'xray'));
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    return dir;
+  }
+
+  Future<String?> xrayBinaryPath() async {
+    if (Platform.isAndroid || Platform.isIOS) return null;
+    final dir = await xrayDirectory();
+    final name = Platform.isWindows ? 'xray.exe' : 'xray';
+    final file = File(p.join(dir.path, name));
+    return file.existsSync() ? file.path : null;
+  }
+
+  Future<XrayCoreInfo> xrayCoreInfo() async {
+    final path = await xrayBinaryPath();
+    String? version;
+    if (path != null) {
+      try {
+        final result = await Process.run(path, ['version']).timeout(const Duration(seconds: 5));
+        version = '${result.stdout}'.trim().split('\n').first;
+      } catch (_) {}
+    }
+    return XrayCoreInfo(binary: path != null, binaryPath: path, version: version);
+  }
+
+  Future<XrayStartResult> startXray({required String configJson, required String workDir}) async {
+    if (Platform.isAndroid || Platform.isIOS) return const XrayStartResult(ok: false, error: 'XRAY_PLATFORM_UNSUPPORTED');
+    final binary = await xrayBinaryPath();
+    if (binary == null) return const XrayStartResult(ok: false, error: 'XRAY_CORE_MISSING');
+    await stopXray();
+    final config = File(p.join(workDir, 'xray-config.json'));
+    await config.writeAsString(configJson, flush: true);
+    try {
+      final process = await Process.start(binary, ['run', '-config', config.path], workingDirectory: p.dirname(binary), mode: ProcessStartMode.normal);
+      _xrayProcess = process;
+      process.stdout.transform(utf8.decoder).listen((line) => appendLog('xray: $line'));
+      process.stderr.transform(utf8.decoder).listen((line) => appendLog('xray: $line'));
+      process.exitCode.then((code) {
+        appendLog('xray exited: $code');
+        if (identical(_xrayProcess, process)) _xrayProcess = null;
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (_xrayProcess == null) return XrayStartResult(ok: false, error: logText.trim().isEmpty ? 'XRAY_EXITED' : logText.trim());
+      return const XrayStartResult(ok: true);
+    } catch (error) {
+      return XrayStartResult(ok: false, error: '$error');
+    }
+  }
+
+  Future<void> stopXray() async {
+    final process = _xrayProcess;
+    _xrayProcess = null;
+    if (process == null) return;
+    process.kill();
+    try {
+      await process.exitCode.timeout(const Duration(milliseconds: 1200));
+    } catch (_) {
+      if (Platform.isWindows) {
+        try {
+          await Process.run('taskkill', ['/F', '/IM', 'xray.exe']).timeout(const Duration(seconds: 3));
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<String> downloadXrayCore({void Function(DownloadProgress progress)? onProgress}) async {
+    if (Platform.isAndroid || Platform.isIOS) throw const CoreDownloadException('xray-platform-unsupported');
+    final response = await _dio.get<Map<String, dynamic>>(
+      'https://api.github.com/repos/XTLS/Xray-core/releases/latest',
+      options: Options(headers: const {'Accept': 'application/vnd.github+json', 'User-Agent': AppConstants.userAgent}, responseType: ResponseType.json),
+    );
+    final assets = (response.data?['assets'] as List?) ?? const [];
+    final asset = _pickXrayAsset(assets);
+    if (asset == null) throw const CoreDownloadException('xray-no-asset');
+    final url = '${asset['browser_download_url'] ?? ''}';
+    final name = '${asset['name'] ?? ''}';
+    final expected = (asset['size'] as num?)?.toInt() ?? 0;
+    final digest = '${asset['digest'] ?? ''}';
+    if (!Uri.tryParse(url).toString().startsWith('https://github.com/XTLS/Xray-core/releases/download/')) throw const CoreDownloadException('xray-invalid-url');
+    if (!RegExp(r'^sha256:[a-f0-9]{64}$').hasMatch(digest)) throw const CoreDownloadException('xray-no-digest');
+    final dir = await xrayDirectory();
+    final archive = File(p.join(dir.path, name));
+    final started = DateTime.now();
+    final streamResponse = await _dio.get<ResponseBody>(url, options: Options(responseType: ResponseType.stream, headers: const {'User-Agent': AppConstants.userAgent}));
+    final total = expected > 0 ? expected : int.tryParse(streamResponse.headers.value(Headers.contentLengthHeader) ?? '') ?? 0;
+    var received = 0;
+    final sink = archive.openWrite();
+    try {
+      await for (final chunk in streamResponse.data!.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        onProgress?.call(DownloadProgress(received: received, total: total, startedAt: started));
+      }
+    } finally {
+      await sink.close();
+    }
+    if (expected > 0 && received != expected) {
+      await archive.delete();
+      throw const CoreDownloadException('xray-size-mismatch');
+    }
+    final actual = await sha256.bind(archive.openRead()).first;
+    if (actual.toString() != digest.substring(7)) {
+      await archive.delete();
+      throw const CoreDownloadException('xray-integrity-failed');
+    }
+    await _extractXray(archive, dir);
+    await archive.delete();
+    final binary = await xrayBinaryPath();
+    if (binary == null) throw const CoreDownloadException('xray-extract-failed');
+    if (!Platform.isWindows) await Process.run('chmod', ['755', binary]);
+    return binary;
+  }
+
+  Map<String, dynamic>? _pickXrayAsset(List assets) {
+    final names = assets.whereType<Map>().map((item) => item.map((k, v) => MapEntry(k.toString(), v))).toList();
+    final wanted = Platform.isWindows ? ['Xray-windows-64.zip'] : Platform.isLinux ? ['Xray-linux-64.zip'] : ['Xray-macos-64.zip', 'Xray-macos-arm64-v8a.zip'];
+    for (final name in wanted) {
+      for (final asset in names) {
+        if ('${asset['name']}' == name) return asset;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _extractXray(File archiveFile, Directory destination) async {
+    final archive = ZipDecoder().decodeBytes(await archiveFile.readAsBytes());
+    for (final entry in archive) {
+      if (!entry.isFile) continue;
+      final base = p.basename(entry.name);
+      if (base != 'xray' && base != 'xray.exe') continue;
+      final out = File(p.join(destination.path, Platform.isWindows ? 'xray.exe' : 'xray'));
+      await out.writeAsBytes(entry.content as List<int>, flush: true);
+    }
   }
 
   static const List<String> bundledRuleSets = [
@@ -201,10 +362,10 @@ class VpnPlatform {
         );
       }
     }
-    return _startProcess(configFile.path, dir.path);
+    return _startProcess(configFile.path, dir.path, preferTun: preferTun);
   }
 
-  Future<CoreStartResult> _startProcess(String configPath, String workDir) async {
+  Future<CoreStartResult> _startProcess(String configPath, String workDir, {required bool preferTun}) async {
     final binary = await binaryPath();
     if (binary == null) {
       return CoreStartResult(
@@ -237,7 +398,7 @@ class VpnPlatform {
           error: logText.trim().isEmpty ? 'core-exited' : logText.trim(),
         );
       }
-      return CoreStartResult(ok: true, mode: 'tun');
+      return CoreStartResult(ok: true, mode: preferTun ? 'tun' : 'proxy');
     } catch (error) {
       return CoreStartResult(ok: false, mode: 'missing', error: '$error');
     }
@@ -255,8 +416,16 @@ class VpnPlatform {
     if (process == null) return;
     process.kill();
     try {
-      await process.exitCode.timeout(const Duration(seconds: 3));
-    } catch (_) {}
+      // Killing is immediate; waiting seconds here only made quitting the
+      // app feel broken.
+      await process.exitCode.timeout(const Duration(milliseconds: 1200));
+    } catch (_) {
+      if (Platform.isWindows) {
+        try {
+          await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe']).timeout(const Duration(seconds: 3));
+        } catch (_) {}
+      }
+    }
   }
 
   Future<bool> isRunning() async {
@@ -391,6 +560,21 @@ class VpnPlatform {
     }
   }
 
+  /// Starts the downloaded desktop installer and closes this process so the
+  /// installer can replace locked files. Android delegates to its package
+  /// installer through [installApk].
+  Future<bool> installUpdate(String path) async {
+    if (!Platform.isWindows) return false;
+    final installer = File(path);
+    if (!installer.existsSync()) return false;
+    await Process.start(
+      installer.path,
+      const ['/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS'],
+      mode: ProcessStartMode.detached,
+    );
+    exit(0);
+  }
+
   Future<void> revealFile(String path) async {
     if (Platform.isWindows) {
       await Process.run('explorer', ['/select,', path]);
@@ -420,27 +604,45 @@ class VpnPlatform {
     }
     final url = asset['browser_download_url'] as String;
     final name = asset['name'] as String;
+    final expected = (asset['size'] as num?)?.toInt() ?? 0;
     final dir = await coreDirectory();
     final archiveFile = File(p.join(dir.path, name));
     final started = DateTime.now();
-    await _dio.download(
-      url,
-      archiveFile.path,
-      options: Options(headers: const {'User-Agent': AppConstants.userAgent}),
-      onReceiveProgress: (received, total) {
-        onProgress?.call(DownloadProgress(
-          received: received,
-          total: total,
-          startedAt: started,
-        ));
-      },
-    );
-    await _extractCore(archiveFile, dir);
-    if (archiveFile.existsSync()) {
-      try {
-        await archiveFile.delete();
-      } catch (_) {}
+    var existing = archiveFile.existsSync() ? archiveFile.lengthSync() : 0;
+    if (expected > 0 && existing > expected) {
+      await archiveFile.delete();
+      existing = 0;
     }
+    if (expected > 0 && existing == expected) {
+      onProgress?.call(DownloadProgress(received: existing, total: expected, startedAt: started));
+    } else {
+      final headers = <String, dynamic>{'User-Agent': AppConstants.userAgent};
+      if (existing > 0) headers['Range'] = 'bytes=$existing-';
+      final streamResponse = await _dio.get<ResponseBody>(
+        url,
+        options: Options(responseType: ResponseType.stream, headers: headers),
+      );
+      final append = existing > 0 && streamResponse.statusCode == 206;
+      if (!append) existing = 0;
+      final total = expected > 0
+          ? expected
+          : (streamResponse.headers.value(Headers.contentLengthHeader) == null
+              ? 0
+              : int.tryParse(streamResponse.headers.value(Headers.contentLengthHeader)!) ?? 0) + existing;
+      final sink = archiveFile.openWrite(mode: append ? FileMode.append : FileMode.writeOnly);
+      var received = existing;
+      try {
+        await for (final chunk in streamResponse.data!.stream) {
+          sink.add(chunk);
+          received += chunk.length;
+          onProgress?.call(DownloadProgress(received: received, total: total, startedAt: started));
+        }
+      } finally {
+        await sink.close();
+      }
+    }
+    await _extractCore(archiveFile, dir);
+    if (archiveFile.existsSync()) await archiveFile.delete();
     final binary = await binaryPath();
     if (binary == null) {
       throw const CoreDownloadException('extract-failed');
@@ -449,9 +651,7 @@ class VpnPlatform {
       await Process.run('chmod', ['755', binary]);
     }
     if (Platform.isAndroid) {
-      try {
-        await _channel.invokeMethod('registerBinary', {'path': binary});
-      } catch (_) {}
+      await _channel.invokeMethod('registerBinary', {'path': binary});
     }
     return binary;
   }

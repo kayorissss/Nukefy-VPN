@@ -15,6 +15,9 @@ class SubscriptionModel {
     this.totalBytes,
     this.expireAt,
     this.lastError,
+    this.hideNotices = false,
+    this.receivedCount = 0,
+    this.rejectedCount = 0,
   });
 
   final String id;
@@ -30,6 +33,9 @@ class SubscriptionModel {
   int? totalBytes;
   DateTime? expireAt;
   String? lastError;
+  bool hideNotices;
+  int receivedCount;
+  int rejectedCount;
 
   bool get isDue {
     if (!enabled || autoUpdateInterval == UpdateInterval.manual) return false;
@@ -53,6 +59,9 @@ class SubscriptionModel {
         'totalBytes': totalBytes,
         'expireAt': expireAt?.toIso8601String(),
         'lastError': lastError,
+        'hideNotices': hideNotices,
+        'receivedCount': receivedCount,
+        'rejectedCount': rejectedCount,
       };
 
   factory SubscriptionModel.fromJson(Map<String, dynamic> json) {
@@ -72,6 +81,9 @@ class SubscriptionModel {
       totalBytes: (json['totalBytes'] as num?)?.toInt(),
       expireAt: _date(json['expireAt']),
       lastError: json['lastError'] as String?,
+      hideNotices: json['hideNotices'] == true,
+      receivedCount: (json['receivedCount'] as num?)?.toInt() ?? 0,
+      rejectedCount: (json['rejectedCount'] as num?)?.toInt() ?? 0,
     );
   }
 

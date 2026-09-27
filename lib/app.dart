@@ -16,8 +16,7 @@ class NukefyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final servers = context.watch<ServersProvider>();
-    final empty = servers.servers.isEmpty && servers.subscriptions.isEmpty;
+    final empty = context.select<ServersProvider, bool>((servers) => servers.servers.isEmpty && servers.subscriptions.isEmpty);
     final welcome = !settings.settings.seenWelcome && empty;
     final brightness = switch (settings.themeMode) {
       ThemeMode.light => Brightness.light,
@@ -30,8 +29,8 @@ class NukefyApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       title: 'Nukefy VPN',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(settings.settings.accent),
-      darkTheme: AppTheme.dark(settings.settings.accent),
+      theme: AppTheme.light(settings.settings.accent, settings.settings.visualTheme),
+      darkTheme: AppTheme.dark(settings.settings.accent, settings.settings.visualTheme),
       themeMode: settings.themeMode,
       home: welcome ? const WelcomeScreen() : const MainShell(),
       ),

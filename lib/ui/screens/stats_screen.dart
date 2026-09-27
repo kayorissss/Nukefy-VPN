@@ -1,3 +1,4 @@
+import '../widgets/responsive_sections.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -19,7 +20,7 @@ class StatsScreen extends StatelessWidget {
     final p = context.palette;
     return SafeArea(
       bottom: false,
-      child: ListView(
+      child: ResponsiveSections(
         padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.paddingOf(context).bottom + 100),
         children: [
           _SpeedTestButton(label: s.t('speedTest'), hint: s.t('speedTestHint')),
@@ -39,7 +40,7 @@ class StatsScreen extends StatelessWidget {
                     icon: Icons.arrow_downward_rounded,
                     caption: s.t('trafficDown'),
                     value: FormatUtils.speed(stats.downBps),
-                    color: AppColors.success,
+                    color: p.success,
                   ),
                 ),
                 Container(
@@ -72,11 +73,11 @@ class StatsScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _Legend(color: AppColors.success, label: s.t('trafficDown')),
+                    _Legend(color: p.success, label: s.t('trafficDown')),
                     const SizedBox(width: 14),
                     _Legend(color: p.accent, label: s.t('upload')),
                     const Spacer(),
-                    Text(s.t('statsNow'), style: AppTextStyles.metricCaption),
+                    Text(s.t('statsNow'), style: context.palette.captionStyle),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -104,7 +105,7 @@ class StatsScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(s.t('statsSessionTime').toUpperCase(), style: AppTextStyles.metricCaption),
+                Text(s.t('statsSessionTime').toUpperCase(), style: context.palette.captionStyle),
                 const SizedBox(height: 8),
                 Text(
                   FormatUtils.duration(stats.sessionDuration),
@@ -139,7 +140,7 @@ class StatsScreen extends StatelessWidget {
           const SizedBox(height: 18),
           Row(
             children: [
-              Text(s.t('log').toUpperCase(), style: AppTextStyles.section),
+              Text(s.t('log').toUpperCase(), style: context.palette.sectionStyle),
               const Spacer(),
               TextButton(onPressed: stats.clearLogs, child: Text(s.t('clear'))),
             ],
@@ -147,7 +148,7 @@ class StatsScreen extends StatelessWidget {
           if (stats.logs.isEmpty)
             Padding(
               padding: const EdgeInsets.all(24),
-              child: Text(s.t('logEmpty'), style: AppTextStyles.bodySecondary),
+              child: Text(s.t('logEmpty'), style: context.palette.secondaryStyle),
             )
           else
             ...stats.logs.map((entry) {
@@ -161,7 +162,7 @@ class StatsScreen extends StatelessWidget {
                 title: Text(entry.serverName, style: AppTextStyles.bodyRegular),
                 subtitle: Text(
                   '${FormatUtils.clock(entry.time)} · ${entry.status}${entry.message == null ? '' : ' · ${entry.message}'}',
-                  style: AppTextStyles.bodySecondary,
+                  style: context.palette.secondaryStyle,
                 ),
                 leading: Icon(Icons.circle, size: 10, color: color),
               );
@@ -185,7 +186,7 @@ class _Legend extends StatelessWidget {
       children: [
         Container(width: 10, height: 3, color: color),
         const SizedBox(width: 6),
-        Text(label, style: AppTextStyles.bodySecondary),
+        Text(label, style: context.palette.secondaryStyle),
       ],
     );
   }
@@ -256,11 +257,11 @@ class _TrafficCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title.toUpperCase(), style: AppTextStyles.metricCaption),
+          Text(title.toUpperCase(), style: context.palette.captionStyle),
           const SizedBox(height: 10),
           Text(
             '↓ ${FormatUtils.bytes(down)}',
-            style: AppTextStyles.monoValue.copyWith(color: AppColors.success, fontSize: 15),
+            style: AppTextStyles.monoValue.copyWith(color: context.palette.success, fontSize: 15),
           ),
           const SizedBox(height: 4),
           Text(
@@ -268,7 +269,7 @@ class _TrafficCard extends StatelessWidget {
             style: AppTextStyles.monoValue.copyWith(color: context.palette.accent, fontSize: 15),
           ),
           const SizedBox(height: 6),
-          Text('${s.t('received')} / ${s.t('sent')}', style: AppTextStyles.bodySecondary),
+          Text('${s.t('received')} / ${s.t('sent')}', style: context.palette.secondaryStyle),
         ],
       ),
     );

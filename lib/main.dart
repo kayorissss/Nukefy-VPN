@@ -15,8 +15,10 @@ import 'core/constants/app_constants.dart';
 import 'core/models/vpn_status.dart';
 import 'core/providers/vpn_provider.dart';
 import 'core/services/app_log.dart';
+import 'core/services/music_service.dart';
 import 'core/services/storage_service.dart';
 import 'core/services/subscription_service.dart';
+import 'core/services/tg_ws_proxy_service.dart';
 import 'core/services/vpn_platform.dart';
 import 'core/services/zapret_service.dart';
 import 'ui/desktop_shell.dart';
@@ -77,8 +79,18 @@ Future<void> _main() async {
   final settings = SettingsProvider(StorageService.instance);
   final servers = ServersProvider(StorageService.instance, SubscriptionService());
   final stats = StatsProvider(StorageService.instance);
+  final music = MusicService(StorageService.instance);
   final vpn = VpnProvider(VpnPlatform());
-  await guard('load', () => Future.wait([settings.load(), servers.load(), stats.load()]));
+  await guard('load', () => Future.wait([settings.load(), servers.load(), stats.load(), music.load()]));
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    // Match the window to the saved theme: a light-theme start used to flash
+    // a dark rectangle before the first frame.
+    final systemDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    final dark = settings.themeMode == ThemeMode.dark || (settings.themeMode == ThemeMode.system && systemDark);
+    try {
+      await windowManager.setBackgroundColor(dark ? const Color(0xFF0D0D0D) : const Color(0xFFF2F4F8));
+    } catch (_) {}
+  }
   vpn.bind(stats: stats, servers: servers, settings: settings);
   await guard('core', vpn.refreshCore, seconds: 5);
 
@@ -88,6 +100,8 @@ Future<void> _main() async {
         ChangeNotifierProvider.value(value: settings),
         ChangeNotifierProvider.value(value: servers),
         ChangeNotifierProvider.value(value: stats),
+        ChangeNotifierProvider.value(value: music),
+        ChangeNotifierProvider.value(value: TgWsProxyService.instance),
         ChangeNotifierProvider.value(value: vpn),
         ChangeNotifierProvider(create: (_) => NavProvider()),
       ],
@@ -110,12 +124,25 @@ Future<void> _main() async {
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     AppLog.log('first frame after ${DateTime.now().difference(startedAt).inMilliseconds}ms');
-    if (Platform.isWindows && settings.settings.zapretAutoStart) {
-      final list = ZapretService.instance.strategies();
-      final chosen = list.where((e) => e.id == settings.settings.zapretStrategy).firstOrNull ?? list.firstOrNull;
-      if (chosen != null) {
-        ZapretService.instance.gameFilter = settings.settings.zapretGameFilter;
-        unawaited(ZapretService.instance.start(chosen).then((ok) => AppLog.log('zapret autostart ok=$ok ${ZapretService.instance.lastError ?? ''}')));
+    if (Platform.isWindows) {
+      final zapret = ZapretService.instance;
+      try {
+        await zapret.exclusive(() async {
+          await zapret.refreshGameLists();
+          await zapret.serviceInstalled();
+          if (settings.settings.zapretAutoStart && !zapret.servicePresent) {
+            final list = zapret.strategies();
+            final chosen = list.where((e) => e.id == settings.settings.zapretStrategy).firstOrNull ?? list.firstOrNull;
+            if (chosen != null) {
+              zapret.configure(settings.settings);
+              final ok = await zapret.start(chosen);
+              AppLog.log('zapret autostart ok=$ok ${zapret.lastError ?? ''}');
+            }
+          }
+        });
+      } catch (error) {
+        zapret.lastError = '$error';
+        AppLog.log('zapret startup failed: $error');
       }
     }
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {

@@ -22,21 +22,35 @@ class DesktopShell extends StatefulWidget {
 }
 
 class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayListener {
+  String? _iconName;
+
   @override
   void initState() {
     super.initState();
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
+    _iconName = context.read<SettingsProvider>().settings.appIcon;
+    context.read<SettingsProvider>().addListener(_settingsChanged);
     windowManager.addListener(this);
     trayManager.addListener(this);
+    _init();
+  }
+
+  void _settingsChanged() {
+    final next = context.read<SettingsProvider>().settings.appIcon;
+    if (next == _iconName || !mounted) return;
+    _iconName = next;
     _init();
   }
 
   Future<void> _init() async {
     await windowManager.setPreventClose(true);
     final dir = await getApplicationSupportDirectory();
-    final asset = Platform.isWindows ? 'assets/icons/app_icon.ico' : 'assets/icons/tray_icon.png';
+    final selected = _iconName ?? 'default';
+    final asset = Platform.isWindows
+        ? (selected == 'default' ? 'assets/icons/app_icon.ico' : 'assets/icons/app_icon_$selected.ico')
+        : (selected == 'default' ? 'assets/icons/tray_icon.png' : 'assets/icons/app_icon_$selected.png');
     // New file name per icon revision so a stale cached copy is never reused.
-    final icon = File('${dir.path}/${Platform.isWindows ? 'tray_icon_v2.ico' : 'tray_icon_v2.png'}');
+    final icon = File('${dir.path}/${Platform.isWindows ? 'tray_icon_${selected}.ico' : 'tray_icon_${selected}.png'}');
     try {
       final data = await rootBundle.load(asset);
       await icon.writeAsBytes(data.buffer.asUint8List(), flush: true);
@@ -67,6 +81,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   @override
   void dispose() {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      context.read<SettingsProvider>().removeListener(_settingsChanged);
       windowManager.removeListener(this);
       trayManager.removeListener(this);
     }
@@ -170,11 +185,27 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     }
   }
 
+  /// Hiding the window first makes the exit feel instant; the cleanup below
+  /// (winws, sing-box) runs while it is already gone and is bounded, so a
+  /// stuck helper process can never hold the quit for long.
   Future<void> _quit() async {
-    await ZapretService.instance.stop();
-    await context.read<VpnProvider>().disconnect();
+    await windowManager.hide();
+    final vpn = context.read<VpnProvider>();
+    await Future.wait<void>([
+      _bounded(() => ZapretService.instance.shutdown()),
+      _bounded(vpn.disconnect),
+    ]);
     await windowManager.setPreventClose(false);
     await windowManager.destroy();
+    // The window is gone; make sure the process goes with it instead of
+    // lingering until the engine winds down.
+    exit(0);
+  }
+
+  /// Runs [run] but never longer than [seconds] — a helper that refuses to
+  /// die must not block the exit.
+  Future<void> _bounded(Future<void> Function() run, {int seconds = 3}) {
+    return run().timeout(Duration(seconds: seconds), onTimeout: () => Future<void>.value());
   }
 
   @override

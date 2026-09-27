@@ -115,6 +115,28 @@ class NukefyPalette extends ThemeExtension<NukefyPalette> {
         isDark: isDark,
       );
 
+  /// Palette with a complete visual preset applied. The preset changes the
+  /// background, surfaces, borders, typography contrast and control accent;
+  /// [AppTheme] then derives every Material control from this palette.
+  NukefyPalette withTheme(String key) {
+    final preset = ThemePresets.of(key);
+    if (preset == null) return this;
+    final colors = isDark ? preset.dark : preset.light;
+    return NukefyPalette(
+      background: colors.background,
+      card: colors.card,
+      surface: colors.surface,
+      border: colors.border,
+      text: colors.text,
+      textSecondary: colors.textSecondary,
+      textDisabled: colors.textDisabled,
+      accent: colors.accent,
+      accent2: colors.accent2,
+      success: colors.success,
+      isDark: isDark,
+    );
+  }
+
   /// Palette with one of the user-selectable accent pairs applied.
   NukefyPalette withAccent(String key) {
     final pair = AccentThemes.of(key);
@@ -122,9 +144,25 @@ class NukefyPalette extends ThemeExtension<NukefyPalette> {
     return copyWith(accent: isDark ? pair.dark : pair.light, accent2: pair.secondary);
   }
 
+  /// Real interpolation: `AnimatedTheme` cross-fades the whole palette
+  /// instead of swapping the colours halfway through.
   @override
-  NukefyPalette lerp(ThemeExtension<NukefyPalette>? other, double t) =>
-      t < 0.5 ? this : (other as NukefyPalette? ?? this);
+  NukefyPalette lerp(ThemeExtension<NukefyPalette>? other, double t) {
+    if (other is! NukefyPalette) return this;
+    return NukefyPalette(
+      background: Color.lerp(background, other.background, t) ?? background,
+      card: Color.lerp(card, other.card, t) ?? card,
+      surface: Color.lerp(surface, other.surface, t) ?? surface,
+      border: Color.lerp(border, other.border, t) ?? border,
+      text: Color.lerp(text, other.text, t) ?? text,
+      textSecondary: Color.lerp(textSecondary, other.textSecondary, t) ?? textSecondary,
+      textDisabled: Color.lerp(textDisabled, other.textDisabled, t) ?? textDisabled,
+      accent: Color.lerp(accent, other.accent, t) ?? accent,
+      accent2: Color.lerp(accent2, other.accent2, t) ?? accent2,
+      success: Color.lerp(success, other.success, t) ?? success,
+      isDark: t < 0.5 ? isDark : other.isDark,
+    );
+  }
 }
 
 extension NukefyPaletteContext on BuildContext {
@@ -152,4 +190,49 @@ class AccentThemes {
   };
 
   static AccentPair? of(String key) => all[key];
+}
+
+class ThemePreset {
+  const ThemePreset({required this.dark, required this.light});
+  final ThemePalette dark;
+  final ThemePalette light;
+}
+
+class ThemePalette {
+  const ThemePalette({required this.background, required this.card, required this.surface, required this.border, required this.text, required this.textSecondary, required this.textDisabled, required this.accent, required this.accent2, required this.success});
+  final Color background;
+  final Color card;
+  final Color surface;
+  final Color border;
+  final Color text;
+  final Color textSecondary;
+  final Color textDisabled;
+  final Color accent;
+  final Color accent2;
+  final Color success;
+}
+
+/// Complete application skins. A skin is intentionally broader than an
+/// accent swatch: all Material controls consume the palette returned above.
+class ThemePresets {
+  static const Map<String, ThemePreset> all = {
+    'midnight': ThemePreset(
+      dark: ThemePalette(background: Color(0xFF0B0E13), card: Color(0xFF12161D), surface: Color(0xFF1A1F28), border: Color(0xFF242B36), text: Color(0xFFF3F6FA), textSecondary: Color(0xFF8B95A5), textDisabled: Color(0xFF4F5866), accent: Color(0xFF00E5FF), accent2: Color(0xFF7B61FF), success: Color(0xFF2EE59D)),
+      light: ThemePalette(background: Color(0xFFF2F4F8), card: Color(0xFFFFFFFF), surface: Color(0xFFE9EDF3), border: Color(0xFFD9DFE8), text: Color(0xFF0F141B), textSecondary: Color(0xFF5B6675), textDisabled: Color(0xFFA3ACB9), accent: Color(0xFF0097A7), accent2: Color(0xFF5B45D6), success: Color(0xFF0E9F6E)),
+    ),
+    'aurora': ThemePreset(
+      dark: ThemePalette(background: Color(0xFF071615), card: Color(0xFF0D2421), surface: Color(0xFF12332E), border: Color(0xFF1D4B43), text: Color(0xFFE9FFF9), textSecondary: Color(0xFF8BBEB2), textDisabled: Color(0xFF4B746B), accent: Color(0xFF52E6B0), accent2: Color(0xFF55B8FF), success: Color(0xFF8AF7C8)),
+      light: ThemePalette(background: Color(0xFFEAF8F4), card: Color(0xFFF9FFFD), surface: Color(0xFFD9F0E9), border: Color(0xFFB8DCD1), text: Color(0xFF102420), textSecondary: Color(0xFF4E6E66), textDisabled: Color(0xFF9ABAB1), accent: Color(0xFF087F69), accent2: Color(0xFF147DC2), success: Color(0xFF087F69)),
+    ),
+    'ember': ThemePreset(
+      dark: ThemePalette(background: Color(0xFF170D0D), card: Color(0xFF261414), surface: Color(0xFF351A18), border: Color(0xFF58302A), text: Color(0xFFFFF4EC), textSecondary: Color(0xFFC49B8D), textDisabled: Color(0xFF78564D), accent: Color(0xFFFF9A5C), accent2: Color(0xFFFFD166), success: Color(0xFF71D69B)),
+      light: ThemePalette(background: Color(0xFFFFF4ED), card: Color(0xFFFFFCF8), surface: Color(0xFFFFE8D8), border: Color(0xFFEBCBBB), text: Color(0xFF2A1712), textSecondary: Color(0xFF795D51), textDisabled: Color(0xFFB99A8B), accent: Color(0xFFC64C20), accent2: Color(0xFFB57A00), success: Color(0xFF18794E)),
+    ),
+    'ocean': ThemePreset(
+      dark: ThemePalette(background: Color(0xFF07111F), card: Color(0xFF0D1D31), surface: Color(0xFF122943), border: Color(0xFF204568), text: Color(0xFFEEF7FF), textSecondary: Color(0xFF91ACC7), textDisabled: Color(0xFF526F8E), accent: Color(0xFF55B7FF), accent2: Color(0xFF9D8CFF), success: Color(0xFF58D6BA)),
+      light: ThemePalette(background: Color(0xFFEEF7FF), card: Color(0xFFFFFFFF), surface: Color(0xFFDDECF9), border: Color(0xFFC0D7EB), text: Color(0xFF102237), textSecondary: Color(0xFF5E7890), textDisabled: Color(0xFFA4B9CB), accent: Color(0xFF0969B5), accent2: Color(0xFF6749CC), success: Color(0xFF087F69)),
+    ),
+  };
+
+  static ThemePreset? of(String key) => all[key];
 }
