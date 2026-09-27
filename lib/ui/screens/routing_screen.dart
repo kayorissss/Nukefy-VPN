@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/models/app_settings.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/settings_provider.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 
 class RoutingScreen extends StatelessWidget {

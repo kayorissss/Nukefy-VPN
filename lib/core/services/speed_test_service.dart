@@ -79,8 +79,8 @@ class SpeedProgress {
 }
 
 /// One HTTP request of a measurement: url plus the headers it needs.
-class _Request {
-  const _Request(this.url, {this.headers = const <String, String>{}});
+class SpeedRequest {
+  const SpeedRequest(this.url, {this.headers = const <String, String>{}});
   final String url;
   final Map<String, String> headers;
 }
@@ -100,9 +100,9 @@ class SpeedTarget {
 
   final String id;
   final String name;
-  final _Request ping;
+  final SpeedRequest ping;
   /// Download request for `worker` / `chunk` — size-parameterised or ranged.
-  final _Request Function(int worker, int chunk) chunk;
+  final SpeedRequest Function(int worker, int chunk) chunk;
   final String? uploadUrl;
 }
 
@@ -143,8 +143,8 @@ class SpeedTestService {
     SpeedTarget(
       id: 'cloudflare',
       name: 'Cloudflare',
-      ping: const _Request('https://speed.cloudflare.com/__down?bytes=1', headers: _cloudflareHeaders),
-      chunk: (worker, chunk) => _Request(
+      ping: const SpeedRequest('https://speed.cloudflare.com/__down?bytes=1', headers: _cloudflareHeaders),
+      chunk: (worker, chunk) => SpeedRequest(
         'https://speed.cloudflare.com/__down?bytes=$_chunkBytes',
         headers: _cloudflareHeaders,
       ),
@@ -155,12 +155,12 @@ class SpeedTestService {
     SpeedTarget(
       id: 'ovh',
       name: 'OVH',
-      ping: const _Request('https://proof.ovh.net/files/1Mb.dat', headers: {..._ovhHeaders, 'Range': 'bytes=0-0'}),
+      ping: const SpeedRequest('https://proof.ovh.net/files/1Mb.dat', headers: {..._ovhHeaders, 'Range': 'bytes=0-0'}),
       chunk: (worker, chunk) {
         // Interleaved slices so parallel workers never ask for the same
         // bytes and never run past the end of the file.
         final start = (chunk * _workers + worker) * _chunkBytes;
-        return _Request(
+        return SpeedRequest(
           'https://proof.ovh.net/files/1Gb.dat',
           headers: {..._ovhHeaders, 'Range': 'bytes=$start-${start + _chunkBytes - 1}'},
         );
