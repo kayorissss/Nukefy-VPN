@@ -39,6 +39,9 @@ class TgWsProxyService extends ChangeNotifier {
   ));
 
   Process? _process;
+  Timer? _logTimer;
+  int _logOffset = 0;
+  bool _readingLog = false;
   bool _busy = false;
 
   bool get supported => Platform.isWindows;
@@ -156,9 +159,11 @@ class TgWsProxyService extends ChangeNotifier {
       unawaited(process.exitCode.then((_) {
         if (identical(_process, process)) {
           _process = null;
+          _stopLogWatcher();
           notifyListeners();
         }
       }));
+      unawaited(_startLogWatcher());
       notifyListeners();
     } catch (_) {
       notifyListeners();
@@ -169,12 +174,56 @@ class TgWsProxyService extends ChangeNotifier {
   Future<void> stop() async {
     final process = _process;
     _process = null;
+    _stopLogWatcher();
     if (process == null) return;
     process.kill();
     try {
       await process.exitCode.timeout(const Duration(seconds: 3));
     } catch (_) {}
     notifyListeners();
+  }
+
+  Future<void> _startLogWatcher() async {
+    _stopLogWatcher();
+    _logOffset = 0;
+    await _readLogFile();
+    _logTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      unawaited(_readLogFile());
+    });
+  }
+
+  void _stopLogWatcher() {
+    _logTimer?.cancel();
+    _logTimer = null;
+    _readingLog = false;
+  }
+
+  Future<void> _readLogFile() async {
+    if (_readingLog) return;
+    _readingLog = true;
+    try {
+      final file = await logFile();
+      if (file == null || !file.existsSync()) return;
+      final length = await file.length();
+      if (length < _logOffset) _logOffset = 0;
+      if (length <= _logOffset) return;
+      final handle = await file.open();
+      try {
+        await handle.setPosition(_logOffset);
+        final bytes = await handle.read(length - _logOffset);
+        _logOffset = length;
+        for (final line in systemEncoding.decode(bytes, allowMalformed: true).split(RegExp(r'\r?\n'))) {
+          _appendLog(line);
+        }
+      } finally {
+        await handle.close();
+      }
+    } catch (_) {
+      // The proxy can rotate its log while it is running; stdout/stderr still
+      // remain available and the next poll will resume from the new file.
+    } finally {
+      _readingLog = false;
+    }
   }
 
   Future<void> openLog() async {

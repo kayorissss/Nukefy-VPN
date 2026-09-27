@@ -39,7 +39,7 @@ class AppTheme {
       onPrimary: const Color(0xFF041316),
       secondary: p.accent2,
       onSecondary: Colors.white,
-      error: AppColors.error,
+      error: p.error,
       onError: Colors.white,
       surface: p.card,
       onSurface: p.text,

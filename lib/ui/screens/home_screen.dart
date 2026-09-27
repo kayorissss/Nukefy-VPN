@@ -42,7 +42,7 @@ class HomeScreen extends StatelessWidget {
     final statusColor = switch (vpn.status) {
       VpnStatus.connected => p.success,
       VpnStatus.connecting => p.accent,
-      VpnStatus.error => AppColors.error,
+      VpnStatus.error => p.error,
       VpnStatus.disconnected => p.textSecondary,
     };
 
@@ -304,24 +304,25 @@ class _ErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 520),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
         decoration: BoxDecoration(
-          color: AppColors.error.withValues(alpha: 0.10),
+          color: p.error.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+          border: Border.all(color: p.error.withValues(alpha: 0.35)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.error_outline_rounded, size: 18, color: AppColors.error),
+            Icon(Icons.error_outline_rounded, size: 18, color: p.error),
             const SizedBox(width: 10),
             Expanded(
               child: SelectableText(
                 message,
-                style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error, fontSize: 12.5),
+                style: AppTextStyles.bodySecondary.copyWith(color: p.error, fontSize: 12.5),
               ),
             ),
           ],

@@ -45,7 +45,7 @@ class MusicTrack {
   factory MusicTrack.fromJson(Map<String, dynamic> json) => MusicTrack(
         id: '${json['id'] ?? ''}',
         path: '${json['path'] ?? ''}',
-        title: '${json['title'] ?? 'Без названия'}',
+        title: '${json['title'] ?? ''}',
         artist: '${json['artist'] ?? ''}',
         album: '${json['album'] ?? ''}',
         size: (json['size'] as num?)?.toInt() ?? 0,
@@ -79,7 +79,7 @@ class MusicPlaylist {
 
   factory MusicPlaylist.fromJson(Map<String, dynamic> json) => MusicPlaylist(
         id: '${json['id'] ?? ''}',
-        name: '${json['name'] ?? 'Плейлист'}',
+        name: '${json['name'] ?? ''}',
         icon: '${json['icon'] ?? 'music_note'}',
         trackIds: (json['trackIds'] as List?)?.map((e) => '$e').toList() ?? <String>[],
         createdAt: DateTime.tryParse('${json['createdAt']}') ?? DateTime.now(),
@@ -246,7 +246,7 @@ class MusicService extends ChangeNotifier {
         title: match.group(2)!.trim(),
       );
     }
-    return (title: clean.isEmpty ? 'Без названия' : clean, artist: '');
+    return (title: clean, artist: '');
   }
 
   static String? _clean(String? value) {
@@ -263,7 +263,7 @@ class MusicService extends ChangeNotifier {
 
   Future<void> play(MusicTrack track, {List<String>? queue}) async {
     if (!File(track.path).existsSync()) {
-      error = 'Файл трека не найден';
+      error = 'musicFileMissing';
       notifyListeners();
       return;
     }
@@ -376,7 +376,7 @@ class MusicService extends ChangeNotifier {
   Future<MusicPlaylist> createPlaylist(String name, {String icon = 'music_note'}) async {
     final playlist = MusicPlaylist(
       id: _uuid.v4(),
-      name: name.trim().isEmpty ? 'Новый плейлист' : name.trim(),
+      name: name.trim(),
       icon: icon,
       trackIds: <String>[],
       createdAt: DateTime.now(),

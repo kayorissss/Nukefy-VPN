@@ -7,6 +7,7 @@ import '../../core/services/music_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
+import '../../l10n/strings.dart';
 import '../widgets/nukefy_background.dart';
 import '../widgets/responsive_sections.dart';
 
@@ -87,7 +88,7 @@ class _MusicScreenState extends State<MusicScreen> {
       context: context,
       builder: (dialog) => AlertDialog(
         title: Text(s.t('musicDeleteTitle')),
-        content: Text('${s.t('musicDeleteBody')}\n\n${track.title}'),
+        content: Text('${s.t('musicDeleteBody')}\n\n${_trackTitle(track, s)}'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(s.t('cancel'))),
           FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(s.t('delete'))),
@@ -150,7 +151,7 @@ class _MusicScreenState extends State<MusicScreen> {
                     onEdit: (playlist) => _editPlaylist(context, music, playlist),
                   ),
                   if (music.error != null)
-                    _ErrorBanner(message: music.error!, onClose: () => music.error = null),
+                    _ErrorBanner(message: _musicErrorText(music.error!, s), onClose: () => music.error = null),
                   Expanded(
                     child: visible.isEmpty
                         ? _EmptyMusic(onImport: music.busy ? null : _import, label: s.t('musicEmpty'))
@@ -287,7 +288,7 @@ class _MusicScreenState extends State<MusicScreen> {
               for (final playlist in music.playlists)
                 CheckboxListTile(
                   value: playlist.trackIds.contains(track.id),
-                  title: Text(playlist.name),
+                  title: Text(_playlistName(playlist, s)),
                   secondary: Icon(_playlistIcon(playlist.icon)),
                   onChanged: (value) async {
                     await music.setTrackInPlaylist(playlist, track.id, value == true);
@@ -431,7 +432,7 @@ class _PlaylistBar extends StatelessWidget {
           for (final playlist in playlists)
             Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: _PlaylistChip(label: playlist.name, icon: _playlistIcon(playlist.icon), selected: selectedId == playlist.id, onTap: () => onSelected(playlist.id), onLongPress: () => onEdit(playlist)),
+              child: _PlaylistChip(label: _playlistName(playlist, context.read<SettingsProvider>().strings), icon: _playlistIcon(playlist.icon), selected: selectedId == playlist.id, onTap: () => onSelected(playlist.id), onLongPress: () => onEdit(playlist)),
             ),
           Padding(
             padding: const EdgeInsets.only(left: 8),
@@ -551,6 +552,8 @@ class _TrackRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
+    final title = _trackTitle(track, s);
     final current = music.currentId == track.id;
     return Padding(
       padding: const EdgeInsets.only(bottom: 7),
@@ -570,7 +573,7 @@ class _TrackRow extends StatelessWidget {
               SizedBox(width: 28, child: Text('$index', style: context.palette.captionStyle)),
               _MusicArtwork(track: track, size: 44),
               const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)), Text(track.artist.isEmpty ? context.read<SettingsProvider>().strings.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)])),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)), Text(track.artist.isEmpty ? s.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)])),
               if (MediaQuery.sizeOf(context).width > 900) ...[SizedBox(width: 170, child: Text(track.album, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)), SizedBox(width: 90, child: Text(FormatUtils.bytes(track.size), style: context.palette.captionStyle))],
               SizedBox(width: 68, child: Text(_duration(track), textAlign: TextAlign.end, style: context.palette.captionStyle)),
               IconButton(tooltip: context.read<SettingsProvider>().strings.t('musicAddToPlaylist'), onPressed: () => onPlaylist(track), icon: const Icon(Icons.playlist_add_rounded, size: 20)),
@@ -604,6 +607,8 @@ class _TrackCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
+    final title = _trackTitle(track, s);
     return Material(
       color: selected ? p.accent.withValues(alpha: .12) : p.card,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: selected ? p.accent.withValues(alpha: .55) : p.border)),
@@ -618,7 +623,7 @@ class _TrackCard extends StatelessWidget {
           child: Row(children: [
             _MusicArtwork(track: track, size: 70),
             const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(track.artist.isEmpty ? context.read<SettingsProvider>().strings.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle), const SizedBox(height: 8), Text('${_duration(track)} · ${FormatUtils.bytes(track.size)}', style: context.palette.captionStyle)])),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(track.artist.isEmpty ? s.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle), const SizedBox(height: 8), Text('${_duration(track)} · ${FormatUtils.bytes(track.size)}', style: context.palette.captionStyle)])),
             PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'playlist') onPlaylist(track);
@@ -668,7 +673,9 @@ class _NowPlaying extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
     final track = music.currentTrack!;
+    final title = _trackTitle(track, s);
     final max = music.duration.inMilliseconds <= 0 ? 1.0 : music.duration.inMilliseconds.toDouble();
     final value = music.position.inMilliseconds.clamp(0, max.toInt()).toDouble();
     return Container(
@@ -676,7 +683,7 @@ class _NowPlaying extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 10, 14, 8),
       decoration: BoxDecoration(color: p.card, borderRadius: BorderRadius.circular(20), border: Border.all(color: p.accent.withValues(alpha: .45)), boxShadow: [BoxShadow(color: p.accent.withValues(alpha: .08), blurRadius: 20)]),
       child: Column(children: [
-        Row(children: [_MusicArtwork(track: track, size: 42), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)), Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)])), IconButton(onPressed: music.previous, icon: const Icon(Icons.skip_previous_rounded)), IconButton(onPressed: music.toggle, icon: Icon(music.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded, size: 32, color: p.accent)), IconButton(onPressed: music.next, icon: const Icon(Icons.skip_next_rounded))]),
+        Row(children: [_MusicArtwork(track: track, size: 42), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)), Text(track.artist.isEmpty ? s.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)])), IconButton(onPressed: music.previous, icon: const Icon(Icons.skip_previous_rounded)), IconButton(onPressed: music.toggle, icon: Icon(music.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded, size: 32, color: p.accent)), IconButton(onPressed: music.next, icon: const Icon(Icons.skip_next_rounded))]),
         Row(children: [Text(_formatDuration(music.position), style: context.palette.captionStyle), Expanded(child: Slider(value: value, max: max, onChanged: (value) => music.seek(Duration(milliseconds: value.round())))), Text(_formatDuration(music.duration), style: context.palette.captionStyle)]),
       ]),
     );
@@ -703,6 +710,10 @@ class _ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 4), child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: context.palette.error.withValues(alpha: .10), borderRadius: BorderRadius.circular(12), border: Border.all(color: context.palette.error.withValues(alpha: .3))), child: Row(children: [Icon(Icons.error_outline_rounded, color: context.palette.error), const SizedBox(width: 8), Expanded(child: Text(message, style: context.palette.secondaryStyle)), IconButton(onPressed: onClose, icon: const Icon(Icons.close, size: 18))])));
 }
+
+String _trackTitle(MusicTrack track, S s) => track.title.trim().isEmpty ? s.t('musicUntitled') : track.title;
+String _playlistName(MusicPlaylist playlist, S s) => playlist.name.trim().isEmpty ? s.t('musicPlaylistDefault') : playlist.name;
+String _musicErrorText(String raw, S s) => raw == 'musicFileMissing' ? s.t(raw) : raw;
 
 String _duration(MusicTrack track) => track.durationMs == null ? '—' : _formatDuration(Duration(milliseconds: track.durationMs!));
 String _formatDuration(Duration value) => '${value.inMinutes.remainder(60).toString().padLeft(2, '0')}:${value.inSeconds.remainder(60).toString().padLeft(2, '0')}';
