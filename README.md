@@ -1,10 +1,20 @@
 # Nukefy VPN
 
-Клиент sing-box для Android и Windows. Поддерживаются VLESS Reality, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, WireGuard и AmneziaWG.
+> Быстрый и понятный клиент sing-box для Android и Windows.
+>
+> VLESS Reality · VMess · Trojan · Shadowsocks · Hysteria2 · TUIC · WireGuard · AmneziaWG
 
-Версия: **2.4.2**
+- **Текущий релиз:** `2.4.3`
+- **Автор:** [@kayorisan](https://t.me/kayorisan)
+- **Скачать:** [GitHub Releases](https://github.com/kayorissss/Nukefy-VPN/releases/latest)
 
-Автор: **@kayorisan**
+## Что нового в 2.4.3
+
+- **Диагностика сети.** Таймауты, TLS/CA, proxy, системное время и trust store теперь объясняются человеческим языком — без отключения проверки сертификатов.
+- **TG WS Proxy.** Отдельный Windows-only поток на базе Flowseal: загрузка по запросу, проверка размера и SHA-256, безопасная работа с временным файлом.
+- **Каталог игр.** Добавлен устойчивый fallback-каталог с источником данных и настоящими лицензированными игровыми знаками вместо generic-логотипов.
+- **Релизная безопасность.** Для Windows публикуются SHA-256 checksums, используется прозрачное ZIP-сжатие, а при наличии сертификата возможна Authenticode-подпись.
+- **Понятные ошибки и стабильность.** Улучшена обработка Dio/network failures, а analyzer, тесты и Windows release build проверяются в CI.
 
 ## Что нового в 2.4.2
 
@@ -110,10 +120,12 @@
 
 Готовые файлы лежат в [релизах](https://github.com/kayorissss/Nukefy-VPN/releases/latest):
 
-- **NukefyVPN-android.apk** — поставить на телефон. Если Android ругается, разрешите установку из этого источника.
-- **NukefyVPN-windows-x64.zip** — распаковать и запустить `nukefy_vpn.exe`.
+- **NukefyVPN-android.apk** — установить на Android. Если система ругается, разрешите установку из этого источника.
+- **NukefyVPN-Setup-x64.exe** — классический установщик Windows с ярлыками.
+- **NukefyVPN.exe** — portable-версия Windows в одном файле.
+- **SHA256SUMS.txt** — контрольные суммы всех файлов релиза.
 
-На Windows после установки откройте Настройки и скачайте ядро в карточке «Ядро sing-box», иначе VPN не запустится. На Android ядро уже внутри APK.
+На Windows после установки откройте Настройки и скачайте ядро в карточке «Ядро sing-box», иначе VPN не запустится. На Android ядро уже внутри APK. TG WS Proxy устанавливается отдельно из настроек и в основной установщик не входит.
 
 Первый запуск пустой: нет предустановленных подписок. Ссылку можно вставить, набрать или отсканировать QR. Данные остаются на устройстве — зашифрованный Hive, без аналитики, Firebase и внешних логов. Подписки качаются только с URL, который указал пользователь.
 
