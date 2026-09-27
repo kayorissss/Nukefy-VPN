@@ -333,31 +333,56 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [p.accent, p.accent2]),
-              borderRadius: BorderRadius.circular(16),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 560;
+        final heading = Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [p.accent, p.accent2]),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(Icons.library_music_rounded, color: p.isDark ? const Color(0xFF07131A) : Colors.white, size: 25),
             ),
-            child: Icon(Icons.library_music_rounded, color: p.isDark ? const Color(0xFF07131A) : Colors.white, size: 25),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.title),
+                  const SizedBox(height: 3),
+                  Text('$count', style: context.palette.secondaryStyle),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: context.read<SettingsProvider>().strings.t('musicNewPlaylist'),
+              onPressed: onCreatePlaylist,
+              icon: const Icon(Icons.playlist_add_rounded),
+            ),
+          ],
+        );
+        final import = SizedBox(
+          width: compact ? double.infinity : null,
+          child: FilledButton.icon(
+            onPressed: onImport,
+            icon: const Icon(Icons.add_rounded),
+            label: Text(importLabel),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: AppTextStyles.title),
-              const SizedBox(height: 3),
-              Text('$count', style: context.palette.secondaryStyle),
-            ]),
-          ),
-          IconButton(tooltip: context.read<SettingsProvider>().strings.t('musicNewPlaylist'), onPressed: onCreatePlaylist, icon: const Icon(Icons.playlist_add_rounded)),
-          FilledButton.icon(onPressed: onImport, icon: const Icon(Icons.add_rounded), label: Text(importLabel)),
-        ],
-      ),
+        );
+        return Padding(
+          padding: EdgeInsets.fromLTRB(20, compact ? 12 : 18, 20, 10),
+          child: compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [heading, const SizedBox(height: 10), import],
+                )
+              : Row(children: [Expanded(child: heading), const SizedBox(width: 12), import]),
+        );
+      },
     );
   }
 }
@@ -376,37 +401,50 @@ class _Toolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          SizedBox(
-            width: 360,
-            child: TextField(
-              controller: search,
-              onChanged: onQuery,
-              decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded), hintText: hint, isDense: true),
-            ),
-          ),
-          OutlinedButton.icon(onPressed: onSort, icon: Icon(newestFirst ? Icons.south_rounded : Icons.north_rounded, size: 18), label: Text(sortLabel)),
-          SegmentedButton<_MusicView>(
-            segments: const [
-              ButtonSegment(value: _MusicView.list, icon: Icon(Icons.view_list_rounded)),
-              ButtonSegment(value: _MusicView.table, icon: Icon(Icons.table_rows_rounded)),
-              ButtonSegment(value: _MusicView.grid, icon: Icon(Icons.grid_view_rounded)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final searchWidth = constraints.maxWidth < 560 ? (constraints.maxWidth - 40).clamp(240.0, 520.0).toDouble() : 360.0;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: searchWidth,
+                child: TextField(
+                  controller: search,
+                  onChanged: onQuery,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    hintText: hint,
+                    isDense: true,
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: onSort,
+                icon: Icon(newestFirst ? Icons.south_rounded : Icons.north_rounded, size: 18),
+                label: Text(sortLabel),
+              ),
+              SegmentedButton<_MusicView>(
+                segments: const [
+                  ButtonSegment(value: _MusicView.list, icon: Icon(Icons.view_list_rounded)),
+                  ButtonSegment(value: _MusicView.table, icon: Icon(Icons.table_rows_rounded)),
+                  ButtonSegment(value: _MusicView.grid, icon: Icon(Icons.grid_view_rounded)),
+                ],
+                selected: {view},
+                onSelectionChanged: (value) => onView(value.first),
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: WidgetStatePropertyAll(p.text),
+                ),
+              ),
             ],
-            selected: {view},
-            onSelectionChanged: (value) => onView(value.first),
-            style: ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              foregroundColor: WidgetStatePropertyAll(p.text),
-            ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -549,44 +587,94 @@ class _TrackRow extends StatelessWidget {
   final ValueChanged<MusicTrack> onPlaylist;
   final Widget? drag;
 
+  void _playOrPause() {
+    onSelected(track.id);
+    if (music.currentId == track.id) {
+      music.toggle();
+    } else {
+      music.play(track);
+    }
+  }
+
+  Widget _menu(BuildContext context) {
+    final s = context.read<SettingsProvider>().strings;
+    final p = context.palette;
+    return PopupMenuButton<String>(
+      tooltip: s.t('more'),
+      onSelected: (value) {
+        if (value == 'playlist') onPlaylist(track);
+        if (value == 'edit') onEdit(track);
+        if (value == 'delete') {
+          onSelected(track.id);
+          onDelete(music);
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(value: 'playlist', child: Text(s.t('musicAddToPlaylist'))),
+        PopupMenuItem(value: 'edit', child: Text(s.t('edit'))),
+        PopupMenuItem(value: 'delete', child: Text(s.t('delete'), style: TextStyle(color: p.error))),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
     final s = context.read<SettingsProvider>().strings;
     final title = _trackTitle(track, s);
     final current = music.currentId == track.id;
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: selected || current ? p.accent.withValues(alpha: .11) : p.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: selected || current ? p.accent.withValues(alpha: .45) : p.border)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17), side: BorderSide(color: selected || current ? p.accent.withValues(alpha: .45) : p.border)),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            onSelected(track.id);
-            music.play(track);
-          },
+          borderRadius: BorderRadius.circular(17),
+          onTap: _playOrPause,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Row(children: [
-              if (drag != null) ...[drag!, const SizedBox(width: 4)],
-              SizedBox(width: 28, child: Text('$index', style: context.palette.captionStyle)),
-              _MusicArtwork(track: track, size: 44),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)), Text(track.artist.isEmpty ? s.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)])),
-              if (MediaQuery.sizeOf(context).width > 900) ...[SizedBox(width: 170, child: Text(track.album, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)), SizedBox(width: 90, child: Text(FormatUtils.bytes(track.size), style: context.palette.captionStyle))],
-              SizedBox(width: 68, child: Text(_duration(track), textAlign: TextAlign.end, style: context.palette.captionStyle)),
-              IconButton(tooltip: context.read<SettingsProvider>().strings.t('musicAddToPlaylist'), onPressed: () => onPlaylist(track), icon: const Icon(Icons.playlist_add_rounded, size: 20)),
-              IconButton(tooltip: context.read<SettingsProvider>().strings.t('edit'), onPressed: () => onEdit(track), icon: const Icon(Icons.edit_outlined, size: 18)),
-              IconButton(
-                tooltip: context.read<SettingsProvider>().strings.t('delete'),
-                onPressed: () {
-                  onSelected(track.id);
-                  onDelete(music);
-                },
-                icon: Icon(Icons.delete_outline_rounded, color: p.error, size: 20),
-              ),
-            ]),
+            padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10, vertical: compact ? 7 : 8),
+            child: compact
+                ? Row(
+                    children: [
+                      if (drag != null) ...[drag!, const SizedBox(width: 2)],
+                      SizedBox(width: 22, child: Text('$index', style: context.palette.captionStyle)),
+                      _MusicArtwork(track: track, size: 46),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 2),
+                            Text(track.artist.isEmpty ? s.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle),
+                            const SizedBox(height: 2),
+                            Text(_duration(track), style: context.palette.captionStyle),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: current && music.isPlaying ? s.t('musicPause') : s.t('musicPlay'),
+                        onPressed: _playOrPause,
+                        icon: Icon(current && music.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded, color: p.accent, size: 29),
+                      ),
+                      _menu(context),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      if (drag != null) ...[drag!, const SizedBox(width: 4)],
+                      SizedBox(width: 28, child: Text('$index', style: context.palette.captionStyle)),
+                      _MusicArtwork(track: track, size: 44),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)), Text(track.artist.isEmpty ? s.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)])),
+                      if (MediaQuery.sizeOf(context).width > 900) ...[SizedBox(width: 170, child: Text(track.album, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)), SizedBox(width: 90, child: Text(FormatUtils.bytes(track.size), style: context.palette.captionStyle))],
+                      SizedBox(width: 68, child: Text(_duration(track), textAlign: TextAlign.end, style: context.palette.captionStyle)),
+                      IconButton(tooltip: s.t('musicAddToPlaylist'), onPressed: () => onPlaylist(track), icon: const Icon(Icons.playlist_add_rounded, size: 20)),
+                      IconButton(tooltip: s.t('edit'), onPressed: () => onEdit(track), icon: const Icon(Icons.edit_outlined, size: 18)),
+                      IconButton(tooltip: s.t('delete'), onPressed: () { onSelected(track.id); onDelete(music); }, icon: Icon(Icons.delete_outline_rounded, color: p.error, size: 20)),
+                    ],
+                  ),
           ),
         ),
       ),

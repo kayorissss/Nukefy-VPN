@@ -236,6 +236,17 @@ class ThemePresets {
       dark: ThemePalette(background: Color(0xFF07111F), card: Color(0xFF0D1D31), surface: Color(0xFF122943), border: Color(0xFF204568), text: Color(0xFFEEF7FF), textSecondary: Color(0xFF91ACC7), textDisabled: Color(0xFF526F8E), accent: Color(0xFF55B7FF), accent2: Color(0xFF9D8CFF), success: Color(0xFF58D6BA)),
       light: ThemePalette(background: Color(0xFFEEF7FF), card: Color(0xFFFFFFFF), surface: Color(0xFFDDECF9), border: Color(0xFFC0D7EB), text: Color(0xFF102237), textSecondary: Color(0xFF5E7890), textDisabled: Color(0xFFA4B9CB), accent: Color(0xFF0969B5), accent2: Color(0xFF6749CC), success: Color(0xFF087F69)),
     ),
+    // Near-black with restrained white and graphite controls for a genuinely
+    // monochrome option, not another blue accent on a dark background.
+    'carbon': ThemePreset(
+      dark: ThemePalette(background: Color(0xFF050505), card: Color(0xFF0D0D0D), surface: Color(0xFF171717), border: Color(0xFF303030), text: Color(0xFFF7F7F7), textSecondary: Color(0xFFAAAAAA), textDisabled: Color(0xFF626262), accent: Color(0xFFF1F1F1), accent2: Color(0xFF8C8C8C), success: Color(0xFFD6D6D6)),
+      light: ThemePalette(background: Color(0xFFF4F4F4), card: Color(0xFFFFFFFF), surface: Color(0xFFE6E6E6), border: Color(0xFFC8C8C8), text: Color(0xFF101010), textSecondary: Color(0xFF5A5A5A), textDisabled: Color(0xFFA2A2A2), accent: Color(0xFF202020), accent2: Color(0xFF707070), success: Color(0xFF303030)),
+    ),
+    // A black/red skin with red status and controls throughout the app.
+    'crimson': ThemePreset(
+      dark: ThemePalette(background: Color(0xFF120608), card: Color(0xFF1D0B10), surface: Color(0xFF2C1118), border: Color(0xFF5B202C), text: Color(0xFFFFF1F3), textSecondary: Color(0xFFD09DA8), textDisabled: Color(0xFF7B4A56), accent: Color(0xFFFF3F61), accent2: Color(0xFFFF8A5B), success: Color(0xFF7AE5AE)),
+      light: ThemePalette(background: Color(0xFFFFF1F3), card: Color(0xFFFFFBFC), surface: Color(0xFFFFE1E7), border: Color(0xFFE9B9C4), text: Color(0xFF2A0D13), textSecondary: Color(0xFF7D4C58), textDisabled: Color(0xFFB9909A), accent: Color(0xFFC51F42), accent2: Color(0xFFE85D35), success: Color(0xFF147A4A)),
+    ),
   };
 
   static ThemePreset? of(String key) => all[key];

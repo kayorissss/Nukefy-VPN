@@ -83,24 +83,67 @@ class SettingsTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 2),
-      leading: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: p.accent.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(11),
-        ),
-        child: Icon(icon, color: p.accent, size: 19),
-      ),
-      title: Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
-      subtitle: subtitle == null
-          ? null
-          : Text(subtitle!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
-      trailing: trailing ??
-          (onTap == null ? null : Icon(Icons.chevron_right_rounded, color: p.textSecondary)),
-      onTap: onTap,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // A dropdown or a long action label must not steal the title's width
+        // on a phone. The old ListTile left a 40–60 px text column, which is
+        // why Russian words were rendered one character per line.
+        final stacked = constraints.maxWidth < 360 && trailing != null;
+        final lead = Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: p.accent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(icon, color: p.accent, size: 19),
+        );
+        final copy = Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(subtitle!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+              ],
+            ],
+          ),
+        );
+        final row = Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            lead,
+            const SizedBox(width: 12),
+            copy,
+            if (!stacked) ...[
+              const SizedBox(width: 8),
+              trailing ?? (onTap == null ? const SizedBox.shrink() : Icon(Icons.chevron_right_rounded, color: p.textSecondary)),
+            ],
+          ],
+        );
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 7),
+              child: stacked
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        row,
+                        const SizedBox(height: 8),
+                        Align(alignment: AlignmentDirectional.centerEnd, child: trailing),
+                      ],
+                    )
+                  : row,
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -125,25 +168,45 @@ class SwitchTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return SwitchListTile(
-      contentPadding: EdgeInsets.symmetric(horizontal: icon == null ? 2 : 2),
-      secondary: icon == null
-          ? null
-          : Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: p.accent.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Icon(icon, color: p.accent, size: 19),
-            ),
-      title: Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
-      subtitle: subtitle == null
-          ? null
-          : Text(subtitle!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
-      value: value,
-      onChanged: onChanged,
+    return LayoutBuilder(
+      builder: (context, _) {
+        final lead = icon == null
+            ? null
+            : Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: p.accent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, color: p.accent, size: 19),
+              );
+        final text = Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(subtitle!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+              ],
+            ],
+          ),
+        );
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (lead != null) ...[lead, const SizedBox(width: 12)],
+              text,
+              const SizedBox(width: 8),
+              Switch(value: value, onChanged: onChanged),
+            ],
+          ),
+        );
+      },
     );
   }
 }

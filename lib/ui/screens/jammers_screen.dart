@@ -230,36 +230,61 @@ class _VerdictCard extends StatelessWidget {
       JammerVerdict.dead => (Icons.signal_wifi_bad_rounded, AppColors.error, strings.t('jammersDead'), strings.t('jammersDeadDesc')),
       JammerVerdict.idle => (Icons.radar_rounded, p.textSecondary, '', ''),
     };
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: p.card,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.12), blurRadius: 30)],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(18)),
-            child: Icon(icon, color: color, size: 30),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 560;
+        final message = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: AppTextStyles.headline.copyWith(color: color)),
+            const SizedBox(height: 4),
+            Text(body, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+          ],
+        );
+        final iconBox = Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(18)),
+          child: Icon(icon, color: color, size: 30),
+        );
+        final lead = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            iconBox,
+            const SizedBox(width: 16),
+            Expanded(child: message),
+          ],
+        );
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: color.withValues(alpha: 0.4)),
+            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.12), blurRadius: 30)],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: AppTextStyles.headline.copyWith(color: color)),
-                const SizedBox(height: 4),
-                Text(body, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
-              ],
-            ),
-          ),
-          if (trailing != null) ...[const SizedBox(width: 12), trailing!],
-        ],
-      ),
+          child: narrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    lead,
+                    if (trailing != null) ...[
+                      const SizedBox(height: 12),
+                      Align(alignment: AlignmentDirectional.centerEnd, child: trailing),
+                    ],
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    iconBox,
+                    const SizedBox(width: 16),
+                    Expanded(child: message),
+                    if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+                  ],
+                ),
+        );
+      },
     );
   }
 }

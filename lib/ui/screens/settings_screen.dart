@@ -74,19 +74,22 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: s.t('themesHint'),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(52, 0, 2, 12),
-                  child: Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (final entry in ThemePresets.all.entries)
-                        _ThemeChoice(
-                          label: _themeLabel(s, entry.key),
-                          colors: Theme.of(context).brightness == Brightness.dark ? entry.value.dark : entry.value.light,
-                          selected: value.visualTheme == entry.key,
-                          onTap: () => settings.update((item) => item.visualTheme = entry.key),
-                        ),
-                    ],
+                  padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final entry in ThemePresets.all.entries)
+                          _ThemeChoice(
+                            width: constraints.maxWidth < 300 ? (constraints.maxWidth - 10) / 2 : 132,
+                            label: _themeLabel(s, entry.key),
+                            colors: Theme.of(context).brightness == Brightness.dark ? entry.value.dark : entry.value.light,
+                            selected: value.visualTheme == entry.key,
+                            onTap: () => settings.update((item) => item.visualTheme = entry.key),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 if (Platform.isAndroid || Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[
@@ -95,7 +98,7 @@ class SettingsScreen extends StatelessWidget {
                     title: s.t('appIcon'),
                   ),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(52, 0, 2, 12),
+                    padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
                     child: Wrap(
                       spacing: 12,
                       runSpacing: 12,
@@ -241,19 +244,14 @@ class SettingsScreen extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(s.t('connectionModeHint'), style: context.palette.secondaryStyle),
                       const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: SegmentedButton<bool>(
-                          segments: [
-                            ButtonSegment<bool>(value: false, icon: const Icon(Icons.lan_outlined), label: Text(s.t('proxyMode'))),
-                            ButtonSegment<bool>(value: true, icon: const Icon(Icons.router_outlined), label: Text(s.t('tunMode'))),
-                          ],
-                          selected: {value.tunEnabled},
-                          onSelectionChanged: (selected) => settings.update((item) {
-                            item.tunEnabled = selected.single;
-                            if (!item.tunEnabled) item.localProxyEnabled = true;
-                          }),
-                        ),
+                      _ConnectionModeChoice(
+                        tunEnabled: value.tunEnabled,
+                        proxyLabel: s.t('proxyMode'),
+                        tunLabel: s.t('tunMode'),
+                        onChanged: (tun) => settings.update((item) {
+                          item.tunEnabled = tun;
+                          if (!tun) item.localProxyEnabled = true;
+                        }),
                       ),
                     ],
                   ),
@@ -531,6 +529,101 @@ class SettingsScreen extends StatelessWidget {
       PerAppMode.include => s.t('perAppInclude'),
       PerAppMode.exclude => s.t('perAppExclude'),
     };
+  }
+}
+
+class _ConnectionModeChoice extends StatelessWidget {
+  const _ConnectionModeChoice({
+    required this.tunEnabled,
+    required this.proxyLabel,
+    required this.tunLabel,
+    required this.onChanged,
+  });
+
+  final bool tunEnabled;
+  final String proxyLabel;
+  final String tunLabel;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Container(
+      height: 58,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: p.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ModeOption(
+              selected: !tunEnabled,
+              icon: Icons.lan_outlined,
+              label: proxyLabel,
+              onTap: () => onChanged(false),
+            ),
+          ),
+          Expanded(
+            child: _ModeOption(
+              selected: tunEnabled,
+              icon: Icons.router_outlined,
+              label: tunLabel,
+              onTap: () => onChanged(true),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeOption extends StatelessWidget {
+  const _ModeOption({required this.selected, required this.icon, required this.label, required this.onTap});
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(13),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: selected ? p.accent.withValues(alpha: .16) : Colors.transparent,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: selected ? p.accent.withValues(alpha: .55) : Colors.transparent),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 19, color: selected ? p.accent : p.textSecondary),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.bodyRegular.copyWith(color: selected ? p.text : p.textSecondary, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -912,7 +1005,8 @@ class _TaskProgressDialogState<T> extends State<_TaskProgressDialog<T>> {
 
 
 class _ThemeChoice extends StatelessWidget {
-  const _ThemeChoice({required this.label, required this.colors, required this.selected, required this.onTap});
+  const _ThemeChoice({required this.width, required this.label, required this.colors, required this.selected, required this.onTap});
+  final double width;
   final String label;
   final ThemePalette colors;
   final bool selected;
@@ -933,7 +1027,7 @@ class _ThemeChoice extends StatelessWidget {
           scale: selected ? 1.03 : 1,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 260),
-            width: 132,
+            width: width,
             height: 82,
             padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(

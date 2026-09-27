@@ -84,8 +84,11 @@ class MainShell extends StatelessWidget {
       child: NukefyBackground(
         child: Scaffold(
           backgroundColor: Colors.transparent,
-          extendBody: true,
-          extendBodyBehindAppBar: true,
+          // The mobile rail is a real layout region. Let the Scaffold reserve
+          // its height instead of painting pages underneath it: music controls
+          // and the last settings row must never be hidden behind navigation.
+          extendBody: false,
+          extendBodyBehindAppBar: false,
           body: desktop
               ? Column(
                   children: [
