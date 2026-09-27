@@ -212,7 +212,7 @@ class TgWsProxyService extends ChangeNotifier {
         await handle.setPosition(_logOffset);
         final bytes = await handle.read(length - _logOffset);
         _logOffset = length;
-        for (final line in systemEncoding.decode(bytes, allowMalformed: true).split(RegExp(r'\r?\n'))) {
+        for (final line in systemEncoding.decode(bytes).split(RegExp(r'\r?\n'))) {
           _appendLog(line);
         }
       } finally {
