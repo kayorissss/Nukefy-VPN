@@ -64,6 +64,10 @@ class NukefyPalette extends ThemeExtension<NukefyPalette> {
   final Color success;
   final bool isDark;
 
+  /// Semantic error colour stays high-contrast across every visual skin.
+  Color get error => isDark ? AppColors.error : const Color(0xFFB42318);
+  Color get warning => isDark ? AppColors.warning : const Color(0xFFB54708);
+
   static const dark = NukefyPalette(
     background: AppColors.background,
     card: AppColors.backgroundSecondary,

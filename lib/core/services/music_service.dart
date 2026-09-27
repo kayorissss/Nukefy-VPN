@@ -179,12 +179,10 @@ class MusicService extends ChangeNotifier {
   Future<List<MusicTrack>> importFiles() async {
     if (busy) return const [];
     final picked = await FilePicker.pickFiles(
-      allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: supportedExtensions,
-      withData: false,
     );
-    if (picked == null) return const [];
+    if (picked.isEmpty) return const [];
     busy = true;
     error = null;
     notifyListeners();
