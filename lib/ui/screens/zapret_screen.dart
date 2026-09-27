@@ -33,6 +33,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
   CancelToken? _cancel;
   String? _current, _best, _error;
   bool _analyzing = false, _quick = true, _showLog = false, _showTools = false;
+  int _section = 0;
   int _step = 0;
   ZapretUpdateInfo? _update;
   double? _download;
@@ -222,6 +223,12 @@ class _ZapretScreenState extends State<ZapretScreen> {
     onPressed: _zapret.busy ? null : () => _run(action), icon: Icon(icon, size: 18), label: Text(s.t(key)),
   );
 
+  void _selectSection(int value) {
+    if (_section == value) return;
+    setState(() => _section = value);
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
@@ -231,238 +238,496 @@ class _ZapretScreenState extends State<ZapretScreen> {
     final chosen = _selected();
     final vpnOn = context.select<VpnProvider, bool>((v) => v.status != VpnStatus.disconnected);
     final domains = _zapret.loadDomains();
-    final statusColor = _zapret.isRunning ? p.success : p.textSecondary;
-    final controls = SectionCard(
-      title: s.t('zapret'),
+    final running = _zapret.isRunning;
+    final statusColor = running ? p.success : p.textSecondary;
+
+    final activation = SectionCard(
+      title: s.t('zapretActivation'),
       icon: Icons.shield_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: statusColor.withValues(alpha: .12),
-                border: Border.all(color: statusColor.withValues(alpha: .45)),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final power = _ZapretPowerButton(
+          running: running,
+          busy: busy,
+          label: s.t(running ? 'zDeactivate' : 'zActivate'),
+          onTap: busy || chosen == null
+              ? null
+              : () => _run(() async {
+                  if (running) {
+                    await _zapret.stop();
+                  } else {
+                    await _start(chosen);
+                  }
+                }),
+        );
+        final details = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              s.t(running ? 'zapretOn' : 'zapretOff'),
+              style: AppTextStyles.title.copyWith(color: statusColor, fontSize: 20),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${s.t('zapretStrategy')}: ${chosen?.title ?? '—'}',
+              style: p.secondaryStyle,
+            ),
+            const SizedBox(height: 4),
+            Text('${s.t('zVersion')}: ${_zapret.version ?? '—'}', style: p.secondaryStyle),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: busy ? null : () => context.read<NavProvider>().setIndex(6),
+                icon: const Icon(Icons.sports_esports_outlined),
+                label: Text(s.t('zApps')),
               ),
-              child: Icon(Icons.shield_rounded, size: 40, color: statusColor),
             ),
-          ),
-          const SizedBox(height: 12),
-          Center(child: Text(s.t(_zapret.isRunning ? 'zapretOn' : 'zapretOff'), style: AppTextStyles.headline)),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: busy || chosen == null ? null : () => _run(() async {
-                if (_zapret.isRunning) {
-                  await _zapret.stop();
-                } else {
-                  await _start(chosen);
-                }
-              }),
-              icon: const Icon(Icons.power_settings_new),
-              label: Text(s.t(_zapret.isRunning ? 'zDeactivate' : 'zActivate')),
+            const SizedBox(height: 8),
+            SizedBox(width: double.infinity, child: _button('zFolder', Icons.folder_open_outlined, _zapret.openFolder)),
+          ],
+        );
+        if (constraints.maxWidth >= 560) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: Center(child: power)),
+              const SizedBox(width: 32),
+              Expanded(child: details),
+            ],
+          );
+        }
+        return Column(
+          children: [
+            power,
+            const SizedBox(height: 20),
+            details,
+          ],
+        );
+      }),
+    );
+
+    final domainCard = SectionCard(
+      title: s.t('zapretAddDomain'),
+      icon: Icons.language,
+      description: s.t('zapretDomainsHint'),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final domain in domains)
+            InputChip(
+              label: Text(domain),
+              onDeleted: busy
+                  ? null
+                  : () => _run(() async {
+                      await _zapret.saveDomains([...domains]..remove(domain));
+                      await _restart();
+                    }),
             ),
+          ActionChip(
+            label: Text(s.t('add')),
+            avatar: const Icon(Icons.add),
+            onPressed: busy ? null : _addDomain,
           ),
-          const SizedBox(height: 12),
-          Center(child: Text('${s.t('zVersion')}: ${_zapret.version ?? '—'}', style: p.secondaryStyle)),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: busy ? null : () => context.read<NavProvider>().setIndex(6),
-            icon: const Icon(Icons.sports_esports_outlined),
-            label: Text(s.t('zApps')),
-          ),
-          const SizedBox(height: 8),
-          _button('zFolder', Icons.folder_open_outlined, _zapret.openFolder),
         ],
       ),
     );
 
-    final main = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      SectionCard(title: s.t('general'), icon: Icons.tune, child: Column(children: [
-        Wrap(spacing: 12, runSpacing: 12, children: [
-          _dropdown(s.t('zapretGameFilter'), settings.settings.zapretGameMode,
-            {'off': s.t('zOff'), 'all': 'TCP + UDP', 'tcp': 'TCP', 'udp': 'UDP'},
-            (v) => _run(() async {
-              await settings.update((a) { a.zapretGameMode = v; a.zapretGameFilter = v != 'off'; });
-              _zapret.configure(settings.settings); await _zapret.saveGameFilter(); await _restart();
-            })),
-          _dropdown('IPSet Filter', _zapret.ipsetMode(), {'any': s.t('zIpsetAny'), 'loaded': s.t('zIpsetLoaded'), 'none': s.t('zIpsetNone')},
-            (v) => _run(() async { await _zapret.setIpsetMode(v); await _restart(); })),
-          OutlinedButton(onPressed: busy ? null : () => _ports(true), child: Text('TCP: ${settings.settings.zapretGameTcp}')),
-          OutlinedButton(onPressed: busy ? null : () => _ports(false), child: Text('UDP: ${settings.settings.zapretGameUdp}')),
-        ]),
-        SwitchListTile(contentPadding: EdgeInsets.zero, title: Text(s.t('zapretAutoStart')), value: settings.settings.zapretAutoStart,
-          onChanged: busy || _zapret.servicePresent ? null : (v) => settings.update((a) => a.zapretAutoStart = v)),
-        Container(
-          decoration: BoxDecoration(
-            color: p.surface.withValues(alpha: .42),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: p.border),
-          ),
+    final settingsPage = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionCard(
+          title: s.t('general'),
+          icon: Icons.tune,
           child: Column(
             children: [
-              ListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                title: Text(s.t('zTools'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
-                trailing: Icon(_showTools ? Icons.expand_less_rounded : Icons.expand_more_rounded),
-                onTap: busy ? null : () => setState(() => _showTools = !_showTools),
-              ),
-              if (_showTools)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        title: Text(s.t('zAutoUpdate')),
-                        value: settings.settings.zapretAutoUpdateCheck,
-                        onChanged: busy ? null : (v) => _run(() async {
-                          await _zapret.setAutoUpdateCheck(v);
-                          await settings.update((a) => a.zapretAutoUpdateCheck = v);
-                        }),
-                      ),
-                      Wrap(spacing: 8, runSpacing: 8, children: [
-                        _button('zIpsetUpdate', Icons.download, () async { await _zapret.updateIpsetList(); await _restart(); }),
-                        _button('zHosts', Icons.description_outlined, _hosts),
-                        _button('zDiagnostics', Icons.health_and_safety_outlined, () async {
-                          final report = await _zapret.diagnostics();
-                          if (mounted) await _text(s.t('zDiagnostics'), report);
-                        }),
-                        _button('zServiceStatus', Icons.info_outline, () async {
-                          await _zapret.serviceInstalled();
-                          if (mounted) await _text(s.t('zServiceStatus'), s.t(_zapret.serviceRunning ? 'zapretOn' : _zapret.servicePresent ? 'zServiceStopped' : 'zServiceAbsent'));
-                        }),
-                        _button(_zapret.servicePresent ? 'zServiceRemove' : 'zServiceInstall', Icons.settings_suggest_outlined, () async {
-                          final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-                            title: Text(s.t('zServiceStatus')),
-                            content: Text(s.t('zServiceWarning')),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.t('cancel'))),
-                              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.t('confirm'))),
-                            ],
-                          ));
-                          if (confirmed != true) return;
-                          if (_zapret.servicePresent) {
-                            await _zapret.removeService();
-                          } else if (chosen != null) {
-                            _zapret.configure(settings.settings);
-                            await _zapret.installService(chosen);
-                          }
-                        }),
-                      ]),
-                    ],
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _dropdown(
+                    s.t('zapretGameFilter'),
+                    settings.settings.zapretGameMode,
+                    {'off': s.t('zOff'), 'all': 'TCP + UDP', 'tcp': 'TCP', 'udp': 'UDP'},
+                    (v) => _run(() async {
+                      await settings.update((a) {
+                        a.zapretGameMode = v;
+                        a.zapretGameFilter = v != 'off';
+                      });
+                      _zapret.configure(settings.settings);
+                      await _zapret.saveGameFilter();
+                      await _restart();
+                    }),
                   ),
+                  _dropdown(
+                    'IPSet Filter',
+                    _zapret.ipsetMode(),
+                    {'any': s.t('zIpsetAny'), 'loaded': s.t('zIpsetLoaded'), 'none': s.t('zIpsetNone')},
+                    (v) => _run(() async {
+                      await _zapret.setIpsetMode(v);
+                      await _restart();
+                    }),
+                  ),
+                  OutlinedButton(onPressed: busy ? null : () => _ports(true), child: Text('TCP: ${settings.settings.zapretGameTcp}')),
+                  OutlinedButton(onPressed: busy ? null : () => _ports(false), child: Text('UDP: ${settings.settings.zapretGameUdp}')),
+                ],
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(s.t('zapretAutoStart')),
+                value: settings.settings.zapretAutoStart,
+                onChanged: busy || _zapret.servicePresent ? null : (v) => settings.update((a) => a.zapretAutoStart = v),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: p.surface.withValues(alpha: .42),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: p.border),
                 ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      title: Text(s.t('zTools'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+                      trailing: Icon(_showTools ? Icons.expand_less_rounded : Icons.expand_more_rounded),
+                      onTap: busy ? null : () => setState(() => _showTools = !_showTools),
+                    ),
+                    if (_showTools)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              title: Text(s.t('zAutoUpdate')),
+                              value: settings.settings.zapretAutoUpdateCheck,
+                              onChanged: busy
+                                  ? null
+                                  : (v) => _run(() async {
+                                      await _zapret.setAutoUpdateCheck(v);
+                                      await settings.update((a) => a.zapretAutoUpdateCheck = v);
+                                    }),
+                            ),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _button('zIpsetUpdate', Icons.download, () async {
+                                  await _zapret.updateIpsetList();
+                                  await _restart();
+                                }),
+                                _button('zHosts', Icons.description_outlined, _hosts),
+                                _button('zDiagnostics', Icons.health_and_safety_outlined, () async {
+                                  final report = await _zapret.diagnostics();
+                                  if (mounted) await _text(s.t('zDiagnostics'), report);
+                                }),
+                                _button('zServiceStatus', Icons.info_outline, () async {
+                                  await _zapret.serviceInstalled();
+                                  if (mounted) {
+                                    await _text(
+                                      s.t('zServiceStatus'),
+                                      s.t(_zapret.serviceRunning
+                                          ? 'zapretOn'
+                                          : _zapret.servicePresent
+                                              ? 'zServiceStopped'
+                                              : 'zServiceAbsent'),
+                                    );
+                                  }
+                                }),
+                                _button(
+                                  _zapret.servicePresent ? 'zServiceRemove' : 'zServiceInstall',
+                                  Icons.settings_suggest_outlined,
+                                  () async {
+                                    final confirmed = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: Text(s.t('zServiceStatus')),
+                                        content: Text(s.t('zServiceWarning')),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.t('cancel'))),
+                                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.t('confirm'))),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirmed != true) return;
+                                    if (_zapret.servicePresent) {
+                                      await _zapret.removeService();
+                                    } else if (chosen != null) {
+                                      _zapret.configure(settings.settings);
+                                      await _zapret.installService(chosen);
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (final kind in ['discord', 'game'])
+                    _dropdown(
+                      kind == 'discord' ? s.t('zDiscordFake') : s.t('zGameFake'),
+                      _zapret.activeFake(kind),
+                      {for (final name in _zapret.fakeFiles()) name: name},
+                      (name) => _run(() async {
+                        final wasRunning = _zapret.isRunning;
+                        if (wasRunning) await _zapret.stop();
+                        await _zapret.setActiveFake(kind, name);
+                        if (wasRunning && chosen != null) await _start(chosen);
+                      }),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
-          const SizedBox(height: 16),
-          Wrap(spacing: 12, runSpacing: 12, children: [for (final kind in ['discord', 'game'])
-            _dropdown(kind == 'discord' ? s.t('zDiscordFake') : s.t('zGameFake'), _zapret.activeFake(kind), {for (final name in _zapret.fakeFiles()) name: name},
-              (name) => _run(() async { final running = _zapret.isRunning; if (running) await _zapret.stop(); await _zapret.setActiveFake(kind, name); if (running && chosen != null) await _start(chosen); })),
-          ]),
-          const SizedBox(height: 16),
-        ]),
-      ),
-      SectionCard(title: s.t('zapretAnalyze'), icon: Icons.analytics_outlined, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(s.t('zProbeHint'), style: context.palette.secondaryStyle),
-        const SizedBox(height: 10),
-        Wrap(spacing: 8, runSpacing: 8, children: [for (final target in _targets)
-          FilterChip(avatar: ZapretTargetIcon(id: target.id), label: Text(target.name), selected: settings.settings.zapretCheckTargets.contains(target.id),
-            onSelected: busy ? null : (v) => settings.update((a) { a.zapretCheckTargets = [...a.zapretCheckTargets]..remove(target.id); if (v) a.zapretCheckTargets.add(target.id); })),
-        ]),
-        SwitchListTile(contentPadding: EdgeInsets.zero, title: Text(s.t('zQuick')), value: _quick, onChanged: busy ? null : (v) => setState(() => _quick = v)),
-        if (vpnOn) Text(s.t('zapretAnalyzeVpnOn'), style: TextStyle(color: p.accent)),
-        SizedBox(height: 56, child: Row(children: [
-          FilledButton.icon(onPressed: _analyzing ? () => _cancel?.cancel() : busy || _checking || _preparingAnalysis || vpnOn || !_targets.any((t) => settings.settings.zapretCheckTargets.contains(t.id)) ? null : _analyze,
-            icon: Icon(_analyzing ? Icons.stop : Icons.play_arrow), label: Text(s.t(_analyzing ? 'cancel' : 'zapretAnalyze'))),
-          const SizedBox(width: 16),
-          Expanded(child: Text(_analyzing ? '$_step / ${_strategies.length}' : _best != null ? s.t('zapretApplied') : _step > 0 ? s.t('zAnalysisFinished') : '', maxLines: 2)),
-        ])),
-        LinearProgressIndicator(value: _analyzing ? _step / _strategies.length : 0, minHeight: 3),
-      ])),
-      SectionCard(
-        title: s.t('zapretStrategies'),
-        icon: Icons.view_module_outlined,
-        description: s.t('zapretStrategyHint'),
-        child: LayoutBuilder(builder: (context, constraints) {
-          final count = (constraints.maxWidth / 250).floor().clamp(1, 8).toInt();
-          final width = (constraints.maxWidth - 12 * (count - 1)) / count;
-          return Wrap(
-            spacing: 12,
-            runSpacing: 12,
+        SectionCard(
+          title: s.t('zapretAnalyze'),
+          icon: Icons.analytics_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final strategy in _strategies)
-                SizedBox(
-                  width: width,
-                  height: 132 * MediaQuery.textScalerOf(context).scale(1),
-                  child: _tile(strategy, strategy.id == chosen?.id, busy),
-                ),
-            ],
-          );
-        }),
-      ),
-    ]);
-
-    return SafeArea(bottom: false, child: LayoutBuilder(builder: (context, constraints) => SingleChildScrollView(
-      key: const PageStorageKey('zapret-main'), controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 100),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [Expanded(child: Text('ZAPRET', style: AppTextStyles.title)), TextButton.icon(onPressed: _checking || busy ? null : _checkUpdate, icon: const Icon(Icons.system_update_alt), label: Text(s.t(_checking ? 'zChecking' : 'zCheckUpdate')))]),
-        SizedBox(height: 48, child: Align(alignment: Alignment.centerLeft, child: _error == null ? Text(s.t('zapretHint'), style: context.palette.secondaryStyle) : InkWell(onTap: () => _text(s.t('zError'), _error!), child: Text(_error!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.error))))),
-        if (_update != null && settings.settings.zapretSkippedVersion != _update!.version)
-          SectionCard(title: '${s.t('zUpdateAvailable')} ${_update!.version}', icon: Icons.update, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(s.t('zUpdateTrust')),
-            Wrap(spacing: 12, children: [TextButton(onPressed: () => _text(_update!.version, _update!.notes), child: Text(s.t('zReleaseNotes'))),
-              FilledButton(onPressed: busy ? null : () => _run(() async {
-                await _updater.install(_update!, (progress) { if (mounted) setState(() => _download = progress.fraction); });
-                if (mounted) setState(() { _strategies = _zapret.strategies(); _update = null; _download = null; });
-              }), child: Text(s.t('zInstall'))),
-              TextButton(onPressed: busy ? null : () => settings.update((a) => a.zapretSkippedVersion = _update!.version), child: Text(s.t('zLater')))]),
-            if (_download != null) LinearProgressIndicator(value: _download),
-          ])),
-        if (!_zapret.isSupported) Text(s.t('zapretMissing'))
-        else ...[
-          if (constraints.maxWidth >= 980) Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 300, child: controls), const SizedBox(width: 20), Expanded(child: main)])
-          else ...[controls, main],
-          const SizedBox(height: 20),
-          SectionCard(title: s.t('zapretAddDomain'), icon: Icons.language, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Wrap(spacing: 8, runSpacing: 8, children: [for (final domain in domains) InputChip(label: Text(domain), onDeleted: busy ? null : () => _run(() async { await _zapret.saveDomains([...domains]..remove(domain)); await _restart(); })),
-              ActionChip(label: Text(s.t('add')), avatar: const Icon(Icons.add), onPressed: busy ? null : _addDomain)]),
-          ])),
-          SectionCard(
-            title: s.t('logs'),
-            icon: Icons.terminal_rounded,
-            trailing: IconButton(
-              tooltip: s.t(_showLog ? 'collapse' : 'expand'),
-              onPressed: () => setState(() => _showLog = !_showLog),
-              icon: Icon(_showLog ? Icons.expand_less_rounded : Icons.expand_more_rounded),
-            ),
-            child: _showLog
-                ? SizedBox(
-                    height: 260,
-                    child: SingleChildScrollView(
-                      child: ValueListenableBuilder<int>(
-                        valueListenable: _zapret.logRevision,
-                        builder: (context, _, child) => SelectableText(
-                          _zapret.log.join('\n'),
-                          style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-                        ),
+              Text(s.t('zProbeHint'), style: context.palette.secondaryStyle),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final target in _targets)
+                    FilterChip(
+                      avatar: ZapretTargetIcon(id: target.id),
+                      label: Text(target.name),
+                      selected: settings.settings.zapretCheckTargets.contains(target.id),
+                      onSelected: busy
+                          ? null
+                          : (v) => settings.update((a) {
+                                a.zapretCheckTargets = [...a.zapretCheckTargets]..remove(target.id);
+                                if (v) a.zapretCheckTargets.add(target.id);
+                              }),
+                    ),
+                ],
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(s.t('zQuick')),
+                value: _quick,
+                onChanged: busy ? null : (v) => setState(() => _quick = v),
+              ),
+              if (vpnOn) Text(s.t('zapretAnalyzeVpnOn'), style: TextStyle(color: p.accent)),
+              SizedBox(
+                height: 56,
+                child: Row(
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _analyzing
+                          ? () => _cancel?.cancel()
+                          : busy || _checking || _preparingAnalysis || vpnOn || !_targets.any((t) => settings.settings.zapretCheckTargets.contains(t.id))
+                              ? null
+                              : _analyze,
+                      icon: Icon(_analyzing ? Icons.stop : Icons.play_arrow),
+                      label: Text(s.t(_analyzing ? 'cancel' : 'zapretAnalyze')),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        _analyzing
+                            ? '$_step / ${_strategies.length}'
+                            : _best != null
+                                ? s.t('zapretApplied')
+                                : _step > 0
+                                    ? s.t('zAnalysisFinished')
+                                    : '',
+                        maxLines: 2,
                       ),
                     ),
-                  )
-                : Text(s.t('logsCollapsed'), style: p.secondaryStyle),
+                  ],
+                ),
+              ),
+              LinearProgressIndicator(value: _analyzing ? _step / _strategies.length : 0, minHeight: 3),
+            ],
           ),
-        ],
-      ]),
-    )));
+        ),
+        SectionCard(
+          title: s.t('zapretStrategies'),
+          icon: Icons.view_module_outlined,
+          description: s.t('zapretStrategyHint'),
+          child: LayoutBuilder(builder: (context, constraints) {
+            final count = (constraints.maxWidth / 250).floor().clamp(1, 8).toInt();
+            final width = (constraints.maxWidth - 12 * (count - 1)) / count;
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final strategy in _strategies)
+                  SizedBox(
+                    width: width,
+                    height: 132 * MediaQuery.textScalerOf(context).scale(1),
+                    child: _tile(strategy, strategy.id == chosen?.id, busy),
+                  ),
+              ],
+            );
+          }),
+        ),
+        SectionCard(
+          title: s.t('logs'),
+          icon: Icons.terminal_rounded,
+          trailing: IconButton(
+            tooltip: s.t(_showLog ? 'collapse' : 'expand'),
+            onPressed: () => setState(() => _showLog = !_showLog),
+            icon: Icon(_showLog ? Icons.expand_less_rounded : Icons.expand_more_rounded),
+          ),
+          child: _showLog
+              ? SizedBox(
+                  height: 260,
+                  child: SingleChildScrollView(
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: _zapret.logRevision,
+                      builder: (context, _, child) => SelectableText(
+                        _zapret.log.join('\n'),
+                        style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+                      ),
+                    ),
+                  ),
+                )
+              : Text(s.t('logsCollapsed'), style: p.secondaryStyle),
+        ),
+      ],
+    );
+
+    return SafeArea(
+      bottom: false,
+      child: LayoutBuilder(
+        builder: (context, _) => SingleChildScrollView(
+          key: const PageStorageKey('zapret-main'),
+          controller: _scroll,
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 100),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text('ZAPRET', style: AppTextStyles.title)),
+                  TextButton.icon(
+                    onPressed: _checking || busy ? null : _checkUpdate,
+                    icon: const Icon(Icons.system_update_alt),
+                    label: Text(s.t(_checking ? 'zChecking' : 'zCheckUpdate')),
+                  ),
+                ],
+              ),
+              SizedBox(
+                height: 48,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _error == null
+                      ? Text(s.t('zapretHint'), style: context.palette.secondaryStyle)
+                      : InkWell(
+                          onTap: () => _text(s.t('zError'), _error!),
+                          child: Text(
+                            _error!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: AppColors.error),
+                          ),
+                        ),
+                ),
+              ),
+              if (_update != null && settings.settings.zapretSkippedVersion != _update!.version)
+                SectionCard(
+                  title: '${s.t('zUpdateAvailable')} ${_update!.version}',
+                  icon: Icons.update,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.t('zUpdateTrust')),
+                      Wrap(
+                        spacing: 12,
+                        children: [
+                          TextButton(onPressed: () => _text(_update!.version, _update!.notes), child: Text(s.t('zReleaseNotes'))),
+                          FilledButton(
+                            onPressed: busy
+                                ? null
+                                : () => _run(() async {
+                                    await _updater.install(_update!, (progress) {
+                                      if (mounted) setState(() => _download = progress.fraction);
+                                    });
+                                    if (mounted) setState(() {
+                                      _strategies = _zapret.strategies();
+                                      _update = null;
+                                      _download = null;
+                                    });
+                                  }),
+                            child: Text(s.t('zInstall')),
+                          ),
+                          TextButton(
+                            onPressed: busy ? null : () => settings.update((a) => a.zapretSkippedVersion = _update!.version),
+                            child: Text(s.t('zLater')),
+                          ),
+                        ],
+                      ),
+                      if (_download != null) LinearProgressIndicator(value: _download),
+                    ],
+                  ),
+                ),
+              if (!_zapret.isSupported)
+                Text(s.t('zapretMissing'))
+              else ...[
+                Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: p.surface.withValues(alpha: .45),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: p.border),
+                  ),
+                  child: DefaultTabController(
+                    length: 2,
+                    initialIndex: _section,
+                    child: TabBar(
+                      onTap: _selectSection,
+                      dividerColor: Colors.transparent,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      indicator: BoxDecoration(
+                        color: p.accent.withValues(alpha: .16),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      labelColor: p.text,
+                      unselectedLabelColor: p.textSecondary,
+                      labelStyle: AppTextStyles.tab,
+                      unselectedLabelStyle: AppTextStyles.tab,
+                      tabs: [
+                        Tab(text: s.t('zOverview')),
+                        Tab(text: s.t('zSettings')),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                domainCard,
+                if (_section == 0) ...[
+                  Align(
+                    alignment: Alignment.center,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 900),
+                      child: activation,
+                    ),
+                  ),
+                ] else
+                  settingsPage,
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _dropdown(String label, String? value, Map<String, String> values, void Function(String) changed) => SizedBox(width: 240,
@@ -542,6 +807,67 @@ class _ZapretScreenState extends State<ZapretScreen> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ZapretPowerButton extends StatelessWidget {
+  const _ZapretPowerButton({
+    required this.running,
+    required this.busy,
+    required this.label,
+    required this.onTap,
+  });
+
+  final bool running;
+  final bool busy;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final color = running ? p.success : p.accent;
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: label,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            width: 184,
+            height: 184,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [color.withValues(alpha: .26), p.accent2.withValues(alpha: .18)],
+              ),
+              border: Border.all(color: color.withValues(alpha: .62), width: 1.5),
+              boxShadow: [
+                BoxShadow(color: color.withValues(alpha: .18), blurRadius: 34, spreadRadius: 3),
+              ],
+            ),
+            child: Center(
+              child: busy
+                  ? SizedBox(width: 42, height: 42, child: CircularProgressIndicator(color: color, strokeWidth: 3))
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(running ? Icons.shield_rounded : Icons.power_settings_new_rounded, size: 52, color: color),
+                        const SizedBox(height: 10),
+                        Text(label.toUpperCase(), style: AppTextStyles.status.copyWith(color: color, fontSize: 10, letterSpacing: 1.1)),
+                      ],
+                    ),
+            ),
           ),
         ),
       ),
