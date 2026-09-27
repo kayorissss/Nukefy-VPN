@@ -58,6 +58,12 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
       if (!icon.existsSync()) return;
     }
     await trayManager.setIcon(icon.path);
+    if (Platform.isWindows) {
+      // window_manager applies the same ICO to the taskbar/window, not only
+      // the tray. Linux and macOS keep their native bundle icon and use the
+      // PNG above for the tray.
+      await windowManager.setIcon(icon.path);
+    }
     await trayManager.setToolTip('Nukefy VPN');
     await _menu();
   }

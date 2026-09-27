@@ -24,6 +24,7 @@ class _MusicScreenState extends State<MusicScreen> {
   final _focus = FocusNode();
   _MusicView _view = _MusicView.list;
   bool _newestFirst = true;
+  bool _customOrder = false;
   String? _playlistId;
   String? _selectedId;
 
@@ -47,9 +48,16 @@ class _MusicScreenState extends State<MusicScreen> {
           ].whereType<MusicTrack>().toList();
     source.removeWhere((track) => query.isNotEmpty &&
         !'${track.title} ${track.artist} ${track.album}'.toLowerCase().contains(query));
-    source.sort((a, b) => _newestFirst
-        ? b.addedAt.compareTo(a.addedAt)
-        : a.addedAt.compareTo(b.addedAt));
+    if (!_customOrder) {
+      source.sort((a, b) => _newestFirst
+          ? b.addedAt.compareTo(a.addedAt)
+          : a.addedAt.compareTo(b.addedAt));
+    } else {
+      final order = <String, int>{
+        for (var index = 0; index < music.tracks.length; index++) music.tracks[index].id: index,
+      };
+      source.sort((a, b) => (order[a.id] ?? 0).compareTo(order[b.id] ?? 0));
+    }
     return source;
   }
 
@@ -127,7 +135,10 @@ class _MusicScreenState extends State<MusicScreen> {
                     newestFirst: _newestFirst,
                     onQuery: (_) => setState(() {}),
                     onView: (value) => setState(() => _view = value),
-                    onSort: () => setState(() => _newestFirst = !_newestFirst),
+                    onSort: () => setState(() {
+                      _newestFirst = !_newestFirst;
+                      _customOrder = false;
+                    }),
                     sortLabel: _newestFirst ? s.t('musicNewest') : s.t('musicOldest'),
                   ),
                   _PlaylistBar(
@@ -152,7 +163,10 @@ class _MusicScreenState extends State<MusicScreen> {
                             onDelete: _deleteSelected,
                             onEdit: (track) => _editTrack(context, music, track),
                             onPlaylist: (track) => _trackPlaylists(context, music, track),
-                            onReorder: (oldIndex, newIndex) => music.reorder(oldIndex, newIndex, visible),
+                            onReorder: (oldIndex, newIndex) {
+                              music.reorder(oldIndex, newIndex, visible);
+                              if (mounted) setState(() => _customOrder = true);
+                            },
                           ),
                   ),
                   if (music.currentTrack != null) _NowPlaying(music: music),
@@ -244,7 +258,10 @@ class _MusicScreenState extends State<MusicScreen> {
         ),
       ),
     );
-    if (result == null) return;
+    if (result == null) {
+      name.dispose();
+      return;
+    }
     if (playlist == null) {
       await music.createPlaylist(result.name, icon: result.icon);
     } else {
@@ -558,7 +575,14 @@ class _TrackRow extends StatelessWidget {
               SizedBox(width: 68, child: Text(_duration(track), textAlign: TextAlign.end, style: context.palette.captionStyle)),
               IconButton(tooltip: context.read<SettingsProvider>().strings.t('musicAddToPlaylist'), onPressed: () => onPlaylist(track), icon: const Icon(Icons.playlist_add_rounded, size: 20)),
               IconButton(tooltip: context.read<SettingsProvider>().strings.t('edit'), onPressed: () => onEdit(track), icon: const Icon(Icons.edit_outlined, size: 18)),
-              IconButton(tooltip: context.read<SettingsProvider>().strings.t('delete'), onPressed: () => onDelete(music), icon: Icon(Icons.delete_outline_rounded, color: p.error, size: 20)),
+              IconButton(
+                tooltip: context.read<SettingsProvider>().strings.t('delete'),
+                onPressed: () {
+                  onSelected(track.id);
+                  onDelete(music);
+                },
+                icon: Icon(Icons.delete_outline_rounded, color: p.error, size: 20),
+              ),
             ]),
           ),
         ),
@@ -595,7 +619,21 @@ class _TrackCard extends StatelessWidget {
             _MusicArtwork(track: track, size: 70),
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(track.artist.isEmpty ? context.read<SettingsProvider>().strings.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle), const SizedBox(height: 8), Text('${_duration(track)} · ${FormatUtils.bytes(track.size)}', style: context.palette.captionStyle)])),
-            PopupMenuButton<String>(onSelected: (value) { if (value == 'playlist') onPlaylist(track); if (value == 'edit') onEdit(track); if (value == 'delete') onDelete(music); }, itemBuilder: (context) => [PopupMenuItem(value: 'playlist', child: Text(context.read<SettingsProvider>().strings.t('musicAddToPlaylist'))), PopupMenuItem(value: 'edit', child: Text(context.read<SettingsProvider>().strings.t('edit'))), PopupMenuItem(value: 'delete', child: Text(context.read<SettingsProvider>().strings.t('delete')))]),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'playlist') onPlaylist(track);
+                if (value == 'edit') onEdit(track);
+                if (value == 'delete') {
+                  onSelected(track.id);
+                  onDelete(music);
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(value: 'playlist', child: Text(context.read<SettingsProvider>().strings.t('musicAddToPlaylist'))),
+                PopupMenuItem(value: 'edit', child: Text(context.read<SettingsProvider>().strings.t('edit'))),
+                PopupMenuItem(value: 'delete', child: Text(context.read<SettingsProvider>().strings.t('delete'))),
+              ],
+            ),
           ]),
         ),
       ),

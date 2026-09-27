@@ -338,7 +338,7 @@ class GameBlocklistService {
     if (clean.isEmpty) throw const FormatException('Empty domain list');
     final file = await fileFor(id);
     final temp = File('${file.path}.tmp');
-    await temp.writeAsString('${clean.join('\\n')}\\n', flush: true);
+    await temp.writeAsString('${clean.join('\n')}\n', flush: true);
     await temp.rename(file.path);
     final items = [...installed()];
     final index = items.indexWhere((item) => item.id == id);

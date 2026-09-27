@@ -34,17 +34,31 @@ class XrayConfigBuilder {
     if (transport is! Map || !const {'xhttp', 'splithttp'}.contains('${transport['type']}'.toLowerCase())) {
       throw const XrayConfigException('XRAY_TRANSPORT_MISSING');
     }
+    final listen = settings.allowLan ? '0.0.0.0' : '127.0.0.1';
+    final inbounds = <Map<String, dynamic>>[];
+    // The SOCKS inbound is internal when the sing-box TUN front-end is
+    // active, and becomes the user-facing local proxy otherwise.
+    if (settings.tunEnabled || settings.localProxyEnabled) {
+      inbounds.add({
+        'tag': 'socks-in',
+        'listen': listen,
+        'port': inboundPort,
+        'protocol': 'socks',
+        'settings': {'udp': true},
+      });
+    }
+    if (!settings.tunEnabled && settings.localProxyEnabled && settings.httpPort != inboundPort) {
+      inbounds.add({
+        'tag': 'http-in',
+        'listen': listen,
+        'port': settings.httpPort,
+        'protocol': 'http',
+        'settings': {},
+      });
+    }
     final config = <String, dynamic>{
       'log': {'loglevel': settings.logLevel, 'access': logPath, 'error': logPath},
-      'inbounds': [
-        {
-          'tag': 'socks-in',
-          'listen': settings.allowLan ? '0.0.0.0' : '127.0.0.1',
-          'port': inboundPort,
-          'protocol': 'socks',
-          'settings': {'udp': true},
-        },
-      ],
+      'inbounds': inbounds,
       'outbounds': [
         _proxyOutbound(server, outbound, transport),
         {'tag': 'direct', 'protocol': 'freedom', 'settings': {}},
@@ -194,11 +208,12 @@ class XrayConfigBuilder {
   ) {
     final tls = source['tls'];
     final security = tls is Map && tls['reality'] is Map ? 'reality' : (tls is Map && tls['enabled'] == true ? 'tls' : 'none');
+    final rawPath = '${transport['path'] ?? ''}'.trim();
     final stream = <String, dynamic>{
       'network': 'xhttp',
       'security': security,
       'xhttpSettings': {
-        'path': '${transport['path'] ?? '/'}'.isEmpty ? '/' : '${transport['path']}',
+        'path': rawPath.isEmpty ? '/' : rawPath,
         if ('${transport['host'] ?? ''}'.isNotEmpty) 'host': '${transport['host']}',
         if ('${transport['mode'] ?? ''}'.isNotEmpty) 'mode': '${transport['mode']}',
         if (transport['extra'] is Map) 'extra': transport['extra'],

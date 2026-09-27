@@ -202,11 +202,12 @@ class MusicService extends ChangeNotifier {
         if (destination.existsSync()) destination = File(p.join(directory.path, '$id$extension'));
         if (source.path != destination.path) await source.copy(destination.path);
         final metadata = _readMetadata(destination);
+        final fallback = _fallbackNames(p.basenameWithoutExtension(source.path));
         final track = MusicTrack(
           id: id,
           path: destination.path,
-          title: _clean(metadata?.title) ?? p.basenameWithoutExtension(source.path),
-          artist: _clean(metadata?.artist) ?? '',
+          title: _clean(metadata?.title) ?? fallback.title,
+          artist: _clean(metadata?.artist) ?? fallback.artist,
           album: _clean(metadata?.album) ?? '',
           size: await destination.length(),
           durationMs: metadata?.duration?.inMilliseconds,
@@ -234,6 +235,18 @@ class MusicService extends ChangeNotifier {
     } catch (_) {
       return null;
     }
+  }
+
+  static ({String title, String artist}) _fallbackNames(String filename) {
+    final clean = filename.trim();
+    final match = RegExp(r'^(.+?)\s+[-–—]\s+(.+)$').firstMatch(clean);
+    if (match != null) {
+      return (
+        artist: match.group(1)!.trim(),
+        title: match.group(2)!.trim(),
+      );
+    }
+    return (title: clean.isEmpty ? 'Без названия' : clean, artist: '');
   }
 
   static String? _clean(String? value) {
@@ -336,15 +349,26 @@ class MusicService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reorders the visible queue and persists the resulting library order.
+  /// [newIndex] follows ReorderableListView's legacy callback: it is the
+  /// insertion index before the dragged item is removed and may equal the
+  /// list length when dropped after the last row.
   Future<void> reorder(int oldIndex, int newIndex, List<MusicTrack> visible) async {
-    if (oldIndex < 0 || oldIndex >= visible.length || newIndex < 0 || newIndex >= visible.length) return;
-    final moving = visible[oldIndex];
-    final target = visible[newIndex];
-    final from = tracks.indexOf(moving);
-    final to = tracks.indexOf(target);
-    if (from < 0 || to < 0) return;
-    tracks.removeAt(from);
-    tracks.insert(to > from ? to - 1 : to, moving);
+    if (oldIndex < 0 || oldIndex >= visible.length) return;
+    final reordered = List<MusicTrack>.from(visible);
+    final moving = reordered.removeAt(oldIndex);
+    if (newIndex > oldIndex) newIndex -= 1;
+    if (newIndex < 0 || newIndex > reordered.length) return;
+    reordered.insert(newIndex, moving);
+    final visibleIds = visible.map((track) => track.id).toSet();
+    final hidden = tracks.where((track) => !visibleIds.contains(track.id)).toList();
+    tracks
+      ..clear()
+      ..addAll(reordered)
+      ..addAll(hidden);
+    _queue
+      ..clear()
+      ..addAll(tracks.map((track) => track.id));
     await _save();
     notifyListeners();
   }
