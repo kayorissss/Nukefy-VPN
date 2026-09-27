@@ -201,10 +201,10 @@ class VpnPlatform {
         );
       }
     }
-    return _startProcess(configFile.path, dir.path);
+    return _startProcess(configFile.path, dir.path, preferTun: preferTun);
   }
 
-  Future<CoreStartResult> _startProcess(String configPath, String workDir) async {
+  Future<CoreStartResult> _startProcess(String configPath, String workDir, {required bool preferTun}) async {
     final binary = await binaryPath();
     if (binary == null) {
       return CoreStartResult(
@@ -237,7 +237,7 @@ class VpnPlatform {
           error: logText.trim().isEmpty ? 'core-exited' : logText.trim(),
         );
       }
-      return CoreStartResult(ok: true, mode: 'tun');
+      return CoreStartResult(ok: true, mode: preferTun ? 'tun' : 'proxy');
     } catch (error) {
       return CoreStartResult(ok: false, mode: 'missing', error: '$error');
     }
