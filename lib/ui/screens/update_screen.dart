@@ -12,6 +12,7 @@ import '../../core/services/vpn_platform.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
+import '../../core/utils/network_diagnostics.dart';
 import '../widgets/nukefy_background.dart';
 import '../widgets/nukefy_logo.dart';
 
@@ -73,7 +74,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
       if (!mounted) return;
       setState(() {
         _phase = _Phase.failed;
-        _error = '$error';
+        _error = NetworkDiagnostics.textOrRaw(error, context.read<SettingsProvider>().strings.t);
       });
     }
   }

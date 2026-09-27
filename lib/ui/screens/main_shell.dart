@@ -52,6 +52,7 @@ class MainShell extends StatelessWidget {
       const StatsScreen(),
       const SettingsScreen(),
       if (zapret) ZapretGamesScreen(active: index == 6, embedded: true),
+      if (zapret) ZapretScreen(active: index == 7, settingsOnly: true),
     ];
 
     final body = IndexedStack(index: index, children: pages);
@@ -235,7 +236,7 @@ class _SideRail extends StatelessWidget {
                   for (var i = 0; i < tabs.length; i++) ...[
                     _RailItem(
                       spec: tabs[i],
-                      selected: i == index || (i == 2 && index == 6),
+                      selected: i == index || (i == 2 && (index == 6 || index == 7)),
                       collapsed: collapsed,
                       onTap: () => nav.setIndex(i),
                       onDoubleTap: Platform.isWindows && i == 2 ? nav.toggleZapret : null,
@@ -264,12 +265,23 @@ class _SideRail extends StatelessWidget {
                               decoration: BoxDecoration(
                                 border: BorderDirectional(start: BorderSide(color: p.accent.withValues(alpha: .35), width: 1)),
                               ),
-                              child: _RailItem(
-                                spec: _TabSpec(Icons.sports_esports_rounded, Icons.sports_esports_outlined, s.t('zApps')),
-                                selected: index == 6,
-                                collapsed: false,
-                                nested: true,
-                                onTap: () => nav.setIndex(6),
+                              child: Column(
+                                children: [
+                                  _RailItem(
+                                    spec: _TabSpec(Icons.sports_esports_rounded, Icons.sports_esports_outlined, s.t('zApps')),
+                                    selected: index == 6,
+                                    collapsed: false,
+                                    nested: true,
+                                    onTap: () => nav.setIndex(6),
+                                  ),
+                                  _RailItem(
+                                    spec: _TabSpec(Icons.settings_suggest_rounded, Icons.settings_suggest_outlined, s.t('zSettings')),
+                                    selected: index == 7,
+                                    collapsed: false,
+                                    nested: true,
+                                    onTap: () => nav.setIndex(7),
+                                  ),
+                                ],
                               ),
                             ),
                           ),

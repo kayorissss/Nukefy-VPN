@@ -13,6 +13,7 @@ import '../../core/providers/vpn_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
+import '../../core/utils/network_diagnostics.dart';
 import '../../core/utils/share_link_builder.dart';
 import '../dialogs/speed_test_dialog.dart';
 import '../import_actions.dart';
@@ -386,7 +387,7 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
                   child: Text(
-                    sub.lastError!,
+                    NetworkDiagnostics.textOrRaw(sub.lastError!, s.t),
                     style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error),
                   ),
                 ),

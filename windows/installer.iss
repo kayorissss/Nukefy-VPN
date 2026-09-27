@@ -19,8 +19,11 @@ UninstallDisplayIcon={app}\nukefy_vpn.exe
 OutputDir=..\
 OutputBaseFilename=NukefyVPN-Setup-x64
 SetupIconFile=runner\resources\app_icon.ico
-Compression=lzma2/ultra64
-SolidCompression=yes
+; Do not pack the installer with an obfuscating/high-compression profile.
+; A transparent ZIP payload is larger but is easier for SmartScreen and AV
+; engines to inspect and does not change the runtime DPI implementation.
+Compression=zip
+SolidCompression=no
 WizardStyle=modern
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible

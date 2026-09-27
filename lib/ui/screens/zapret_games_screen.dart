@@ -7,6 +7,7 @@ import '../../core/services/game_blocklist_service.dart';
 import '../../core/services/zapret_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/utils/network_diagnostics.dart';
 import '../widgets/game_mark.dart';
 
 class ZapretGamesScreen extends StatefulWidget {
@@ -24,6 +25,7 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
   List<GameListInfo> _catalog = [];
   bool _loading = false, _grid = true;
   String? _error;
+  String? _notice;
   String _query = '';
 
   @override
@@ -56,13 +58,19 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
           if (!await _zapret.start(strategy)) throw StateError(_zapret.lastError ?? 'Restart failed');
         }
       });
-    } catch (e) { if (mounted) setState(() => _error = '$e'); }
+    } catch (e) { if (mounted) setState(() => _error = NetworkDiagnostics.textOrRaw(e, context.read<SettingsProvider>().strings.t)); }
     finally { if (mounted) setState(() => _loading = false); }
   }
 
   Future<void> _refresh() => _operation(() async {
     final catalog = await _games.refreshCatalog();
-    if (catalog != null && mounted) setState(() => _catalog = catalog);
+    if (catalog != null && mounted) {
+      final s = context.read<SettingsProvider>().strings;
+      setState(() {
+        _catalog = catalog;
+        _notice = _games.usedFallback ? s.t('zCatalogOffline') : null;
+      });
+    }
     return await _games.refreshInstalled() > 0;
   });
 
@@ -121,7 +129,7 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
         Text('medvedeff-true/ru-gaming-blocklist • games/*.txt', style: p.captionStyle),
         const SizedBox(height: 16),
         TextField(onChanged: (v) => setState(() => _query = v), decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: s.t('zFindGame'))),
-        SizedBox(height: 40, child: _loading ? const Center(child: LinearProgressIndicator()) : _error != null ? Text(_error!, maxLines: 2, style: const TextStyle(color: AppColors.error)) : _zapret.busy ? Text(s.t('zBusy')) : const SizedBox()),
+        SizedBox(height: 40, child: _loading ? const Center(child: LinearProgressIndicator()) : _error != null ? Text(_error!, maxLines: 2, style: const TextStyle(color: AppColors.error)) : _notice != null ? Text(_notice!, maxLines: 3, style: p.secondaryStyle) : _zapret.busy ? Text(s.t('zBusy')) : const SizedBox()),
         if (catalog.isEmpty && !_loading) Text(s.t('zNoGames')),
         LayoutBuilder(builder: (context, box) {
           final count = _grid ? (box.maxWidth / 270).floor().clamp(1, 8) : 1;

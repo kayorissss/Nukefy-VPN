@@ -76,7 +76,13 @@ class DownloadProgress {
 }
 
 class VpnPlatform {
-  VpnPlatform({Dio? dio}) : _dio = dio ?? Dio();
+  VpnPlatform({Dio? dio})
+      : _dio = dio ??
+            Dio(BaseOptions(
+              connectTimeout: const Duration(seconds: 15),
+              receiveTimeout: const Duration(minutes: 2),
+              sendTimeout: const Duration(seconds: 30),
+            ));
 
   static const _channel = MethodChannel('com.nukefy.vpn/core');
   final Dio _dio;

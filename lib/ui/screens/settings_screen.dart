@@ -13,10 +13,12 @@ import '../../core/providers/settings_provider.dart';
 import '../../core/providers/vpn_provider.dart';
 import '../../core/services/app_log.dart';
 import '../../core/services/subscription_service.dart';
+import '../../core/services/tg_ws_proxy_service.dart';
 import '../../core/services/update_service.dart';
 import '../../core/services/vpn_platform.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/utils/network_diagnostics.dart';
 import '../../l10n/strings.dart';
 import '../dialogs/progress_dialog.dart';
 import '../import_actions.dart';
@@ -539,57 +541,62 @@ class _TelegramCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.palette;
     const tg = Color(0xFF2AABEE);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(22),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(22),
-          onTap: () => launchUrl(Uri.parse(AppConstants.telegramProxyUrl), mode: LaunchMode.externalApplication),
-          onLongPress: () => _copyProxy(context),
-          child: Ink(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(22),
+            child: InkWell(
               borderRadius: BorderRadius.circular(22),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [tg.withValues(alpha: p.isDark ? 0.22 : 0.16), p.accent2.withValues(alpha: 0.10)],
-              ),
-              border: Border.all(color: tg.withValues(alpha: 0.4)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(color: tg, borderRadius: BorderRadius.circular(16)),
-                  child: const Icon(Icons.send_rounded, color: Colors.white, size: 24),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(strings.t('telegramButton'), style: AppTextStyles.headline.copyWith(fontSize: 15)),
-                      const SizedBox(height: 3),
-                      Text(strings.t('telegramHelp'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
-                    ],
+              onTap: () => launchUrl(Uri.parse(AppConstants.telegramProxyUrl), mode: LaunchMode.externalApplication),
+              onLongPress: () => _copyProxy(context),
+              child: Ink(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [tg.withValues(alpha: p.isDark ? 0.22 : 0.16), p.accent2.withValues(alpha: 0.10)],
                   ),
+                  border: Border.all(color: tg.withValues(alpha: 0.4)),
                 ),
-                const SizedBox(width: 4),
-                IconButton(
-                  tooltip: strings.t('copyLink'),
-                  onPressed: () => _copyProxy(context),
-                  icon: Icon(Icons.copy_rounded, color: p.textSecondary, size: 20),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(color: tg, borderRadius: BorderRadius.circular(16)),
+                      child: const Icon(Icons.send_rounded, color: Colors.white, size: 24),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(strings.t('telegramButton'), style: AppTextStyles.headline.copyWith(fontSize: 15)),
+                          const SizedBox(height: 3),
+                          Text(strings.t('telegramHelp'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      tooltip: strings.t('copyLink'),
+                      onPressed: () => _copyProxy(context),
+                      icon: Icon(Icons.copy_rounded, color: p.textSecondary, size: 20),
+                    ),
+                    Icon(Icons.open_in_new_rounded, color: p.textSecondary, size: 20),
+                  ],
                 ),
-                Icon(Icons.open_in_new_rounded, color: p.textSecondary, size: 20),
-              ],
+              ),
             ),
           ),
         ),
-      ),
+        if (Platform.isWindows) _TgWsProxyCard(strings: strings),
+      ],
     );
   }
 
@@ -598,6 +605,165 @@ class _TelegramCard extends StatelessWidget {
     await Clipboard.setData(const ClipboardData(text: AppConstants.telegramProxyUrl));
     if (context.mounted) showNukefySnack(context, strings.t('copied'));
   }
+}
+
+class _TgWsProxyCard extends StatefulWidget {
+  const _TgWsProxyCard({required this.strings});
+  final S strings;
+
+  @override
+  State<_TgWsProxyCard> createState() => _TgWsProxyCardState();
+}
+
+class _TgWsProxyCardState extends State<_TgWsProxyCard> {
+  final _service = TgWsProxyService.instance;
+  late Future<File?> _binary;
+  bool _acting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _binary = _service.binaryFile();
+    _service.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    _service.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  void _reload() {
+    _binary = _service.binaryFile();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _run(Future<void> Function() operation) async {
+    if (_acting) return;
+    setState(() => _acting = true);
+    try {
+      await operation();
+      _reload();
+    } catch (error) {
+      if (mounted) showNukefySnack(context, _tgWsError(widget.strings, error), error: true);
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: p.card,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: p.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: p.accent.withValues(alpha: .13), borderRadius: BorderRadius.circular(14)),
+                child: Icon(Icons.swap_horiz_rounded, color: p.accent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.strings.t('telegramWsTitle'), style: AppTextStyles.headline.copyWith(fontSize: 15)),
+                    const SizedBox(height: 4),
+                    Text(widget.strings.t('telegramWsDescription'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(widget.strings.t('telegramWsSecurity'), style: p.captionStyle),
+          const SizedBox(height: 4),
+          Text(widget.strings.t('telegramWsSetup'), style: p.captionStyle),
+          const SizedBox(height: 12),
+          FutureBuilder<File?>(
+            future: _binary,
+            builder: (context, snapshot) {
+              final installed = snapshot.data != null;
+              final status = _service.busy
+                  ? widget.strings.t('downloading')
+                  : _service.running
+                      ? widget.strings.t('telegramWsRunning')
+                      : installed
+                          ? widget.strings.t('telegramWsReady')
+                          : widget.strings.t('telegramWsMissing');
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(status, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700, color: _service.running ? p.success : p.text)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (!installed)
+                        FilledButton.icon(
+                          onPressed: _acting || _service.busy ? null : () => _run(() async { await _service.download(); }),
+                          icon: _service.busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download_rounded, size: 18),
+                          label: Text(widget.strings.t('telegramWsDownload')),
+                        )
+                      else if (!_service.running)
+                        FilledButton.icon(
+                          onPressed: _acting ? null : () => _run(_service.start),
+                          icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                          label: Text(widget.strings.t('telegramWsStart')),
+                        )
+                      else
+                        OutlinedButton.icon(
+                          onPressed: _acting ? null : () => _run(_service.stop),
+                          icon: const Icon(Icons.stop_rounded, size: 18),
+                          label: Text(widget.strings.t('telegramWsStop')),
+                        ),
+                      OutlinedButton.icon(
+                        onPressed: _acting ? null : () => _run(_service.openLog),
+                        icon: const Icon(Icons.article_outlined, size: 18),
+                        label: Text(widget.strings.t('telegramWsLogs')),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _tgWsError(S s, Object error) {
+  final raw = '$error';
+  if (raw.contains('tg-ws-no-release') || raw.contains('tg-ws-no-windows-asset')) return s.t('telegramWsError');
+  if (raw.contains('tg-ws-no-digest') ||
+      raw.contains('tg-ws-integrity-failed') ||
+      raw.contains('tg-ws-size-mismatch') ||
+      raw.contains('tg-ws-invalid-url') ||
+      raw.contains('tg-ws-invalid-size')) {
+    return s.t('telegramWsIntegrity');
+  }
+  if (raw.contains('tg-ws-not-installed')) return s.t('telegramWsMissing');
+  if (raw.contains('tg-ws-windows-only')) return s.t('telegramWsWindowsOnly');
+  return NetworkDiagnostics.textOrRaw(error, s.t);
 }
 
 class _CoreCard extends StatelessWidget {
@@ -826,7 +992,7 @@ String _coreErrorText(S s, String raw) {
     'no-core-asset' => s.t('coreNoAsset'),
     'unsupported-archive' => s.t('coreBadArchive'),
     'extract-failed' => s.t('coreExtractFail'),
-    _ => raw,
+    _ => NetworkDiagnostics.textOrRaw(raw, s.t),
   };
 }
 
@@ -869,7 +1035,7 @@ Future<void> checkUpdatesFlow(BuildContext context, {bool silentIfCurrent = fals
     await UpdateScreen.open(context, info);
   } on Exception catch (error) {
     if (silentIfCurrent || !context.mounted) return;
-    final message = '$error'.contains('404') ? s.t('noReleases') : s.t('networkError');
+    final message = '$error'.contains('404') ? s.t('noReleases') : NetworkDiagnostics.textOrRaw(error, s.t);
     showNukefySnack(context, message, error: true);
   }
 }

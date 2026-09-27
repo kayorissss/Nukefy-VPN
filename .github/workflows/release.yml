@@ -198,6 +198,27 @@ jobs:
           $ver = "${{ env.RELEASE_TAG }}".TrimStart('v')
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$ver" windows\installer.iss
           if (-not (Test-Path NukefyVPN-Setup-x64.exe)) { throw 'installer not produced' }
+      - name: Sign Windows files when a certificate is configured
+        shell: pwsh
+        env:
+          WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+          WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_PASSWORD)) {
+            Write-Host 'No Authenticode certificate configured; release remains verifiable by SHA-256.'
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'nukefy-signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+          $files = @('NukefyVPN.exe', 'NukefyVPN-Setup-x64.exe')
+          $files += Get-ChildItem 'build/windows/x64/runner/Release' -Recurse -Filter '*.exe' | ForEach-Object FullName
+          $signtool = (Get-Command signtool.exe -ErrorAction Stop).Source
+          foreach ($file in ($files | Select-Object -Unique)) {
+            & $signtool sign /quiet /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f $pfx /p $env:WINDOWS_PFX_PASSWORD $file
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed for $file" }
+          }
+          Remove-Item $pfx -Force
       - uses: actions/upload-artifact@v4
         with:
           name: NukefyVPN-windows-x64
@@ -216,6 +237,9 @@ jobs:
           pattern: NukefyVPN-*
           merge-multiple: true
           path: release-assets
+      - name: Create release checksums
+        working-directory: release-assets
+        run: sha256sum NukefyVPN.exe NukefyVPN-Setup-x64.exe NukefyVPN-android.apk > ../SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
@@ -226,6 +250,7 @@ jobs:
             release-assets/NukefyVPN.exe
             release-assets/NukefyVPN-Setup-x64.exe
             release-assets/NukefyVPN-android.apk
+            SHA256SUMS.txt
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

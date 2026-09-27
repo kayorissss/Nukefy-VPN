@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 
-/// Game/platform marks downloaded from the CC0 Simple Icons catalog. IDs are
-/// upstream filenames, so matching stable words also covers new catalog rows.
+/// Bundled game and platform marks come from the reviewed sources in
+/// assets/brands/games/NOTICE.txt. IDs are upstream filenames, so matching
+/// stable words also covers new catalog rows.
 class GameMark extends StatelessWidget {
   const GameMark({super.key, required this.id, this.size = 28});
   final String id;
@@ -11,6 +12,16 @@ class GameMark extends StatelessWidget {
   static const _marks = <String, String>{
     'battledotnet': 'battle',
     'battlenet': 'battle',
+    'apexlegends': 'apexlegends',
+    'rocketleague': 'epicgames',
+    'armareforger': 'armareforger',
+    'battlefield': 'battlefield',
+    'bluearchive': 'bluearchive',
+    'deadbydaylight': 'deadbydaylight',
+    'minecraft': 'minecraft',
+    'mortalkombat': 'mortalkombat',
+    'warframe': 'warframe',
+    'wutheringwaves': 'wutheringwaves',
     'cloudflare': 'cloudflare',
     'epic': 'epicgames',
     'electronicarts': 'ea',

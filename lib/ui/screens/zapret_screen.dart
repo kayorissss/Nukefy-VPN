@@ -12,13 +12,15 @@ import '../../core/services/zapret_service.dart';
 import '../../core/services/zapret_update_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/utils/network_diagnostics.dart';
 import '../../l10n/strings.dart';
 import '../widgets/section_card.dart';
 import '../widgets/game_mark.dart';
 
 class ZapretScreen extends StatefulWidget {
-  const ZapretScreen({super.key, this.active = true});
+  const ZapretScreen({super.key, this.active = true, this.settingsOnly = false});
   final bool active;
+  final bool settingsOnly;
   @override
   State<ZapretScreen> createState() => _ZapretScreenState();
 }
@@ -33,7 +35,6 @@ class _ZapretScreenState extends State<ZapretScreen> {
   CancelToken? _cancel;
   String? _current, _best, _error;
   bool _analyzing = false, _quick = true, _showLog = false, _showTools = false;
-  int _section = 0;
   int _step = 0;
   ZapretUpdateInfo? _update;
   double? _download;
@@ -75,7 +76,11 @@ class _ZapretScreenState extends State<ZapretScreen> {
     if (_zapret.busy) return;
     setState(() => _error = null);
     try { await _zapret.exclusive(action); }
-    catch (error) { if (mounted) setState(() => _error = '$error'.contains('ipset-backup-missing') ? s.t('zNoIpsetBackup') : '$error'); }
+    catch (error) {
+      if (!mounted) return;
+      final raw = '$error';
+      setState(() => _error = raw.contains('ipset-backup-missing') ? s.t('zNoIpsetBackup') : NetworkDiagnostics.textOrRaw(error, s.t));
+    }
     finally { if (mounted && _download != null) setState(() => _download = null); }
   }
 
@@ -104,7 +109,10 @@ class _ZapretScreenState extends State<ZapretScreen> {
     if (_zapret.busy || _checking || _preparingAnalysis) return;
     setState(() => _preparingAnalysis = true);
     try { await _loadTargets(); }
-    catch (e) { if (mounted) setState(() => _error = '$e'); return; }
+    catch (e) {
+      if (mounted) setState(() => _error = NetworkDiagnostics.textOrRaw(e, s.t));
+      return;
+    }
     finally { if (mounted) setState(() => _preparingAnalysis = false); }
     if (!mounted) return;
     final settings = context.read<SettingsProvider>();
@@ -162,7 +170,9 @@ class _ZapretScreenState extends State<ZapretScreen> {
         if (!automatic && update != null) await context.read<SettingsProvider>().update((a) => a.zapretSkippedVersion = null);
       }
       if (!automatic && mounted && update == null) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.t('zUpToDate'))));
-    } catch (e) { if (mounted) setState(() => _error = '$e'); }
+    } catch (e) {
+      if (mounted) setState(() => _error = NetworkDiagnostics.textOrRaw(e, s.t));
+    }
     finally { if (mounted) setState(() => _checking = false); }
   }
 
@@ -223,12 +233,6 @@ class _ZapretScreenState extends State<ZapretScreen> {
     onPressed: _zapret.busy ? null : () => _run(action), icon: Icon(icon, size: 18), label: Text(s.t(key)),
   );
 
-  void _selectSection(int value) {
-    if (_section == value) return;
-    setState(() => _section = value);
-    if (_scroll.hasClients) _scroll.jumpTo(0);
-  }
-
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
@@ -266,11 +270,6 @@ class _ZapretScreenState extends State<ZapretScreen> {
               s.t(running ? 'zapretOn' : 'zapretOff'),
               style: AppTextStyles.title.copyWith(color: statusColor, fontSize: 20),
             ),
-            const SizedBox(height: 8),
-            Text(
-              '${s.t('zapretStrategy')}: ${chosen?.title ?? '—'}',
-              style: p.secondaryStyle,
-            ),
             const SizedBox(height: 4),
             Text('${s.t('zVersion')}: ${_zapret.version ?? '—'}', style: p.secondaryStyle),
             const SizedBox(height: 18),
@@ -280,6 +279,15 @@ class _ZapretScreenState extends State<ZapretScreen> {
                 onPressed: busy ? null : () => context.read<NavProvider>().setIndex(6),
                 icon: const Icon(Icons.sports_esports_outlined),
                 label: Text(s.t('zApps')),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: busy ? null : () => context.read<NavProvider>().setIndex(7),
+                icon: const Icon(Icons.settings_suggest_outlined),
+                label: Text(s.t('zSettings')),
               ),
             ),
             const SizedBox(height: 8),
@@ -492,6 +500,35 @@ class _ZapretScreenState extends State<ZapretScreen> {
           ),
         ),
         SectionCard(
+          title: s.t('logs'),
+          icon: Icons.terminal_rounded,
+          trailing: IconButton(
+            tooltip: s.t(_showLog ? 'collapse' : 'expand'),
+            onPressed: () => setState(() => _showLog = !_showLog),
+            icon: Icon(_showLog ? Icons.expand_less_rounded : Icons.expand_more_rounded),
+          ),
+          child: _showLog
+              ? SizedBox(
+                  height: 260,
+                  child: SingleChildScrollView(
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: _zapret.logRevision,
+                      builder: (context, _, child) => SelectableText(
+                        _zapret.log.join('\n'),
+                        style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+                      ),
+                    ),
+                  ),
+                )
+              : Text(s.t('logsCollapsed'), style: p.secondaryStyle),
+        ),
+      ],
+    );
+
+    final analysisPage = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionCard(
           title: s.t('zapretAnalyze'),
           icon: Icons.analytics_outlined,
           child: Column(
@@ -578,30 +615,37 @@ class _ZapretScreenState extends State<ZapretScreen> {
             );
           }),
         ),
-        SectionCard(
-          title: s.t('logs'),
-          icon: Icons.terminal_rounded,
-          trailing: IconButton(
-            tooltip: s.t(_showLog ? 'collapse' : 'expand'),
-            onPressed: () => setState(() => _showLog = !_showLog),
-            icon: Icon(_showLog ? Icons.expand_less_rounded : Icons.expand_more_rounded),
-          ),
-          child: _showLog
-              ? SizedBox(
-                  height: 260,
-                  child: SingleChildScrollView(
-                    child: ValueListenableBuilder<int>(
-                      valueListenable: _zapret.logRevision,
-                      builder: (context, _, child) => SelectableText(
-                        _zapret.log.join('\n'),
-                        style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
-                      ),
-                    ),
-                  ),
-                )
-              : Text(s.t('logsCollapsed'), style: p.secondaryStyle),
-        ),
       ],
+    );
+
+    final strategySummary = SectionCard(
+      title: s.t('zapretStrategy'),
+      icon: Icons.route_rounded,
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: p.accent.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(Icons.alt_route_rounded, color: p.accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(chosen?.title ?? s.t('zapretUnknown'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 3),
+                Text(s.t(running ? 'zapretOn' : 'zapretOff'), style: p.secondaryStyle),
+              ],
+            ),
+          ),
+          if (_best == chosen?.id) Icon(Icons.verified_rounded, color: p.success),
+        ],
+      ),
     );
 
     return SafeArea(
@@ -680,48 +724,19 @@ class _ZapretScreenState extends State<ZapretScreen> {
                 ),
               if (!_zapret.isSupported)
                 Text(s.t('zapretMissing'))
-              else ...[
-                Container(
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: p.surface.withValues(alpha: .45),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: p.border),
-                  ),
-                  child: DefaultTabController(
-                    length: 2,
-                    initialIndex: _section,
-                    child: TabBar(
-                      onTap: _selectSection,
-                      dividerColor: Colors.transparent,
-                      indicatorSize: TabBarIndicatorSize.tab,
-                      indicator: BoxDecoration(
-                        color: p.accent.withValues(alpha: .16),
-                        borderRadius: BorderRadius.circular(11),
-                      ),
-                      labelColor: p.text,
-                      unselectedLabelColor: p.textSecondary,
-                      labelStyle: AppTextStyles.tab,
-                      unselectedLabelStyle: AppTextStyles.tab,
-                      tabs: [
-                        Tab(text: s.t('zOverview')),
-                        Tab(text: s.t('zSettings')),
-                      ],
-                    ),
+              else if (widget.settingsOnly) ...[
+                domainCard,
+                settingsPage,
+              ] else ...[
+                Align(
+                  alignment: Alignment.center,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 900),
+                    child: activation,
                   ),
                 ),
-                const SizedBox(height: 16),
-                domainCard,
-                if (_section == 0) ...[
-                  Align(
-                    alignment: Alignment.center,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 900),
-                      child: activation,
-                    ),
-                  ),
-                ] else
-                  settingsPage,
+                strategySummary,
+                analysisPage,
               ],
             ],
           ),

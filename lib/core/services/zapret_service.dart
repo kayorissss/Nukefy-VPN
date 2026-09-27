@@ -355,7 +355,11 @@ class ZapretService extends ChangeNotifier {
   Future<void> updateIpsetList() async {
     final path = _ipsetPath;
     if (path == null) throw StateError('zapret-missing');
-    final dio = Dio();
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 45),
+      sendTimeout: const Duration(seconds: 30),
+    ));
     try {
       final response = await dio.get<String>(_ipsetUrl, options: Options(responseType: ResponseType.plain));
       final clean = <String>[];
@@ -519,7 +523,11 @@ class ZapretService extends ChangeNotifier {
 
   /// Save a reviewed proposal, never overwrite the system hosts file.
   Future<String> hostsProposal() async {
-    final dio = Dio();
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 45),
+      sendTimeout: const Duration(seconds: 30),
+    ));
     try {
       final response = await dio.get<String>(
         'https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/main/.service/hosts',

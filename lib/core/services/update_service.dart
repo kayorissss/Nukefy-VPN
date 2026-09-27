@@ -30,7 +30,13 @@ class UpdateInfo {
 }
 
 class UpdateService {
-  UpdateService({Dio? dio}) : _dio = dio ?? Dio();
+  UpdateService({Dio? dio})
+      : _dio = dio ??
+            Dio(BaseOptions(
+              connectTimeout: const Duration(seconds: 15),
+              receiveTimeout: const Duration(seconds: 45),
+              sendTimeout: const Duration(seconds: 30),
+            ));
 
   final Dio _dio;
 

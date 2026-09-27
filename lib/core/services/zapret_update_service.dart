@@ -23,7 +23,11 @@ class ZapretUpdateInfo {
 /// Only official GitHub release assets; SHA-256 checked before extraction.
 /// Hash verification detects corruption, not a compromised upstream release.
 class ZapretUpdateService {
-  final Dio _dio = Dio();
+  final Dio _dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 15),
+    receiveTimeout: const Duration(minutes: 2),
+    sendTimeout: const Duration(seconds: 30),
+  ));
   static const repo = 'Flowseal/zapret-discord-youtube';
 
   Future<ZapretUpdateInfo?> check() async {

@@ -95,9 +95,42 @@ class GameBlocklistService {
   static const String _installedKey = 'zapret_games_installed';
 
   final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 12),
+    connectTimeout: const Duration(seconds: 8),
     receiveTimeout: const Duration(seconds: 30),
+    sendTimeout: const Duration(seconds: 15),
   ));
+
+  bool _usedFallback = false;
+  bool get usedFallback => _usedFallback;
+
+  /// Stable names from the upstream repository. This is deliberately only a
+  /// catalogue: domain contents are still downloaded from the official raw
+  /// file after the user explicitly adds a game.
+  static const List<GameListInfo> _fallbackCatalog = [
+    GameListInfo(id: 'ApexLegends_RocketLeague', name: 'Apex Legends / Rocket League', file: 'ApexLegends_RocketLeague.txt', size: 4864),
+    GameListInfo(id: 'Arknights', name: 'Arknights', file: 'Arknights.txt', size: 2643),
+    GameListInfo(id: 'ArmaReforger', name: 'Arma Reforger', file: 'ArmaReforger.txt', size: 2563),
+    GameListInfo(id: 'BattleNet', name: 'Battle Net', file: 'BattleNet.txt', size: 2881),
+    GameListInfo(id: 'Battlefield6', name: 'Battlefield 6', file: 'Battlefield6.txt', size: 3426),
+    GameListInfo(id: 'BlueArchive', name: 'Blue Archive', file: 'BlueArchive.txt', size: 7866),
+    GameListInfo(id: 'Cloudflare_AWS', name: 'Cloudflare / AWS', file: 'Cloudflare_AWS.txt', size: 17966),
+    GameListInfo(id: 'DeadByDaylight', name: 'Dead By Daylight', file: 'DeadByDaylight.txt', size: 4302),
+    GameListInfo(id: 'EA_Origin', name: 'EA / Origin', file: 'EA_Origin.txt', size: 4913),
+    GameListInfo(id: 'EpicGames_Fortnite', name: 'Epic Games / Fortnite', file: 'EpicGames_Fortnite.txt', size: 9996),
+    GameListInfo(id: 'GooseGooseDuck', name: 'Goose Goose Duck', file: 'GooseGooseDuck.txt', size: 9),
+    GameListInfo(id: 'LeagueOfLegends', name: 'League Of Legends', file: 'LeagueOfLegends.txt', size: 18106),
+    GameListInfo(id: 'Minecraft_Extra', name: 'Minecraft / Extra', file: 'Minecraft_Extra.txt', size: 5030),
+    GameListInfo(id: 'MortalKombat1', name: 'Mortal Kombat 1', file: 'MortalKombat1.txt', size: 17),
+    GameListInfo(id: 'Other_Games', name: 'Other Games', file: 'Other_Games.txt', size: 142545),
+    GameListInfo(id: 'PhotonEngine', name: 'Photon Engine', file: 'PhotonEngine.txt', size: 356),
+    GameListInfo(id: 'RiotGames_Valorant', name: 'Riot Games / Valorant', file: 'RiotGames_Valorant.txt', size: 7661),
+    GameListInfo(id: 'Roblox', name: 'Roblox', file: 'Roblox.txt', size: 15494),
+    GameListInfo(id: 'Steam', name: 'Steam', file: 'Steam.txt', size: 16499),
+    GameListInfo(id: 'Ubisoft_Rainbow_Six_Siege', name: 'Ubisoft / Rainbow Six Siege', file: 'Ubisoft_Rainbow_Six_Siege.txt', size: 7834),
+    GameListInfo(id: 'VRChat', name: 'VRChat', file: 'VRChat.txt', size: 1604),
+    GameListInfo(id: 'Warframe', name: 'Warframe', file: 'Warframe.txt', size: 227002),
+    GameListInfo(id: 'WutheringWaves', name: 'Wuthering Waves', file: 'WutheringWaves.txt', size: 1284),
+  ];
 
   /// Canonical user data, survives portable-app and zapret replacement.
   Future<Directory> get _dir async {
@@ -149,8 +182,10 @@ class GameBlocklistService {
   }
 
   /// Lists `games/*.txt` straight from the repository, so games added
-  /// upstream show up on their own.
+  /// upstream show up on their own. If the catalogue request is unavailable,
+  /// use the last known upstream names instead of leaving the page empty.
   Future<List<GameListInfo>?> refreshCatalog() async {
+    try {
       final response = await _dio.get<List<dynamic>>(
         _contentsApi,
         options: Options(
@@ -177,15 +212,37 @@ class GameBlocklistService {
               ))
           .toList()
         ..sort((a, b) => a.name.compareTo(b.name));
-      if (list.isEmpty) return null;
-      await StorageService.instance.writeJson(
-        _catalogKey,
-        {
-          'items': list.map((e) => e.toJson()).toList(),
-          'at': DateTime.now().toIso8601String(),
-        },
-      );
+      if (list.isEmpty) throw const StateError('Empty game catalogue');
+      _usedFallback = false;
+      await _saveCatalog(list, source: 'github');
       return list;
+    } on DioException {
+      return _fallbackCatalogResult();
+    } on StateError catch (error) {
+      final raw = '$error';
+      if (raw.contains('GitHub HTTP') || raw.contains('Empty game catalogue')) {
+        return _fallbackCatalogResult();
+      }
+      rethrow;
+    }
+  }
+
+  Future<List<GameListInfo>> _fallbackCatalogResult() async {
+    _usedFallback = true;
+    final fallback = List<GameListInfo>.unmodifiable(_fallbackCatalog);
+    await _saveCatalog(fallback, source: 'built-in');
+    return fallback;
+  }
+
+  Future<void> _saveCatalog(List<GameListInfo> list, {required String source}) async {
+    await StorageService.instance.writeJson(
+      _catalogKey,
+      {
+        'items': list.map((e) => e.toJson()).toList(),
+        'at': DateTime.now().toIso8601String(),
+        'source': source,
+      },
+    );
   }
 
   /// `EpicGames_Fortnite` → `EpicGames / Fortnite`.
