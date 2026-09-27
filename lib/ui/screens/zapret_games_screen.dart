@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/providers/settings_provider.dart';
+import '../../core/providers/nav_provider.dart';
 import '../../core/services/game_blocklist_service.dart';
 import '../../core/services/zapret_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -102,7 +103,16 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
     final content = SafeArea(bottom: false, child: LayoutBuilder(builder: (context, constraints) => SingleChildScrollView(
       controller: _scroll, key: const PageStorageKey('zapret-games'), padding: const EdgeInsets.fromLTRB(24, 20, 24, 100),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [if (!widget.embedded) const BackButton(), Expanded(child: Text(s.t('zApps'), style: AppTextStyles.title)),
+        Row(children: [
+          if (widget.embedded)
+            IconButton(
+              tooltip: s.t('zapret'),
+              onPressed: () => context.read<NavProvider>().setIndex(2),
+              icon: const Icon(Icons.arrow_back_rounded),
+            )
+          else
+            const BackButton(),
+          Expanded(child: Text(s.t('zApps'), style: AppTextStyles.title)),
           IconButton(tooltip: s.t('zRefresh'), onPressed: _loading || _zapret.busy ? null : _refresh, icon: const Icon(Icons.refresh)),
           IconButton(tooltip: s.t('zView'), onPressed: () => setState(() => _grid = !_grid), icon: Icon(_grid ? Icons.view_list_outlined : Icons.grid_view_rounded))]),
         const SizedBox(height: 16),

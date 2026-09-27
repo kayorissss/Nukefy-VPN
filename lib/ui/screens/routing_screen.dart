@@ -7,6 +7,7 @@ import '../../core/models/vpn_status.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../widgets/responsive_sections.dart';
 
 class RoutingScreen extends StatelessWidget {
   const RoutingScreen({super.key});
@@ -18,7 +19,9 @@ class RoutingScreen extends StatelessWidget {
     final mode = settings.settings.routingMode;
     return Scaffold(
       appBar: AppBar(title: Text(s.t('routing'))),
-      body: ListView(
+      body: ResponsiveFrame(
+        maxWidth: 1180,
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(s.t('geosite'), style: context.palette.secondaryStyle),
@@ -64,6 +67,7 @@ class RoutingScreen extends StatelessWidget {
               ),
             ),
         ],
+        ),
       ),
     );
   }

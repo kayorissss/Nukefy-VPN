@@ -194,46 +194,115 @@ class _SideRail extends StatelessWidget {
     final s = context.watch<SettingsProvider>().strings;
     final nav = context.watch<NavProvider>();
     final collapsed = nav.collapsed;
-    return Container(
-      width: collapsed ? 72 : 220,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      width: collapsed ? 76 : 244,
       margin: const EdgeInsets.fromLTRB(12, 4, 0, 16),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-      decoration: BoxDecoration(color: p.card, borderRadius: BorderRadius.circular(24), border: Border.all(color: p.border)),
-      child: Column(children: [
-        Row(children: [
-          if (!collapsed) ...[const NukefyLogo(size: 32), const Spacer()],
-          IconButton(tooltip: s.t(nav.collapsed ? 'zExpandMenu' : 'zCollapseMenu'), onPressed: nav.toggleRail, icon: Icon(nav.collapsed ? Icons.menu : Icons.menu_open)),
-        ]),
-        const SizedBox(height: 16),
-        Expanded(child: SingleChildScrollView(child: Column(children: [
-          for (var i = 0; i < tabs.length; i++) ...[
-            Row(children: [Expanded(child: _RailItem(
-              spec: tabs[i], selected: i == index, collapsed: collapsed,
-              onTap: () => nav.setIndex(i),
-              onDoubleTap: Platform.isWindows && i == 2 ? nav.toggleZapret : null,
-            )),
-              if (Platform.isWindows && i == 2 && !collapsed) IconButton(
-                tooltip: s.t('zApps'), onPressed: nav.toggleZapret,
-                icon: Icon(nav.zapretExpanded ? Icons.expand_less : Icons.expand_more, size: 18)),
-            ]),
-            if (Platform.isWindows && i == 2)
-              AnimatedSize(duration: const Duration(milliseconds: 180), alignment: Alignment.topCenter,
-                child: nav.zapretExpanded || collapsed
-                  ? _RailItem(spec: _TabSpec(Icons.sports_esports, Icons.sports_esports_outlined, s.t('zApps')), selected: index == 6, collapsed: collapsed, onTap: () => nav.setIndex(6))
-                  : const SizedBox(width: double.infinity)),
-          ],
-        ]))),
-        if (!collapsed) Text('v${AppConstants.version}', style: p.captionStyle),
-      ]),
+      decoration: BoxDecoration(
+        color: p.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: p.border),
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 38,
+            child: Row(
+              mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+              children: [
+                if (!collapsed) ...[
+                  const NukefyLogo(size: 32),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text('Nukefy', style: AppTextStyles.headline.copyWith(fontSize: 14))),
+                ],
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 38, height: 38),
+                  tooltip: s.t(collapsed ? 'zExpandMenu' : 'zCollapseMenu'),
+                  onPressed: nav.toggleRail,
+                  icon: Icon(collapsed ? Icons.menu_rounded : Icons.menu_open_rounded),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (var i = 0; i < tabs.length; i++) ...[
+                    _RailItem(
+                      spec: tabs[i],
+                      selected: i == index || (i == 2 && index == 6),
+                      collapsed: collapsed,
+                      onTap: () => nav.setIndex(i),
+                      onDoubleTap: Platform.isWindows && i == 2 ? nav.toggleZapret : null,
+                      trailing: Platform.isWindows && i == 2 && !collapsed
+                          ? IconButton(
+                              tooltip: s.t('zApps'),
+                              onPressed: nav.toggleZapret,
+                              icon: Icon(
+                                nav.zapretExpanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded,
+                                size: 20,
+                              ),
+                            )
+                          : null,
+                    ),
+                    if (Platform.isWindows && i == 2 && !collapsed)
+                      ClipRect(
+                        child: AnimatedCrossFade(
+                          duration: const Duration(milliseconds: 180),
+                          firstCurve: Curves.easeOutCubic,
+                          secondCurve: Curves.easeInCubic,
+                          sizeCurve: Curves.easeOutCubic,
+                          crossFadeState: nav.zapretExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+                          firstChild: Padding(
+                            padding: const EdgeInsetsDirectional.only(start: 22),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                border: BorderDirectional(start: BorderSide(color: p.accent.withValues(alpha: .35), width: 1)),
+                              ),
+                              child: _RailItem(
+                                spec: _TabSpec(Icons.sports_esports_rounded, Icons.sports_esports_outlined, s.t('zApps')),
+                                selected: index == 6,
+                                collapsed: false,
+                                nested: true,
+                                onTap: () => nav.setIndex(6),
+                              ),
+                            ),
+                          ),
+                          secondChild: const SizedBox.shrink(),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          if (!collapsed) Text('v${AppConstants.version}', style: p.captionStyle),
+        ],
+      ),
     );
   }
 }
 
 class _RailItem extends StatelessWidget {
-  const _RailItem({required this.spec, required this.selected, required this.onTap, this.collapsed = false, this.onDoubleTap});
+  const _RailItem({
+    required this.spec,
+    required this.selected,
+    required this.onTap,
+    this.collapsed = false,
+    this.onDoubleTap,
+    this.trailing,
+    this.nested = false,
+  });
+
   final bool collapsed;
   final VoidCallback? onDoubleTap;
-
+  final Widget? trailing;
+  final bool nested;
   final _TabSpec spec;
   final bool selected;
   final VoidCallback onTap;
@@ -244,35 +313,41 @@ class _RailItem extends StatelessWidget {
     final color = selected ? p.accent : p.textSecondary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: Tooltip(message: spec.label, child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        onDoubleTap: onDoubleTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          decoration: BoxDecoration(
-            color: selected ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            child: Row(
-              children: [
-                Icon(selected ? spec.icon : spec.outlined, size: 20, color: color),
-                if (!collapsed) const SizedBox(width: 12),
-                if (!collapsed) Expanded(
-                  child: Text(
-                    spec.label.toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.tab.copyWith(color: selected ? p.text : p.textSecondary, fontSize: 10.5),
-                  ),
-                ),
-              ],
+      child: Tooltip(
+        message: spec.label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          onDoubleTap: onDoubleTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: double.infinity,
+            height: nested ? 42 : 48,
+            decoration: BoxDecoration(
+              color: selected ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
+              borderRadius: BorderRadius.circular(nested ? 12 : 16),
             ),
+            padding: EdgeInsets.symmetric(horizontal: collapsed ? 0 : (nested ? 10 : 12)),
+            child: collapsed
+                ? Center(child: Icon(selected ? spec.icon : spec.outlined, size: 22, color: color))
+                : Row(
+                    children: [
+                      Icon(selected ? spec.icon : spec.outlined, size: 21, color: color),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          spec.label.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.tab.copyWith(color: selected ? p.text : p.textSecondary, fontSize: nested ? 10 : 10.5),
+                        ),
+                      ),
+                      if (trailing != null) trailing!,
+                    ],
+                  ),
           ),
         ),
-      )),
+      ),
     );
   }
 }

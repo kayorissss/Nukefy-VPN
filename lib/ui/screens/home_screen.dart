@@ -117,7 +117,7 @@ class HomeScreen extends StatelessWidget {
             const Spacer(),
             _ServerCard(
               server: server,
-              title: server == null ? s.t('selectServer') : server.name,
+              title: server == null ? s.t('selectServer') : server.displayName,
               subtitle: server == null
                   ? s.t('tapToChange')
                   : '${FormatUtils.protocolLabel(server.protocol)} · ${server.address}',
@@ -134,6 +134,7 @@ class HomeScreen extends StatelessWidget {
   String _friendlyError(S s, String raw) {
     if (raw == 'CORE_MISSING') return s.t('coreMissing');
     if (raw == 'LIBBOX_MISSING') return s.t('libboxMissing');
+    if (raw == 'information-entry') return s.t('informationEntry');
     if (raw == 'need-server') return s.t('needServer');
     if (raw == 'XHTTP_UNSUPPORTED') return s.t('xhttpUnsupported');
     if (raw.startsWith('NO_TRAFFIC:')) return '${s.t('noTraffic')}\n${raw.substring(11)}';
@@ -148,7 +149,7 @@ class HomeScreen extends StatelessWidget {
 /// Bottom sheet with every server; tapping one connects right away.
 Future<void> showServerPicker(BuildContext context) async {
   final servers = context.read<ServersProvider>();
-  if (servers.servers.isEmpty) {
+  if (servers.servers.where((server) => !server.isInformational).isEmpty) {
     context.read<NavProvider>().setIndex(1);
     return;
   }
@@ -173,7 +174,7 @@ class _ServerPickerSheet extends StatelessWidget {
     final vpn = context.watch<VpnProvider>();
     final s = context.watch<SettingsProvider>().strings;
     final p = context.palette;
-    final list = [...servers.servers]
+    final list = servers.servers.where((server) => !server.isInformational).toList()
       ..sort((a, b) {
         int rank(ServerModel m) => m.pingMs == null ? 1 : (m.pingMs! < 0 ? 2 : 0);
         final r = rank(a).compareTo(rank(b));
@@ -237,7 +238,7 @@ class _ServerPickerSheet extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    server.name,
+                                    server.displayName,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: AppTextStyles.bodyRegular.copyWith(

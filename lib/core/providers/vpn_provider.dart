@@ -70,6 +70,11 @@ class VpnProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (server.isInformational) {
+      errorMessage = 'information-entry';
+      notifyListeners();
+      return;
+    }
     activeServerId = server.id;
     await settings.update((s) => s.selectedServerId = server.id);
     status = VpnStatus.connecting;
@@ -87,9 +92,9 @@ class VpnProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    // Android always runs through libbox + VpnService; desktop uses the
-    // system TUN whenever the user has it enabled.
-    final useTun = Platform.isAndroid ? info.libbox : settings.settings.tunEnabled;
+    // Both platforms expose the same choice. Android uses VpnService for TUN;
+    // proxy mode keeps the local SOCKS/HTTP inbound instead.
+    final useTun = settings.settings.tunEnabled && (Platform.isAndroid ? info.libbox : true);
     if (Platform.isAndroid && useTun) {
       final ready = await _platform.prepareVpn();
       if (!ready) {

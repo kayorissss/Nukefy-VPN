@@ -1,3 +1,4 @@
+import '../widgets/responsive_sections.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -39,7 +40,7 @@ class SettingsScreen extends StatelessWidget {
     final bottom = MediaQuery.paddingOf(context).bottom;
     return SafeArea(
       bottom: false,
-      child: ListView(
+      child: ResponsiveSections(
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
         children: [
           // Telegram proxy is the thing people look for first when the
@@ -228,14 +229,32 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: '${_perAppLabel(s, value.perAppMode)} · ${s.t('perAppHint')}',
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PerAppScreen())),
                   ),
-                if (!Platform.isAndroid)
-                  SwitchTile(
-                    icon: Icons.router_outlined,
-                    title: s.t('tun'),
-                    subtitle: s.t('tunHint'),
-                    value: value.tunEnabled,
-                    onChanged: (next) => settings.update((item) => item.tunEnabled = next),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(2, 8, 2, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.t('connectionMode'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Text(s.t('connectionModeHint'), style: context.palette.secondaryStyle),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<bool>(
+                          segments: [
+                            ButtonSegment<bool>(value: false, icon: const Icon(Icons.lan_outlined), label: Text(s.t('proxyMode'))),
+                            ButtonSegment<bool>(value: true, icon: const Icon(Icons.router_outlined), label: Text(s.t('tunMode'))),
+                          ],
+                          selected: {value.tunEnabled},
+                          onSelectionChanged: (selected) => settings.update((item) {
+                            item.tunEnabled = selected.single;
+                            if (!item.tunEnabled) item.localProxyEnabled = true;
+                          }),
+                        ),
+                      ),
+                    ],
                   ),
+                ),
                 SwitchTile(
                   icon: Icons.lan_outlined,
                   title: s.t('localProxy'),

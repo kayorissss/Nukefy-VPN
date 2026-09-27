@@ -1,3 +1,4 @@
+import '../widgets/responsive_sections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -92,7 +93,7 @@ class _JammersScreenState extends State<JammersScreen> {
 
     return SafeArea(
       bottom: false,
-      child: ListView(
+      child: ResponsiveSections(
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
         children: [
           _VerdictCard(verdict: _verdict, strings: s)

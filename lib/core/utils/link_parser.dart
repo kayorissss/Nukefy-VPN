@@ -4,6 +4,7 @@ import '../constants/app_constants.dart';
 import 'base64_utils.dart';
 import 'clash_parser.dart';
 import 'geo_utils.dart';
+import 'server_identity.dart';
 
 class ServerDraft {
   ServerDraft({
@@ -17,6 +18,8 @@ class ServerDraft {
     this.countryCode,
     this.tags = const [],
   });
+
+  String get fingerprint => ServerIdentity.of(protocol, address, port, outbound, endpoint, rawLink);
 
   final String name;
   final String address;

@@ -88,13 +88,17 @@ class UpdateService {
     }
     if (Platform.isWindows) {
       final list = maps.cast<Map<String, dynamic>?>();
+      // The setup asset can replace an installed copy and asks Windows for
+      // elevation. It is the only Windows asset that completes the update;
+      // the portable exe is for a fresh/manual launch.
       return list.firstWhere(
-            (asset) => nameHas(asset!, '.exe') && !nameHas(asset, 'setup'),
+            (asset) => nameHas(asset!, 'setup') && nameHas(asset, '.exe'),
             orElse: () => list.firstWhere(
-              (asset) =>
-                  nameHas(asset!, '.exe') ||
-                  (nameHas(asset, 'windows') && nameHas(asset, '.zip')),
-              orElse: () => null,
+              (asset) => nameHas(asset!, '.exe'),
+              orElse: () => list.firstWhere(
+                (asset) => nameHas(asset!, 'windows') && nameHas(asset, '.zip'),
+                orElse: () => null,
+              ),
             ),
           );
     }

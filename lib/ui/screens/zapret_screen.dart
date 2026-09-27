@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/settings_provider.dart';
+import '../../core/providers/nav_provider.dart';
 import '../../core/providers/vpn_provider.dart';
 import '../../core/services/game_blocklist_service.dart';
 import '../../core/services/zapret_probe.dart';
@@ -231,7 +232,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
     final chosen = _selected();
     final vpnOn = context.select<VpnProvider, bool>((v) => v.status != VpnStatus.disconnected);
     final domains = _zapret.loadDomains();
-    final controls = SectionCard(title: 'ZAPRET', icon: Icons.shield_outlined, child: Column(children: [
+    final controls = SectionCard(title: s.t('zapret'), icon: Icons.shield_outlined, child: Column(children: [
       const SizedBox(height: 20),
       Icon(Icons.shield_rounded, size: 80, color: _zapret.isRunning ? p.success : p.textSecondary),
       const SizedBox(height: 24),
@@ -243,10 +244,11 @@ class _ZapretScreenState extends State<ZapretScreen> {
       const SizedBox(height: 16),
       Text('${s.t('zVersion')}: ${_zapret.version ?? '—'}'),
       const SizedBox(height: 12),
-      OutlinedButton.icon(onPressed: busy ? null : () async {
-        await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ZapretGamesScreen()));
-        if (mounted) await _loadTargets();
-      }, icon: const Icon(Icons.sports_esports_outlined), label: Text(s.t('zApps'))),
+      OutlinedButton.icon(
+        onPressed: busy ? null : () => context.read<NavProvider>().setIndex(6),
+        icon: const Icon(Icons.sports_esports_outlined),
+        label: Text(s.t('zApps')),
+      ),
       _button('zFolder', Icons.folder_open_outlined, _zapret.openFolder),
     ]));
 
@@ -306,13 +308,27 @@ class _ZapretScreenState extends State<ZapretScreen> {
         ])),
         LinearProgressIndicator(value: _analyzing ? _step / _strategies.length : 0, minHeight: 3),
       ])),
-      LayoutBuilder(builder: (context, constraints) {
-        final count = (constraints.maxWidth / 250).floor().clamp(1, 8);
-        final width = (constraints.maxWidth - 12 * (count - 1)) / count;
-        return Wrap(spacing: 12, runSpacing: 12, children: [for (final strategy in _strategies)
-          SizedBox(width: width, height: 186 * MediaQuery.textScalerOf(context).scale(1), child: _tile(strategy, strategy.id == chosen?.id, busy)),
-        ]);
-      }),
+      SectionCard(
+        title: s.t('zapretStrategies'),
+        icon: Icons.view_module_outlined,
+        description: s.t('zapretStrategyHint'),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final count = (constraints.maxWidth / 250).floor().clamp(1, 8).toInt();
+          final width = (constraints.maxWidth - 12 * (count - 1)) / count;
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final strategy in _strategies)
+                SizedBox(
+                  width: width,
+                  height: 186 * MediaQuery.textScalerOf(context).scale(1),
+                  child: _tile(strategy, strategy.id == chosen?.id, busy),
+                ),
+            ],
+          );
+        }),
+      ),
     ]);
 
     return SafeArea(bottom: false, child: LayoutBuilder(builder: (context, constraints) => SingleChildScrollView(
@@ -334,15 +350,36 @@ class _ZapretScreenState extends State<ZapretScreen> {
           ])),
         if (!_zapret.isSupported) Text(s.t('zapretMissing'))
         else ...[
-          if (constraints.maxWidth >= 900) Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 245, child: controls), const SizedBox(width: 20), Expanded(child: main)])
+          if (constraints.maxWidth >= 980) Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 300, child: controls), const SizedBox(width: 20), Expanded(child: main)])
           else ...[controls, main],
           const SizedBox(height: 20),
           SectionCard(title: s.t('zapretAddDomain'), icon: Icons.language, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Wrap(spacing: 8, runSpacing: 8, children: [for (final domain in domains) InputChip(label: Text(domain), onDeleted: busy ? null : () => _run(() async { await _zapret.saveDomains([...domains]..remove(domain)); await _restart(); })),
               ActionChip(label: Text(s.t('add')), avatar: const Icon(Icons.add), onPressed: busy ? null : _addDomain)]),
           ])),
-          OutlinedButton.icon(onPressed: () => setState(() => _showLog = !_showLog), icon: const Icon(Icons.terminal), label: Text(s.t('logs'))),
-          if (_showLog) Container(padding: const EdgeInsets.all(16), color: p.surface, child: SizedBox(height: 260, child: SingleChildScrollView(child: ValueListenableBuilder<int>(valueListenable: _zapret.logRevision, builder: (context, _, child) => SelectableText(_zapret.log.join('\n'), style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12)))))),
+          SectionCard(
+            title: s.t('logs'),
+            icon: Icons.terminal_rounded,
+            trailing: IconButton(
+              tooltip: s.t(_showLog ? 'collapse' : 'expand'),
+              onPressed: () => setState(() => _showLog = !_showLog),
+              icon: Icon(_showLog ? Icons.expand_less_rounded : Icons.expand_more_rounded),
+            ),
+            child: _showLog
+                ? SizedBox(
+                    height: 260,
+                    child: SingleChildScrollView(
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: _zapret.logRevision,
+                        builder: (context, _, child) => SelectableText(
+                          _zapret.log.join('\n'),
+                          style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  )
+                : Text(s.t('logsCollapsed'), style: p.secondaryStyle),
+          ),
         ],
       ]),
     )));

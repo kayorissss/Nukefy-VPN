@@ -8,6 +8,7 @@ import '../../core/providers/settings_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../widgets/nukefy_feedback.dart';
+import '../widgets/responsive_sections.dart';
 
 class ServerEditScreen extends StatefulWidget {
   const ServerEditScreen({super.key, required this.serverId});
@@ -22,12 +23,14 @@ class _ServerEditScreenState extends State<ServerEditScreen> {
   late final TextEditingController _json;
   String? _detour;
   String? _error;
+  late final bool _readOnly;
 
   @override
   void initState() {
     super.initState();
     final server = context.read<ServersProvider>().byId(widget.serverId);
     _detour = server?.detourServerId;
+    _readOnly = server?.subscriptionId != null;
     final payload = server?.endpoint ?? server?.outbound ?? {
       'name': server?.name,
       'address': server?.address,
@@ -54,10 +57,12 @@ class _ServerEditScreenState extends State<ServerEditScreen> {
       appBar: AppBar(
         title: Text(s.t('edit')),
         actions: [
-          TextButton(onPressed: _save, child: Text(s.t('save'))),
+          TextButton(onPressed: _readOnly ? null : _save, child: Text(s.t(_readOnly ? 'subscriptionReadOnly' : 'save'))),
         ],
       ),
-      body: Padding(
+      body: ResponsiveFrame(
+        maxWidth: 1200,
+        child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -81,6 +86,7 @@ class _ServerEditScreenState extends State<ServerEditScreen> {
                 controller: _json,
                 maxLines: null,
                 expands: true,
+                readOnly: _readOnly,
                 style: AppTextStyles.monoValue,
               ),
             ),
@@ -88,12 +94,14 @@ class _ServerEditScreenState extends State<ServerEditScreen> {
               Text(_error!, style: AppTextStyles.bodySecondary.copyWith(color: Colors.redAccent)),
           ],
         ),
+        ),
       ),
     );
   }
 
   Future<void> _save() async {
     final s = context.read<SettingsProvider>().strings;
+    if (_readOnly) return;
     final servers = context.read<ServersProvider>();
     final server = servers.byId(widget.serverId);
     if (server == null) return;

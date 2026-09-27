@@ -162,7 +162,7 @@ class ServersProvider extends ChangeNotifier {
 
   /// Pings only the servers of one subscription.
   Future<void> pingSubscription(String id) async {
-    final targets = serversOf(id);
+    final targets = serversOf(id).where((server) => !server.isInformational).toList();
     if (targets.isEmpty) return;
     await PingUtils.pingAll(
       targets.map((s) => (id: s.id, host: s.address, port: s.port)).toList(),
@@ -180,18 +180,27 @@ class ServersProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setInformational(ServerModel server, bool value) async {
+    server.informational = value;
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> toggleNotices(SubscriptionModel sub) async {
+    sub.hideNotices = !sub.hideNotices;
+    await _persist();
+    notifyListeners();
+  }
+
   Future<int> addDrafts(
     List<ServerDraft> drafts, {
     String? subscriptionId,
     bool markNew = false,
   }) async {
     var added = 0;
+    final existingByKey = {for (final server in servers.where((s) => s.subscriptionId == subscriptionId)) server.fingerprint: server};
     for (final draft in drafts) {
-      final existing = servers.where((server) {
-        return server.subscriptionId == subscriptionId &&
-            server.fingerprint ==
-                '${draft.protocol}|${draft.address.toLowerCase()}|${draft.port}|${draft.name.toLowerCase()}';
-      }).firstOrNull;
+      final existing = existingByKey[draft.fingerprint];
       if (existing != null) {
         existing
           ..rawLink = draft.rawLink ?? existing.rawLink
@@ -216,6 +225,7 @@ class ServersProvider extends ChangeNotifier {
         isNew: markNew,
         createdAt: DateTime.now(),
       ));
+      existingByKey[draft.fingerprint] = servers.last;
       added++;
     }
     await _persist();
@@ -245,13 +255,17 @@ class ServersProvider extends ChangeNotifier {
     try {
       final fetched = await _subscriptions.fetch(sub);
       final previous = serversOf(id).map((e) => e.fingerprint).toSet();
+      final fetchedKeys = fetched.servers.map((e) => e.fingerprint).toSet();
+      sub.receivedCount = fetched.servers.length;
+      sub.rejectedCount = fetched.warnings.length;
+      if (fetched.servers.isEmpty && fetched.warnings.isNotEmpty) {
+        throw SubscriptionException('subscription-parse-failed');
+      }
       servers.removeWhere(
         (server) =>
             server.subscriptionId == id &&
             !server.isPinned &&
-            !fetched.servers.any((draft) =>
-                '${draft.protocol}|${draft.address.toLowerCase()}|${draft.port}|${draft.name.toLowerCase()}' ==
-                server.fingerprint),
+            !fetchedKeys.contains(server.fingerprint),
       );
       await addDrafts(
         fetched.servers,

@@ -6,6 +6,7 @@ import 'package:nukefy_vpn/core/services/game_blocklist_service.dart';
 import 'package:nukefy_vpn/core/services/zapret_probe.dart';
 import 'package:nukefy_vpn/core/services/zapret_service.dart';
 import 'package:nukefy_vpn/core/services/zapret_update_service.dart';
+import 'package:nukefy_vpn/core/utils/server_identity.dart';
 
 void main() {
   test('release extraction rejects traversal and Windows alternate streams', () {
@@ -68,6 +69,19 @@ void main() {
     }
     expect(ZapretProbe.publicAddress(InternetAddress('1.1.1.1')), isTrue);
     expect(ZapretProbe.publicAddress(InternetAddress('2606:4700:4700::1111')), isTrue);
+  });
+
+  test('server identity keeps distinct credentials and ignores display renames', () {
+    final first = ServerIdentity.of('vless', 'Example.com', 443, {'uuid': 'one'}, null, null);
+    final renamed = ServerIdentity.of('vless', 'example.com', 443, {'uuid': 'one'}, null, null);
+    final otherCredential = ServerIdentity.of('vless', 'example.com', 443, {'uuid': 'two'}, null, null);
+    expect(renamed, first);
+    expect(otherCredential, isNot(first));
+  });
+
+  test('subscription notices are not connectable by inference from a failed ping', () {
+    expect(ServerIdentity.isNotice('Щука VPN — приложение скоро перестанет поддерживаться', 'shuka.site', 443), isTrue);
+    expect(ServerIdentity.isNotice('DE Frankfurt 01', 'example.com', 443), isFalse);
   });
 
   test('game hostlists injected per profile even when upstream includes user lists', () {

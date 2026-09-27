@@ -1,3 +1,4 @@
+import '../widgets/responsive_sections.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -19,7 +20,7 @@ class StatsScreen extends StatelessWidget {
     final p = context.palette;
     return SafeArea(
       bottom: false,
-      child: ListView(
+      child: ResponsiveSections(
         padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.paddingOf(context).bottom + 100),
         children: [
           _SpeedTestButton(label: s.t('speedTest'), hint: s.t('speedTestHint')),

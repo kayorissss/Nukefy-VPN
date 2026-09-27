@@ -13,6 +13,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
 import '../../l10n/strings.dart';
+import '../widgets/responsive_sections.dart';
 import '../widgets/nukefy_background.dart';
 
 /// Built-in speed test: gauge with a live needle, ping/jitter/down/up
@@ -190,7 +191,9 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
       ),
       body: NukefyBackground(
         child: SafeArea(
-          child: ListView(
+          child: ResponsiveFrame(
+            maxWidth: 1200,
+            child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
               // Gauge.
@@ -333,6 +336,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
               else
                 for (final item in _history) _HistoryRow(item: item, strings: s),
             ],
+            ),
           ),
         ),
       ),

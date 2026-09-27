@@ -399,6 +399,21 @@ class VpnPlatform {
     }
   }
 
+  /// Starts the downloaded desktop installer and closes this process so the
+  /// installer can replace locked files. Android delegates to its package
+  /// installer through [installApk].
+  Future<bool> installUpdate(String path) async {
+    if (!Platform.isWindows) return false;
+    final installer = File(path);
+    if (!installer.existsSync()) return false;
+    await Process.start(
+      installer.path,
+      const ['/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS'],
+      mode: ProcessStartMode.detached,
+    );
+    exit(0);
+  }
+
   Future<void> revealFile(String path) async {
     if (Platform.isWindows) {
       await Process.run('explorer', ['/select,', path]);
@@ -428,27 +443,45 @@ class VpnPlatform {
     }
     final url = asset['browser_download_url'] as String;
     final name = asset['name'] as String;
+    final expected = (asset['size'] as num?)?.toInt() ?? 0;
     final dir = await coreDirectory();
     final archiveFile = File(p.join(dir.path, name));
     final started = DateTime.now();
-    await _dio.download(
-      url,
-      archiveFile.path,
-      options: Options(headers: const {'User-Agent': AppConstants.userAgent}),
-      onReceiveProgress: (received, total) {
-        onProgress?.call(DownloadProgress(
-          received: received,
-          total: total,
-          startedAt: started,
-        ));
-      },
-    );
-    await _extractCore(archiveFile, dir);
-    if (archiveFile.existsSync()) {
-      try {
-        await archiveFile.delete();
-      } catch (_) {}
+    var existing = archiveFile.existsSync() ? archiveFile.lengthSync() : 0;
+    if (expected > 0 && existing > expected) {
+      await archiveFile.delete();
+      existing = 0;
     }
+    if (expected > 0 && existing == expected) {
+      onProgress?.call(DownloadProgress(received: existing, total: expected, startedAt: started));
+    } else {
+      final headers = <String, dynamic>{'User-Agent': AppConstants.userAgent};
+      if (existing > 0) headers['Range'] = 'bytes=$existing-';
+      final streamResponse = await _dio.get<ResponseBody>(
+        url,
+        options: Options(responseType: ResponseType.stream, headers: headers),
+      );
+      final append = existing > 0 && streamResponse.statusCode == 206;
+      if (!append) existing = 0;
+      final total = expected > 0
+          ? expected
+          : (streamResponse.headers.value(Headers.contentLengthHeader) == null
+              ? 0
+              : int.tryParse(streamResponse.headers.value(Headers.contentLengthHeader)!) ?? 0) + existing;
+      final sink = archiveFile.openWrite(mode: append ? FileMode.append : FileMode.writeOnly);
+      var received = existing;
+      try {
+        await for (final chunk in streamResponse.data!.stream) {
+          sink.add(chunk);
+          received += chunk.length;
+          onProgress?.call(DownloadProgress(received: received, total: total, startedAt: started));
+        }
+      } finally {
+        await sink.close();
+      }
+    }
+    await _extractCore(archiveFile, dir);
+    if (archiveFile.existsSync()) await archiveFile.delete();
     final binary = await binaryPath();
     if (binary == null) {
       throw const CoreDownloadException('extract-failed');
@@ -457,9 +490,7 @@ class VpnPlatform {
       await Process.run('chmod', ['755', binary]);
     }
     if (Platform.isAndroid) {
-      try {
-        await _channel.invokeMethod('registerBinary', {'path': binary});
-      } catch (_) {}
+      await _channel.invokeMethod('registerBinary', {'path': binary});
     }
     return binary;
   }
