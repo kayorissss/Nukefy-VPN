@@ -55,7 +55,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
   }
 
   Future<void> _enter() async {
-    if (!_zapret.isSupported) return;
+    if (!_zapret.isSupported || _zapret.busy) return;
     await _run(() async { await _zapret.serviceInstalled(); await _loadTargets(); });
     if (mounted && context.read<SettingsProvider>().settings.zapretAutoUpdateCheck) await _checkUpdate(automatic: true);
   }
@@ -99,7 +99,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
   }
 
   Future<void> _analyze() async {
-    if (_zapret.busy) return;
+    if (_zapret.busy || _checking) return;
     try { await _loadTargets(); }
     catch (e) { if (mounted) setState(() => _error = '$e'); return; }
     if (!mounted) return;
@@ -296,7 +296,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
         SwitchListTile(contentPadding: EdgeInsets.zero, title: Text(s.t('zQuick')), value: _quick, onChanged: busy ? null : (v) => setState(() => _quick = v)),
         if (vpnOn) Text(s.t('zapretAnalyzeVpnOn'), style: TextStyle(color: p.accent)),
         SizedBox(height: 56, child: Row(children: [
-          FilledButton.icon(onPressed: _analyzing ? () => _cancel?.cancel() : busy || vpnOn || !_targets.any((t) => settings.settings.zapretCheckTargets.contains(t.id)) ? null : _analyze,
+          FilledButton.icon(onPressed: _analyzing ? () => _cancel?.cancel() : busy || _checking || vpnOn || !_targets.any((t) => settings.settings.zapretCheckTargets.contains(t.id)) ? null : _analyze,
             icon: Icon(_analyzing ? Icons.stop : Icons.play_arrow), label: Text(s.t(_analyzing ? 'cancel' : 'zapretAnalyze'))),
           const SizedBox(width: 16),
           Expanded(child: Text(_analyzing ? '$_step / ${_strategies.length}' : _best != null ? s.t('zapretApplied') : _step > 0 ? s.t('zAnalysisFinished') : '', maxLines: 2)),

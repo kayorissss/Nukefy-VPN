@@ -469,7 +469,10 @@ class ZapretService extends ChangeNotifier {
   Future<void> _startService() async {
     await _sc(['start', 'zapret']);
     final clock = Stopwatch()..start();
-    while (await _serviceState() != 4) {
+    while (true) {
+      final state = await _serviceState();
+      if (state == 4) break;
+      if (state == null || state == 1) throw StateError('zapret service stopped during startup');
       if (clock.elapsed > const Duration(seconds: 15)) throw StateError('zapret service did not reach RUNNING');
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
