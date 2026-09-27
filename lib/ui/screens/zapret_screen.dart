@@ -75,6 +75,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
     setState(() => _error = null);
     try { await _zapret.exclusive(action); }
     catch (error) { if (mounted) setState(() => _error = '$error'.contains('ipset-backup-missing') ? s.t('zNoIpsetBackup') : '$error'); }
+    finally { if (mounted && _download != null) setState(() => _download = null); }
   }
 
   Future<void> _loadTargets() async {

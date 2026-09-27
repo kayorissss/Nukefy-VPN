@@ -39,3 +39,18 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" -F body=@body.md || true
           exit 1
       - run: flutter test
+
+  windows:
+    name: Windows release build
+    runs-on: windows-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.4
+          cache: true
+      - run: flutter config --enable-windows-desktop
+      - run: flutter pub get
+      - run: flutter build windows --release

@@ -674,6 +674,7 @@ class ZapretService extends ChangeNotifier {
       _ensureUserLists();
       _writeUserList(loadDomains());
       await refreshGameLists();
+      if (_closing) return false;
       if (servicePresent) {
         await _sc(['config', 'zapret', 'binPath=', _serviceCommand(strategy)]);
         await _startService();
@@ -685,6 +686,7 @@ class ZapretService extends ChangeNotifier {
       if (args.isEmpty) throw Exception('strategy has no winws arguments');
       final exe = p.join(root!.path, 'bin', 'winws.exe');
       final process = await Process.start(exe, args, workingDirectory: p.join(root!.path, 'bin'));
+      if (_closing) { process.kill(); await process.exitCode; return false; }
       _process = process;
       _runningStrategyId = strategy.id;
       process.stdout.transform(const Utf8Decoder(allowMalformed: true)).transform(const LineSplitter()).listen(_append);
