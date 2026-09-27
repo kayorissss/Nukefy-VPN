@@ -107,7 +107,7 @@ class ZapretUpdateService {
         await flag.writeAsString('ENABLED');
       } else if (await flag.exists()) { await flag.delete(); }
       await File(p.join(stage.path, 'VERSION.txt')).writeAsString(info.version);
-      await service.stop(sweep: false);
+      await service.stop();
       await target.rename(backup.path);
       try {
         await stage.rename(target.path);
@@ -123,7 +123,7 @@ class ZapretUpdateService {
       await backup.delete(recursive: true);
     } catch (_) {
       if (swapped && await backup.exists()) {
-        await service.stop(sweep: false);
+        await service.stop();
         await Directory(target.path).delete(recursive: true);
         await backup.rename(target.path);
       }

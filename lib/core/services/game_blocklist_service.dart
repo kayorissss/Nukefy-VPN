@@ -7,7 +7,6 @@ import 'package:path_provider/path_provider.dart';
 
 import '../constants/app_constants.dart';
 import 'storage_service.dart';
-import 'zapret_service.dart';
 
 /// One game/service list from medvedeff-true/ru-gaming-blocklist.
 class GameListInfo {
@@ -63,10 +62,10 @@ class InstalledGame {
       );
 }
 
-class GameInstallResult {
-  const GameInstallResult({required this.ok, this.count = 0, this.rejected = 0});
-  final bool ok;
-  final int count;
+class GameListPreview {
+  GameListPreview({required this.game, required List<String> domains, required this.rejected}) : domains = List.unmodifiable(domains);
+  final GameListInfo game;
+  final List<String> domains;
   final int rejected;
 }
 
@@ -89,7 +88,7 @@ class GameBlocklistService {
 
   /// Refuse anything that is not a plain host name: no slashes, no shell
   /// characters, no spaces, at least one dot and a latin TLD.
-  static final RegExp _domain = RegExp(r'^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$');
+  static final RegExp _domain = RegExp(r'^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59})$');
   static const int _maxFileBytes = 2 * 1024 * 1024;
 
   static const String _catalogKey = 'zapret_games_catalog';
@@ -100,14 +99,8 @@ class GameBlocklistService {
     receiveTimeout: const Duration(seconds: 30),
   ));
 
-  /// Directory the game lists live in: next to zapret when it exists.
+  /// Canonical user data, survives portable-app and zapret replacement.
   Future<Directory> get _dir async {
-    final root = ZapretService.instance.root;
-    if (root != null) {
-      final dir = Directory(p.join(root.path, 'lists', 'games'));
-      if (!dir.existsSync()) dir.createSync(recursive: true);
-      return dir;
-    }
     final support = await getApplicationSupportDirectory();
     final dir = Directory(p.join(support.path, 'zapret-games'));
     if (!dir.existsSync()) dir.createSync(recursive: true);
@@ -138,8 +131,6 @@ class GameBlocklistService {
         .toList();
   }
 
-  bool isInstalled(String id) => installed().any((e) => e.id == id);
-
   Future<void> _saveInstalled(List<InstalledGame> items) async {
     await StorageService.instance.writeJson(
       _installedKey,
@@ -160,7 +151,6 @@ class GameBlocklistService {
   /// Lists `games/*.txt` straight from the repository, so games added
   /// upstream show up on their own.
   Future<List<GameListInfo>?> refreshCatalog() async {
-    try {
       final response = await _dio.get<List<dynamic>>(
         _contentsApi,
         options: Options(
@@ -196,9 +186,6 @@ class GameBlocklistService {
         },
       );
       return list;
-    } on DioException {
-      rethrow;
-    }
   }
 
   /// `EpicGames_Fortnite` → `EpicGames / Fortnite`.
@@ -210,9 +197,8 @@ class GameBlocklistService {
   }
 
   /// Downloads one list, validates it and writes it as a hostlist.
-  Future<GameInstallResult> install(GameListInfo game) async {
+  Future<GameListPreview> prepare(GameListInfo game) async {
     if (!validId(game.id) || game.file != '${game.id}.txt') throw const FormatException('Invalid game ID');
-    try {
       final url = '$_rawBase/${Uri.encodeComponent(game.file)}';
       final response = await _dio.get<ResponseBody>(
         url, options: Options(responseType: ResponseType.stream, followRedirects: false),
@@ -223,7 +209,7 @@ class GameBlocklistService {
         body.addAll(chunk);
       }
       if (body.isEmpty) {
-        return const GameInstallResult(ok: false);
+        throw const FormatException('Empty domain list');
       }
       final text = utf8.decode(body, allowMalformed: true);
       final clean = <String>[];
@@ -237,21 +223,24 @@ class GameBlocklistService {
           rejected++;
         }
       }
-      if (clean.isEmpty) return const GameInstallResult(ok: false);
+      if (clean.isEmpty) throw const FormatException('Empty domain list');
 
-      final dir = await _dir;
-      final file = File(p.join(dir.path, '${game.id}.txt'));
-      final temp = File('${file.path}.tmp');
-      await temp.writeAsString('${clean.toSet().join('\n')}\n', flush: true);
-      await temp.rename(file.path);
+      return GameListPreview(game: game, domains: clean.toSet().toList(), rejected: rejected);
+  }
 
-      final items = [...installed()]..removeWhere((e) => e.id == game.id);
-      items.add(InstalledGame(id: game.id, name: game.name, count: clean.toSet().length, updatedAt: DateTime.now()));
-      await _saveInstalled(items);
-      return GameInstallResult(ok: true, count: clean.toSet().length, rejected: rejected);
-    } on DioException {
-      rethrow;
+  Future<void> install(GameListPreview preview) async {
+    final game = preview.game;
+    if (!validId(game.id) || preview.domains.isEmpty || !preview.domains.every(validDomain)) {
+      throw const FormatException('Invalid domain list');
     }
+    final dir = await _dir;
+    final file = File(p.join(dir.path, '${game.id}.txt'));
+    final temp = File('${file.path}.tmp');
+    await temp.writeAsString('${preview.domains.join('\n')}\n', flush: true);
+    await temp.rename(file.path);
+    final items = [...installed()]..removeWhere((e) => e.id == game.id);
+    items.add(InstalledGame(id: game.id, name: game.name, count: preview.domains.length, updatedAt: DateTime.now()));
+    await _saveInstalled(items);
   }
 
   static bool validDomain(String value) => _domain.hasMatch(value) &&
@@ -270,8 +259,8 @@ class GameBlocklistService {
     for (final game in current) {
       final info = GameListInfo(id: game.id, name: game.name, file: '${game.id}.txt');
       final before = await domains(game.id);
-      final result = await install(info);
-      if (!result.ok) throw const FormatException('Invalid updated game list');
+      final preview = await prepare(info);
+      await install(preview);
       final after = await domains(game.id);
       if (before.join('\n') != after.join('\n')) updated++;
     }

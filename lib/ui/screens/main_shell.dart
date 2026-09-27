@@ -47,7 +47,7 @@ class MainShell extends StatelessWidget {
     final pages = <Widget>[
       const HomeScreen(),
       const ServersScreen(),
-      if (zapret) const ZapretScreen(),
+      if (zapret) ZapretScreen(active: index == 2),
       const JammersScreen(),
       const StatsScreen(),
       const SettingsScreen(),
@@ -193,7 +193,7 @@ class _SideRail extends StatelessWidget {
     final p = context.palette;
     final s = context.watch<SettingsProvider>().strings;
     final nav = context.watch<NavProvider>();
-    final collapsed = nav.collapsed || MediaQuery.sizeOf(context).width < 1000;
+    final collapsed = nav.collapsed;
     return Container(
       width: collapsed ? 72 : 220,
       margin: const EdgeInsets.fromLTRB(12, 4, 0, 16),

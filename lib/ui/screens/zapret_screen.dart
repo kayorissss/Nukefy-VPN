@@ -16,7 +16,8 @@ import '../widgets/section_card.dart';
 import 'zapret_games_screen.dart';
 
 class ZapretScreen extends StatefulWidget {
-  const ZapretScreen({super.key});
+  const ZapretScreen({super.key, this.active = true});
+  final bool active;
   @override
   State<ZapretScreen> createState() => _ZapretScreenState();
 }
@@ -43,14 +44,19 @@ class _ZapretScreenState extends State<ZapretScreen> {
     super.initState();
     _strategies = _zapret.strategies();
     _zapret.addListener(_changed);
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || !_zapret.isSupported) return;
-      await _run(() async {
-        await _zapret.serviceInstalled();
-        await _loadTargets();
-      });
-      if (mounted && context.read<SettingsProvider>().settings.zapretAutoUpdateCheck) await _checkUpdate(automatic: true);
-    });
+    if (widget.active) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _enter(); });
+  }
+
+  @override
+  void didUpdateWidget(covariant ZapretScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) _enter();
+  }
+
+  Future<void> _enter() async {
+    if (!_zapret.isSupported) return;
+    await _run(() async { await _zapret.serviceInstalled(); await _loadTargets(); });
+    if (mounted && context.read<SettingsProvider>().settings.zapretAutoUpdateCheck) await _checkUpdate(automatic: true);
   }
 
   @override
@@ -126,7 +132,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
         }
         completed = !token.isCancelled;
       } finally {
-        await _zapret.stop(sweep: false);
+        await _zapret.stop();
         // Cancellation restores the original selection and running state.
         final chosen = completed && best != null ? _strategies.firstWhere((e) => e.id == best) : previous;
         if (completed && best != null) await settings.update((v) => v.zapretStrategy = best!);
@@ -172,6 +178,18 @@ class _ZapretScreenState extends State<ZapretScreen> {
     return value;
   }
 
+  Future<void> _hosts() async {
+    final text = await _zapret.hostsProposal();
+    if (!mounted) return;
+    final apply = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: Text(s.t('zHostsReview')), content: SizedBox(width: 600, child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(s.t('zHostsWarning')), const SizedBox(height: 12), SelectableText(text),
+      ]))),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.t('cancel'))), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.t('zHostsApply')))],
+    ));
+    if (apply == true) await _zapret.applyHosts(text);
+  }
+
   Future<void> _ports(bool tcp) async {
     final settings = context.read<SettingsProvider>();
     final value = await _input(tcp ? 'TCP' : 'UDP', tcp ? settings.settings.zapretGameTcp : settings.settings.zapretGameUdp, ports: true);
@@ -179,6 +197,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
     await _run(() async {
       await settings.update((v) { if (tcp) { v.zapretGameTcp = value; } else { v.zapretGameUdp = value; } });
       _zapret.configure(settings.settings);
+      await _zapret.saveGameFilter();
       await _restart();
     });
   }
@@ -214,7 +233,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
       Text(s.t(_zapret.isRunning ? 'zapretOn' : 'zapretOff'), style: AppTextStyles.headline),
       const SizedBox(height: 16),
       FilledButton.icon(onPressed: busy || chosen == null ? null : () => _run(() async {
-        if (_zapret.isRunning) { await _zapret.stop(sweep: false); } else { await _start(chosen); }
+        if (_zapret.isRunning) { await _zapret.stop(); } else { await _start(chosen); }
       }), icon: const Icon(Icons.power_settings_new), label: Text(s.t(_zapret.isRunning ? 'zDeactivate' : 'zActivate'))),
       const SizedBox(height: 16),
       Text('${s.t('zVersion')}: ${_zapret.version ?? '—'}'),
@@ -233,7 +252,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
             {'off': s.t('zOff'), 'all': 'TCP + UDP', 'tcp': 'TCP', 'udp': 'UDP'},
             (v) => _run(() async {
               await settings.update((a) { a.zapretGameMode = v; a.zapretGameFilter = v != 'off'; });
-              _zapret.configure(settings.settings); await _restart();
+              _zapret.configure(settings.settings); await _zapret.saveGameFilter(); await _restart();
             })),
           _dropdown('IPSet Filter', _zapret.ipsetMode(), {'any': s.t('zIpsetAny'), 'loaded': s.t('zIpsetLoaded'), 'none': s.t('zIpsetNone')},
             (v) => _run(() async { await _zapret.setIpsetMode(v); await _restart(); })),
@@ -247,7 +266,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
             onChanged: busy ? null : (v) => _run(() async { await _zapret.setAutoUpdateCheck(v); await settings.update((a) => a.zapretAutoUpdateCheck = v); })),
           Wrap(spacing: 8, runSpacing: 8, children: [
             _button('zIpsetUpdate', Icons.download, () async { await _zapret.updateIpsetList(); await _restart(); }),
-            _button('zHosts', Icons.description_outlined, () async { final text = await _zapret.hostsProposal(); if (mounted) await _text(s.t('zHostsReview'), text); }),
+            _button('zHosts', Icons.description_outlined, _hosts),
             _button('zDiagnostics', Icons.health_and_safety_outlined, () async { final report = await _zapret.diagnostics(); if (mounted) await _text(s.t('zDiagnostics'), report); }),
             _button('zServiceStatus', Icons.info_outline, () async { await _zapret.serviceInstalled(); if (mounted) await _text(s.t('zServiceStatus'), s.t(_zapret.serviceRunning ? 'zapretOn' : _zapret.servicePresent ? 'zServiceStopped' : 'zServiceAbsent')); }),
             _button(_zapret.servicePresent ? 'zServiceRemove' : 'zServiceInstall', Icons.settings_suggest_outlined, () async {
@@ -260,7 +279,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
           const SizedBox(height: 16),
           Wrap(spacing: 12, runSpacing: 12, children: [for (final kind in ['discord', 'game'])
             _dropdown(kind == 'discord' ? s.t('zDiscordFake') : s.t('zGameFake'), _zapret.activeFake(kind), {for (final name in _zapret.fakeFiles()) name: name},
-              (name) => _run(() async { final running = _zapret.isRunning; if (running) await _zapret.stop(sweep: false); await _zapret.setActiveFake(kind, name); if (running && chosen != null) await _start(chosen); })),
+              (name) => _run(() async { final running = _zapret.isRunning; if (running) await _zapret.stop(); await _zapret.setActiveFake(kind, name); if (running && chosen != null) await _start(chosen); })),
           ]),
           const SizedBox(height: 16),
         ]),

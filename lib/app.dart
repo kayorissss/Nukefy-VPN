@@ -16,8 +16,7 @@ class NukefyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final servers = context.watch<ServersProvider>();
-    final empty = servers.servers.isEmpty && servers.subscriptions.isEmpty;
+    final empty = context.select<ServersProvider, bool>((servers) => servers.servers.isEmpty && servers.subscriptions.isEmpty);
     final welcome = !settings.settings.seenWelcome && empty;
     final brightness = switch (settings.themeMode) {
       ThemeMode.light => Brightness.light,
@@ -38,4 +37,3 @@ class NukefyApp extends StatelessWidget {
     );
   }
 }
-

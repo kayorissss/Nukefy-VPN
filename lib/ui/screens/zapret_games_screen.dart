@@ -42,14 +42,14 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
   void dispose() { _zapret.removeListener(_changed); _scroll.dispose(); super.dispose(); }
   void _changed() { if (mounted) setState(() {}); }
 
-  Future<void> _operation(Future<void> Function() action) async {
+  Future<void> _operation(Future<bool> Function() action) async {
     if (_zapret.busy || _loading) return;
     setState(() { _loading = true; _error = null; });
     try {
       await _zapret.exclusive(() async {
-        await action();
+        final changed = await action();
         await _zapret.refreshGameLists();
-        if (_zapret.isRunning) {
+        if (changed && _zapret.isRunning) {
           final strategy = _zapret.strategies().firstWhere((s) => s.id == _zapret.runningStrategyId);
           if (!await _zapret.start(strategy)) throw StateError(_zapret.lastError ?? 'Restart failed');
         }
@@ -61,29 +61,34 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
   Future<void> _refresh() => _operation(() async {
     final catalog = await _games.refreshCatalog();
     if (catalog != null && mounted) setState(() => _catalog = catalog);
-    await _games.refreshInstalled();
+    return await _games.refreshInstalled() > 0;
   });
 
   Future<void> _install(GameListInfo game) async {
     final s = context.read<SettingsProvider>().strings;
+    GameListPreview? preview;
+    await _operation(() async { preview = await _games.prepare(game); return false; });
+    if (preview == null || !mounted) return;
+    final list = preview!;
     final yes = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      title: Text(game.name), content: Text(s.t('zGameConsent')),
+      title: Text(game.name), content: SizedBox(width: 600, child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(s.t('zGameConsent')), const SizedBox(height: 12),
+        Text('${s.t('zDomainCount')}: ${list.domains.length} · ${s.t('zRejected')}: ${list.rejected}'),
+        const SizedBox(height: 12), SelectableText(list.domains.join('\n')),
+      ]))),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.t('cancel'))), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.t('add')))],
     ));
     if (yes != true || !mounted) return;
-    await _operation(() async {
-      final result = await _games.install(game);
-      if (!result.ok) throw FormatException(s.t('zInvalidList'));
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${s.t('zDomainCount')}: ${result.count} · ${s.t('zRejected')}: ${result.rejected}')));
-    });
+    await _operation(() async { await _games.install(list); return true; });
   }
 
   Future<void> _view(GameListInfo game) async {
-    final list = await _games.domains(game.id);
-    if (!mounted) return;
+    List<String>? list;
+    await _operation(() async { list = await _games.domains(game.id); return false; });
+    if (!mounted || list == null) return;
     final s = context.read<SettingsProvider>().strings;
     await showDialog<void>(context: context, builder: (ctx) => AlertDialog(
-      title: Text(game.name), content: SizedBox(width: 600, child: SingleChildScrollView(child: SelectableText(list.join('\n')))),
+      title: Text(game.name), content: SizedBox(width: 600, child: SingleChildScrollView(child: SelectableText(list!.join('\n')))),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.t('close')))],
     ));
   }
@@ -127,7 +132,7 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
         Text(installed == null ? s.t('zNotAdded') : '${installed.count} ${s.t('zDomains')}', style: p.captionStyle)]))]);
     final actions = Wrap(spacing: 8, children: installed == null
       ? [FilledButton.icon(onPressed: enabled ? () => _install(game) : null, icon: const Icon(Icons.add, size: 18), label: Text(s.t('add')))]
-      : [TextButton(onPressed: enabled ? () => _view(game) : null, child: Text(s.t('zShowDomains'))), IconButton(tooltip: s.t('delete'), onPressed: enabled ? () => _operation(() => _games.remove(game.id)) : null, icon: const Icon(Icons.delete_outline, size: 20))]);
+      : [TextButton(onPressed: enabled ? () => _view(game) : null, child: Text(s.t('zShowDomains'))), IconButton(tooltip: s.t('delete'), onPressed: enabled ? () => _operation(() async { await _games.remove(game.id); return true; }) : null, icon: const Icon(Icons.delete_outline, size: 20))]);
     return Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: p.card, border: Border.all(color: p.border), borderRadius: BorderRadius.circular(18)),
       child: _grid ? SizedBox(height: 130, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const Spacer(), actions])) : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const SizedBox(height: 10), actions]));
   }

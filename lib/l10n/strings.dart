@@ -4,6 +4,8 @@ class S {
   final String code;
 
   static const _ru = {
+    'zHostsApply': 'Применить к hosts',
+    'zHostsWarning': 'Изменится системный hosts: соответствующие домены будут направлены на IP из списка Flowseal. Существующие записи сохраняются; резервная копия создаётся рядом с hosts. Нужны права администратора. Применяйте только если доверяете этим записям.',
     'zActivate': 'Активировать',
     'zDeactivate': 'Отключить',
     'zVersion': 'Версия',
@@ -445,6 +447,8 @@ class S {
   };
 
   static const _en = {
+    'zHostsApply': 'Apply to hosts',
+    'zHostsWarning': 'This changes the system hosts file: these domains will resolve to IP addresses from Flowseal. Existing entries are preserved and a backup is saved beside hosts. Administrator rights required. Apply only if you trust these entries.',
     'zActivate': 'Activate',
     'zDeactivate': 'Deactivate',
     'zVersion': 'Version',

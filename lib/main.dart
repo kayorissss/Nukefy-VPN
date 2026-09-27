@@ -121,16 +121,23 @@ Future<void> _main() async {
     AppLog.log('first frame after ${DateTime.now().difference(startedAt).inMilliseconds}ms');
     if (Platform.isWindows) {
       final zapret = ZapretService.instance;
-      await zapret.refreshGameLists();
-      if (settings.settings.zapretAutoStart) {
-        final list = zapret.strategies();
-        final chosen = list.where((e) => e.id == settings.settings.zapretStrategy).firstOrNull ?? list.firstOrNull;
-        if (chosen != null) {
-          zapret.gameMode = settings.settings.zapretGameMode;
-          zapret.gameTcpRange = settings.settings.zapretGameTcp;
-          zapret.gameUdpRange = settings.settings.zapretGameUdp;
-          unawaited(zapret.start(chosen).then((ok) => AppLog.log('zapret autostart ok=$ok ${zapret.lastError ?? ''}')));
-        }
+      try {
+        await zapret.exclusive(() async {
+          await zapret.refreshGameLists();
+          await zapret.serviceInstalled();
+          if (settings.settings.zapretAutoStart && !zapret.servicePresent) {
+            final list = zapret.strategies();
+            final chosen = list.where((e) => e.id == settings.settings.zapretStrategy).firstOrNull ?? list.firstOrNull;
+            if (chosen != null) {
+              zapret.configure(settings.settings);
+              final ok = await zapret.start(chosen);
+              AppLog.log('zapret autostart ok=$ok ${zapret.lastError ?? ''}');
+            }
+          }
+        });
+      } catch (error) {
+        zapret.lastError = '$error';
+        AppLog.log('zapret startup failed: $error');
       }
     }
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
