@@ -1,0 +1,291 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
+import '../constants/app_constants.dart';
+import 'storage_service.dart';
+import 'zapret_service.dart';
+
+/// One game/service list from medvedeff-true/ru-gaming-blocklist.
+class GameListInfo {
+  const GameListInfo({
+    required this.id,
+    required this.name,
+    required this.file,
+    this.size = 0,
+  });
+
+  /// File name without `.txt`, e.g. `EpicGames_Fortnite`.
+  final String id;
+  /// Human readable name, e.g. `Epic Games / Fortnite`.
+  final String name;
+  final String file;
+  final int size;
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'file': file, 'size': size};
+
+  static GameListInfo fromJson(Map<String, dynamic> json) => GameListInfo(
+        id: (json['id'] as String?) ?? '',
+        name: (json['name'] as String?) ?? '',
+        file: (json['file'] as String?) ?? '',
+        size: (json['size'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class InstalledGame {
+  const InstalledGame({
+    required this.id,
+    required this.name,
+    required this.count,
+    this.updatedAt,
+  });
+
+  final String id;
+  final String name;
+  final int count;
+  final DateTime? updatedAt;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'count': count,
+        'updatedAt': updatedAt?.toIso8601String(),
+      };
+
+  static InstalledGame fromJson(Map<String, dynamic> json) => InstalledGame(
+        id: (json['id'] as String?) ?? '',
+        name: (json['name'] as String?) ?? '',
+        count: (json['count'] as num?)?.toInt() ?? 0,
+        updatedAt: DateTime.tryParse('${json['updatedAt']}'),
+      );
+}
+
+class GameInstallResult {
+  const GameInstallResult({required this.ok, this.count = 0, this.rejected = 0});
+  final bool ok;
+  final int count;
+  final int rejected;
+}
+
+/// Downloads per-game domain lists and drops them next to zapret as
+/// hostlists, so the DPI bypass covers game services too.
+///
+/// Everything is fetched from one fixed repository and every single line is
+/// validated before it reaches a file winws will read — nothing executable
+/// and nothing outside `games/*.txt` is ever accepted.
+class GameBlocklistService {
+  GameBlocklistService._();
+  static final GameBlocklistService instance = GameBlocklistService._();
+
+  static const String repo = 'medvedeff-true/ru-gaming-blocklist';
+  static const String branch = 'main';
+  static const String _contentsApi = 'https://api.github.com/repos/$repo/contents/games';
+  static const String _rawBase = 'https://raw.githubusercontent.com/$repo/$branch/games';
+
+  static bool validId(String id) => RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,100}$').hasMatch(id);
+
+  /// Refuse anything that is not a plain host name: no slashes, no shell
+  /// characters, no spaces, at least one dot and a latin TLD.
+  static final RegExp _domain = RegExp(r'^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$');
+  static const int _maxFileBytes = 2 * 1024 * 1024;
+
+  static const String _catalogKey = 'zapret_games_catalog';
+  static const String _installedKey = 'zapret_games_installed';
+
+  final Dio _dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 12),
+    receiveTimeout: const Duration(seconds: 30),
+  ));
+
+  /// Directory the game lists live in: next to zapret when it exists.
+  Future<Directory> get _dir async {
+    final root = ZapretService.instance.root;
+    if (root != null) {
+      final dir = Directory(p.join(root.path, 'lists', 'games'));
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      return dir;
+    }
+    final support = await getApplicationSupportDirectory();
+    final dir = Directory(p.join(support.path, 'zapret-games'));
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    return dir;
+  }
+
+  /// Absolute paths of every installed game list that exists on disk —
+  /// injected as extra `--hostlist` arguments when winws starts.
+  Future<List<String>> installedListPaths() async {
+    final dir = await _dir;
+    if (!dir.existsSync()) return const [];
+    final ids = installed().map((g) => g.id).where(validId).toSet();
+    return dir
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.txt') && ids.contains(p.basenameWithoutExtension(f.path)))
+        .map((f) => f.path)
+        .toList()
+      ..sort();
+  }
+
+  List<InstalledGame> installed() {
+    final json = StorageService.instance.readJson(_installedKey);
+    final items = (json?['items'] as List?) ?? const [];
+    return items
+        .whereType<Map>()
+        .map((e) => InstalledGame.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  bool isInstalled(String id) => installed().any((e) => e.id == id);
+
+  Future<void> _saveInstalled(List<InstalledGame> items) async {
+    await StorageService.instance.writeJson(
+      _installedKey,
+      {'items': items.map((e) => e.toJson()).toList()},
+    );
+  }
+
+  /// Cached copy of the catalogue (refreshed whenever the tab is opened).
+  List<GameListInfo> cachedCatalog() {
+    final json = StorageService.instance.readJson(_catalogKey);
+    final items = (json?['items'] as List?) ?? const [];
+    return items
+        .whereType<Map>()
+        .map((e) => GameListInfo.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  /// Lists `games/*.txt` straight from the repository, so games added
+  /// upstream show up on their own.
+  Future<List<GameListInfo>?> refreshCatalog() async {
+    try {
+      final response = await _dio.get<List<dynamic>>(
+        _contentsApi,
+        options: Options(
+          headers: const {
+            'Accept': 'application/vnd.github+json',
+            'User-Agent': AppConstants.userAgent,
+          },
+          responseType: ResponseType.json,
+          validateStatus: (code) => code != null && code < 500,
+        ),
+      );
+      if (response.statusCode != 200) throw StateError('GitHub HTTP ${response.statusCode}');
+      final list = (response.data ?? const [])
+          .whereType<Map>()
+          .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+          .where((e) => e['type'] == 'file')
+          .map((e) => '${e['name']}')
+          .where((name) => name.endsWith('.txt') && validId(name.substring(0, name.length - 4)))
+          .map((name) => GameListInfo(
+                id: name.substring(0, name.length - 4),
+                name: _pretty(name.substring(0, name.length - 4)),
+                file: name,
+                size: 0,
+              ))
+          .toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+      if (list.isEmpty) return null;
+      await StorageService.instance.writeJson(
+        _catalogKey,
+        {
+          'items': list.map((e) => e.toJson()).toList(),
+          'at': DateTime.now().toIso8601String(),
+        },
+      );
+      return list;
+    } on DioException {
+      rethrow;
+    }
+  }
+
+  /// `EpicGames_Fortnite` → `EpicGames / Fortnite`.
+  static String _pretty(String id) {
+    return id.replaceAll('_', ' / ').replaceAllMapped(
+          RegExp(r'([a-z])([A-Z])'),
+          (m) => '${m.group(1)} ${m.group(2)}',
+        );
+  }
+
+  /// Downloads one list, validates it and writes it as a hostlist.
+  Future<GameInstallResult> install(GameListInfo game) async {
+    if (!validId(game.id) || game.file != '${game.id}.txt') throw const FormatException('Invalid game ID');
+    try {
+      final url = '$_rawBase/${Uri.encodeComponent(game.file)}';
+      final response = await _dio.get<ResponseBody>(
+        url, options: Options(responseType: ResponseType.stream, followRedirects: false),
+      );
+      final body = <int>[];
+      await for (final chunk in response.data!.stream) {
+        if (body.length + chunk.length > _maxFileBytes) throw const FormatException('List exceeds 2 MiB');
+        body.addAll(chunk);
+      }
+      if (body.isEmpty) {
+        return const GameInstallResult(ok: false);
+      }
+      final text = utf8.decode(body, allowMalformed: true);
+      final clean = <String>[];
+      var rejected = 0;
+      for (final rawLine in text.split(RegExp(r'\r?\n'))) {
+        final line = rawLine.trim().toLowerCase();
+        if (line.isEmpty || line.startsWith('#') || line.startsWith('//')) continue;
+        if (validDomain(line)) {
+          clean.add(line);
+        } else {
+          rejected++;
+        }
+      }
+      if (clean.isEmpty) return const GameInstallResult(ok: false);
+
+      final dir = await _dir;
+      final file = File(p.join(dir.path, '${game.id}.txt'));
+      final temp = File('${file.path}.tmp');
+      await temp.writeAsString('${clean.toSet().join('\n')}\n', flush: true);
+      await temp.rename(file.path);
+
+      final items = [...installed()]..removeWhere((e) => e.id == game.id);
+      items.add(InstalledGame(id: game.id, name: game.name, count: clean.toSet().length, updatedAt: DateTime.now()));
+      await _saveInstalled(items);
+      return GameInstallResult(ok: true, count: clean.toSet().length, rejected: rejected);
+    } on DioException {
+      rethrow;
+    }
+  }
+
+  static bool validDomain(String value) => _domain.hasMatch(value) &&
+      !const ['exe', 'bat', 'cmd', 'ps1', 'dll', 'bin', 'txt', 'local', 'localhost', 'internal', 'test', 'invalid'].contains(value.split('.').last);
+
+  Future<List<String>> domains(String id) async {
+    if (!validId(id)) throw const FormatException('Invalid game ID');
+    final file = File(p.join((await _dir).path, '$id.txt'));
+    return (await file.readAsLines()).where(validDomain).toList();
+  }
+
+  /// Re-downloads every installed list; returns how many changed.
+  Future<int> refreshInstalled() async {
+    final current = installed();
+    var updated = 0;
+    for (final game in current) {
+      final info = GameListInfo(id: game.id, name: game.name, file: '${game.id}.txt');
+      final before = await domains(game.id);
+      final result = await install(info);
+      if (!result.ok) throw const FormatException('Invalid updated game list');
+      final after = await domains(game.id);
+      if (before.join('\n') != after.join('\n')) updated++;
+    }
+    return updated;
+  }
+
+  Future<void> remove(String id) async {
+    if (!validId(id)) throw const FormatException('Invalid game ID');
+    final dir = await _dir;
+    final file = File(p.join(dir.path, '$id.txt'));
+    if (file.existsSync()) {
+      await file.delete();
+    }
+    final items = [...installed()]..removeWhere((e) => e.id == id);
+    await _saveInstalled(items);
+  }
+}

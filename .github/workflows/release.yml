@@ -157,7 +157,9 @@ jobs:
           Copy-Item -Recurse -Force (Join-Path $root.FullName 'bin') $dest
           Copy-Item -Recurse -Force (Join-Path $root.FullName 'lists') $dest
           Get-ChildItem $root.FullName -Filter 'general*.bat' | Copy-Item -Destination $dest -Force
-          $zip.Name | Out-File -FilePath (Join-Path $dest 'VERSION.txt')
+          Copy-Item -Force (Join-Path $root.FullName 'service.bat') $dest
+          Copy-Item -Recurse -Force (Join-Path $root.FullName 'utils') $dest
+          $zip.Name | Out-File -Encoding utf8 -FilePath (Join-Path $dest 'VERSION.txt')
           Get-ChildItem $dest
       - name: Build portable single exe
         shell: pwsh

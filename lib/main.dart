@@ -119,12 +119,18 @@ Future<void> _main() async {
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     AppLog.log('first frame after ${DateTime.now().difference(startedAt).inMilliseconds}ms');
-    if (Platform.isWindows && settings.settings.zapretAutoStart) {
-      final list = ZapretService.instance.strategies();
-      final chosen = list.where((e) => e.id == settings.settings.zapretStrategy).firstOrNull ?? list.firstOrNull;
-      if (chosen != null) {
-        ZapretService.instance.gameFilter = settings.settings.zapretGameFilter;
-        unawaited(ZapretService.instance.start(chosen).then((ok) => AppLog.log('zapret autostart ok=$ok ${ZapretService.instance.lastError ?? ''}')));
+    if (Platform.isWindows) {
+      final zapret = ZapretService.instance;
+      await zapret.refreshGameLists();
+      if (settings.settings.zapretAutoStart) {
+        final list = zapret.strategies();
+        final chosen = list.where((e) => e.id == settings.settings.zapretStrategy).firstOrNull ?? list.firstOrNull;
+        if (chosen != null) {
+          zapret.gameMode = settings.settings.zapretGameMode;
+          zapret.gameTcpRange = settings.settings.zapretGameTcp;
+          zapret.gameUdpRange = settings.settings.zapretGameUdp;
+          unawaited(zapret.start(chosen).then((ok) => AppLog.log('zapret autostart ok=$ok ${zapret.lastError ?? ''}')));
+        }
       }
     }
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {

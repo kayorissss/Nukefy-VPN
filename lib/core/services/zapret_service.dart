@@ -2,19 +2,55 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import 'game_blocklist_service.dart';
 import 'storage_service.dart';
+import '../models/app_settings.dart';
 
 /// One `general*.bat` from Flowseal/zapret-discord-youtube, reduced to the
 /// arguments it passes to `winws.exe`.
 class ZapretStrategy {
-  const ZapretStrategy({required this.id, required this.title, required this.file});
+  const ZapretStrategy({
+    required this.id,
+    required this.title,
+    required this.file,
+    required this.number,
+  });
+
   final String id;
   final String title;
   final File file;
+  /// 1-based position in the ordered list — shown on the strategy tile.
+  final int number;
+
+  /// `general` → standard, `general (ALT3)` → alternative, and so on.
+  ZapretStrategyFamily get family {
+    final name = id.toLowerCase();
+    if (name == 'general') return ZapretStrategyFamily.standard;
+    if (name.contains('fake tls auto')) return ZapretStrategyFamily.fakeTlsAuto;
+    if (name.contains('simple fake')) return ZapretStrategyFamily.simpleFake;
+    if (name.contains('alt')) return ZapretStrategyFamily.alternative;
+    if (name.contains('exp')) return ZapretStrategyFamily.experimental;
+    return ZapretStrategyFamily.other;
+  }
+
+  /// Short hint about the fake packets the strategy sends.
+  String get fakeKind {
+    final name = id.toLowerCase();
+    if (name.contains('udp')) return 'UDP';
+    if (name.contains('tls')) return 'TLS';
+    if (name.contains('quic')) return 'QUIC';
+    if (name.contains('http')) return 'HTTP';
+    return 'TCP';
+  }
 }
+
+/// What a strategy does, used only to colour and subtitle the tiles.
+enum ZapretStrategyFamily { standard, alternative, fakeTlsAuto, simpleFake, experimental, other }
 
 /// Windows-only wrapper around zapret (`winws.exe`, WinDivert) bundled in
 /// `<exe dir>/zapret/`. Runs the DPI bypass in the background, without a
@@ -27,7 +63,17 @@ class ZapretService extends ChangeNotifier {
   String? _runningStrategyId;
   String? lastError;
   final List<String> _log = [];
-  bool gameFilter = false;
+  /// Kept for compatibility: true when the game filter is on in any mode.
+  bool get gameFilter => gameMode != 'off';
+  set gameFilter(bool value) => gameMode = value ? 'all' : 'off';
+  /// Flowseal game filter: off | all | tcp | udp.
+  String gameMode = 'off';
+  /// Port ranges used for the game filter (Flowseal default: 1024-65535).
+  String gameTcpRange = '1024-65535';
+  String gameUdpRange = '1024-65535';
+
+  /// Absolute paths of the installed per-game domain lists.
+  List<String> gameListPaths = const [];
 
   /// Name of the list winws reads user domains from.
   static const String userListName = 'list-general-user.txt';
@@ -37,7 +83,34 @@ class ZapretService extends ChangeNotifier {
   static const String _placeholder = 'domain.example.abc';
 
   bool get isSupported => Platform.isWindows && root != null;
-  bool get isRunning => _process != null;
+  bool get isRunning => _process != null || serviceRunning;
+  bool servicePresent = false;
+  bool serviceRunning = false;
+  bool busy = false;
+
+  Future<T> exclusive<T>(Future<T> Function() action) async {
+    if (busy) throw StateError('zapret-busy');
+    busy = true;
+    notifyListeners();
+    try { return await action(); }
+    finally { busy = false; notifyListeners(); }
+  }
+
+  void configure(AppSettings settings) {
+    gameMode = settings.zapretGameMode;
+    gameTcpRange = settings.zapretGameTcp;
+    gameUdpRange = settings.zapretGameUdp;
+    if (!validPorts(gameTcpRange) || !validPorts(gameUdpRange)) {
+      throw const FormatException('Invalid game filter ports');
+    }
+  }
+
+  static bool validPorts(String input) => input.isNotEmpty && input.split(',').every((item) {
+    if (!RegExp(r'^[1-9][0-9]{0,4}(-[1-9][0-9]{0,4})?$').hasMatch(item)) return false;
+    final range = item.split('-').map(int.parse).toList();
+    return range.every((n) => n <= 65535) && range.first <= range.last;
+  });
+
   String? get runningStrategyId => _runningStrategyId;
   List<String> get log => List.unmodifiable(_log);
 
@@ -60,11 +133,12 @@ class ZapretService extends ChangeNotifier {
         .toList()
       ..sort((a, b) => _order(a.path).compareTo(_order(b.path)));
     return [
-      for (final f in files)
+      for (var i = 0; i < files.length; i++)
         ZapretStrategy(
-          id: p.basenameWithoutExtension(f.path),
-          title: _title(p.basenameWithoutExtension(f.path)),
-          file: f,
+          id: p.basenameWithoutExtension(files[i].path),
+          title: _title(p.basenameWithoutExtension(files[i].path)),
+          file: files[i],
+          number: i + 1,
         ),
     ];
   }
@@ -116,8 +190,10 @@ class ZapretService extends ChangeNotifier {
       }
     }
     var command = buffer.toString();
-    final gameTcp = gameFilter ? '1024-65535' : '12';
-    final gameUdp = gameFilter ? '1024-65535' : '12';
+    // Flowseal uses the port 12 as "filter disabled"; with the game filter
+    // on it swaps in the configured ranges.
+    final gameTcp = (gameMode == 'off' || gameMode == 'udp') ? '12' : gameTcpRange;
+    final gameUdp = (gameMode == 'off' || gameMode == 'tcp') ? '12' : gameUdpRange;
     command = command
         .replaceAll('%BIN%', bin)
         .replaceAll('%LISTS%', lists)
@@ -126,17 +202,26 @@ class ZapretService extends ChangeNotifier {
         .replaceAll('%GameFilter%', gameTcp);
     final args = _tokenize(command);
     if (!withUserList || _userListPath == null) return args;
-    if (args.any((a) => a.toLowerCase().contains(userListName.toLowerCase()))) return args;
+
     final out = <String>[];
-    for (final arg in args) {
-      out.add(arg);
-      // `--hostlist="...\list-general.txt"` → also load the user domains.
-      final lower = arg.toLowerCase();
-      final isHostlist = lower.startsWith('--hostlist=') || lower.startsWith('--hostlist-domains=');
-      if (isHostlist && lower.contains(defaultListName.toLowerCase())) {
-        out.add('${arg.split('=').first}=$_userListPath');
+    // Hostlist presence must be checked per --new profile, not globally.
+    var profile = <String>[];
+    void appendProfile() {
+      final hasUser = profile.any((a) => a.startsWith('--hostlist=') && a.toLowerCase().contains(userListName));
+      for (final arg in profile) {
+        out.add(arg);
+        if (arg.startsWith('--hostlist=') && arg.toLowerCase().contains(defaultListName)) {
+          if (!hasUser) out.add('--hostlist=$_userListPath');
+          for (final path in gameListPaths) { out.add('--hostlist=$path'); }
+        }
       }
+      profile = [];
     }
+    for (final arg in args) {
+      if (arg == '--new') { appendProfile(); out.add(arg); }
+      else { profile.add(arg); }
+    }
+    appendProfile();
     return out;
   }
 
@@ -145,6 +230,20 @@ class ZapretService extends ChangeNotifier {
     final dir = root;
     if (dir == null) return null;
     return p.join(dir.path, 'lists', userListName);
+  }
+
+  /// Re-reads the installed game lists from disk; safe to call often.
+  Future<void> refreshGameLists() async {
+    final next = await GameBlocklistService.instance.installedListPaths();
+    if (next.length == gameListPaths.length) {
+      var same = true;
+      for (var i = 0; i < next.length; i++) {
+        if (next[i] != gameListPaths[i]) same = false;
+      }
+      if (same) return;
+    }
+    gameListPaths = next;
+    notifyListeners();
   }
 
   /// Domains the user asked to unblock ("добавить домен для обхода").
@@ -192,6 +291,295 @@ class ZapretService extends ChangeNotifier {
   /// Rough shape check for the "add domain" dialog.
   static bool looksLikeDomain(String value) {
     return RegExp(r'^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$').hasMatch(value);
+  }
+
+  // ═══ Version ═══════════════════════════════════════════════════════════
+
+  /// `service.bat` carries `set "LOCAL_VERSION=1.10.3"`; the release workflow
+  /// also drops the archive name into VERSION.txt.
+  String? get version {
+    final dir = root;
+    if (dir == null) return null;
+    final tagged = File(p.join(dir.path, 'VERSION.txt'));
+    if (tagged.existsSync()) {
+      final match = RegExp(r'(\d+\.\d+(?:\.\d+)?)').firstMatch(
+        String.fromCharCodes(tagged.readAsBytesSync().where((b) => b != 0)).trim(),
+      );
+      if (match != null) return match.group(1);
+    }
+    final bat = File(p.join(dir.path, 'service.bat'));
+    if (bat.existsSync()) {
+      final text = bat.readAsStringSync(encoding: const Utf8Codec(allowMalformed: true));
+      final match = RegExp(r'LOCAL_VERSION=([^"\r\n]+)').firstMatch(text);
+      if (match != null) return match.group(1)!.trim();
+    }
+    return null;
+  }
+
+  bool get hasServiceBat {
+    final dir = root;
+    return dir != null && File(p.join(dir.path, 'service.bat')).existsSync();
+  }
+
+  // ═══ IPSet filter (Flowseal: any | loaded | none) ═════════════════════
+
+  static const String _ipsetStub = '203.0.113.113/32';
+  static const String _ipsetUrl =
+      'https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/refs/heads/main/.service/ipset-service.txt';
+
+  String? get _ipsetPath {
+    final dir = root;
+    if (dir == null) return null;
+    return p.join(dir.path, 'lists', 'ipset-all.txt');
+  }
+
+  /// `any` — empty list (bypass everything), `loaded` — the real list,
+  /// `none` — stub entry, nothing matches.
+  String ipsetMode() {
+    final path = _ipsetPath;
+    if (path == null) return 'any';
+    final file = File(path);
+    if (!file.existsSync()) return 'any';
+    final lines = file
+        .readAsStringSync(encoding: const Utf8Codec(allowMalformed: true))
+        .split(RegExp(r'\r?\n'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && !e.startsWith('#'))
+        .toList();
+    if (lines.isEmpty) return 'any';
+    if (lines.any((e) => e.contains(_ipsetStub))) return 'none';
+    return 'loaded';
+  }
+
+  Future<void> setIpsetMode(String mode) async {
+    if (!const ['none', 'any', 'loaded'].contains(mode)) throw ArgumentError.value(mode);
+    final path = _ipsetPath;
+    if (path == null) throw StateError('zapret-missing');
+    final file = File(path);
+    final backup = File('$path.backup');
+    final current = ipsetMode();
+    if (current == mode) return;
+    if (current == 'loaded') await file.copy(backup.path);
+    if (mode == 'loaded') {
+      if (!await backup.exists()) throw StateError('ipset-backup-missing');
+      await backup.copy(path);
+    } else {
+      await file.writeAsString(mode == 'none' ? '$_ipsetStub\n' : '');
+    }
+    notifyListeners();
+  }
+
+  Future<void> updateIpsetList() async {
+    final path = _ipsetPath;
+    if (path == null) throw StateError('zapret-missing');
+    final dio = Dio();
+    try {
+      final response = await dio.get<String>(_ipsetUrl, options: Options(responseType: ResponseType.plain));
+      final clean = <String>[];
+      for (final line in response.data!.split('\n')) {
+        final value = line.split('#').first.trim();
+        if (value.isEmpty) continue;
+        if (!validIpOrCidr(value)) throw const FormatException('Invalid IPSet list');
+        clean.add(value);
+      }
+      if (clean.isEmpty) throw const FormatException('Empty IPSet list');
+      // Updating a list must not silently enable a disabled filter.
+      final destination = ipsetMode() == 'loaded' ? path : '$path.backup';
+      await File(destination).writeAsString('${clean.toSet().join('\n')}\n');
+      notifyListeners();
+    } finally { dio.close(); }
+  }
+
+  static bool validIpOrCidr(String value) {
+    final parts = value.split('/');
+    if (parts.length > 2) return false;
+    final ip = InternetAddress.tryParse(parts.first);
+    if (ip == null) return false;
+    if (parts.length == 1) return true;
+    final bits = int.tryParse(parts.last);
+    return bits != null && bits >= 0 && bits <= (ip.type == InternetAddressType.IPv4 ? 32 : 128);
+  }
+
+  // ═══ Fake files (Discord / game UDP) ══════════════════════════════════
+
+  /// Every `*.bin` in `bin/` except the two active ones.
+  List<String> fakeFiles() {
+    final dir = root;
+    if (dir == null) return const [];
+    final bin = Directory(p.join(dir.path, 'bin'));
+    if (!bin.existsSync()) return const [];
+    return bin
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.toLowerCase().endsWith('.bin'))
+        .map((f) => p.basenameWithoutExtension(f.path))
+        .where((name) => !name.toUpperCase().startsWith('ACTIVE_'))
+        .toList()
+      ..sort();
+  }
+
+  /// `discord` → bin/ACTIVE_DISCORD_UDP.bin, `game` → bin/ACTIVE_GAME_UDP.bin.
+  String? activeFake(String kind) {
+    final dir = root;
+    if (dir == null) return null;
+    final target = File(p.join(dir.path, 'bin', kind == 'game' ? 'ACTIVE_GAME_UDP.bin' : 'ACTIVE_DISCORD_UDP.bin'));
+    if (!target.existsSync()) return null;
+    final hash = _md5Of(target);
+    for (final name in fakeFiles()) {
+      final candidate = File(p.join(dir.path, 'bin', '$name.bin'));
+      if (_md5Of(candidate) == hash) return name;
+    }
+    return null;
+  }
+
+  String _md5Of(File file) => md5.convert(file.readAsBytesSync()).toString();
+
+  Future<void> setActiveFake(String kind, String name) async {
+    if (!const ['discord', 'game'].contains(kind) || !fakeFiles().contains(name)) {
+      throw ArgumentError('Unknown fake');
+    }
+    final bin = p.join(root!.path, 'bin');
+    await File(p.join(bin, '$name.bin')).copy(p.join(bin, kind == 'game' ? 'ACTIVE_GAME_UDP.bin' : 'ACTIVE_DISCORD_UDP.bin'));
+    notifyListeners();
+  }
+
+  Future<int?> _serviceState() async {
+    final result = await Process.run('sc.exe', ['query', 'zapret']);
+    if (result.exitCode == 1060) return null;
+    if (result.exitCode != 0) throw ProcessException('sc.exe', ['query', 'zapret'], '${result.stderr} ${result.stdout}', result.exitCode);
+    // STATE is followed by its numeric value even on localized Windows.
+    final match = RegExp(r'^\s*[^:\r\n]+:\s+([1-7])\s+[A-Z_]+', multiLine: true).firstMatch('${result.stdout}');
+    if (match == null) throw const FormatException('Unrecognized service state');
+    return int.parse(match.group(1)!);
+  }
+
+  Future<bool> serviceInstalled() async {
+    if (!Platform.isWindows) return false;
+    final state = await _serviceState();
+    servicePresent = state != null;
+    serviceRunning = state == 4;
+    notifyListeners();
+    return servicePresent;
+  }
+
+  Future<void> _sc(List<String> args) async {
+    final result = await Process.run('sc.exe', args);
+    if (result.exitCode != 0) throw ProcessException('sc.exe', args, '${result.stdout} ${result.stderr}', result.exitCode);
+  }
+
+  Future<void> _stopService() async {
+    var state = await _serviceState();
+    if (state == null || state == 1) { serviceRunning = false; return; }
+    if (state != 3) await _sc(['stop', 'zapret']);
+    final clock = Stopwatch()..start();
+    while (state != 1 && state != null) {
+      if (clock.elapsed > const Duration(seconds: 15)) throw StateError('Service did not stop');
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      state = await _serviceState();
+    }
+    serviceRunning = false;
+  }
+
+  String _serviceCommand(ZapretStrategy strategy) {
+    final args = parseArgs(strategy);
+    if (args.isEmpty) throw StateError('Empty strategy');
+    return '"${p.join(root!.path, 'bin', 'winws.exe')}" ${args.map((a) => '"$a"').join(' ')}';
+  }
+
+  Future<void> installService(ZapretStrategy strategy) async {
+    await stop(sweep: false);
+    _ensureUserLists();
+    _writeUserList(loadDomains());
+    await refreshGameLists();
+    if (await serviceInstalled()) throw StateError('Service already installed');
+    await _sc(['create', 'zapret', 'binPath=', _serviceCommand(strategy), 'start=', 'auto', 'DisplayName=', 'zapret (Nukefy VPN)']);
+    servicePresent = true;
+    await _sc(['start', 'zapret']);
+    await serviceInstalled();
+    _runningStrategyId = strategy.id;
+  }
+
+  Future<void> removeService() async {
+    await _stopService();
+    await _sc(['delete', 'zapret']);
+    servicePresent = false;
+    serviceRunning = false;
+    _runningStrategyId = null;
+    notifyListeners();
+  }
+
+  // ═══ Tools ════════════════════════════════════════════════════════════
+
+  /// Opens the zapret folder in Explorer.
+  Future<void> openFolder() async {
+    final dir = root;
+    if (dir == null) throw StateError('zapret-missing');
+    await Process.run('explorer.exe', [dir.path]);
+  }
+
+  /// Save a reviewed proposal, never overwrite the system hosts file.
+  Future<String> hostsProposal() async {
+    final dio = Dio();
+    try {
+      final response = await dio.get<String>(
+        'https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/main/.service/hosts',
+        options: Options(responseType: ResponseType.plain),
+      );
+      final text = response.data!;
+      for (final raw in text.split('\n')) {
+        final line = raw.split('#').first.trim();
+        if (line.isEmpty) continue;
+        final items = line.split(RegExp(r'\s+'));
+        if (items.length < 2 || InternetAddress.tryParse(items.first) == null || !items.skip(1).every(looksLikeDomain)) {
+          throw const FormatException('Invalid hosts list');
+        }
+      }
+      return text;
+    } finally { dio.close(); }
+  }
+
+  /// Short health report: what is loaded, what is running, what is missing.
+  Future<String> diagnostics() async {
+    final lines = <String>[];
+    final dir = root;
+    lines.add('zapret: ${version ?? '—'}');
+    lines.add('path: ${dir?.path ?? '—'}');
+    if (dir == null) return lines.join('\n');
+    lines.add('winws.exe: ${File(p.join(dir.path, 'bin', 'winws.exe')).existsSync() ? 'ok' : 'MISSING'}');
+    final drivers = Directory(p.join(dir.path, 'bin')).existsSync()
+        ? Directory(p.join(dir.path, 'bin')).listSync().whereType<File>().where((f) => f.path.endsWith('.sys')).length
+        : 0;
+    lines.add('WinDivert .sys: $drivers');
+    lines.add('ipset filter: ${ipsetMode()}');
+    lines.add('game filter: $gameMode (tcp: ${gameTcpRange.isEmpty ? '12' : gameTcpRange}, udp: ${gameUdpRange.isEmpty ? '12' : gameUdpRange})');
+    lines.add('service: ${await serviceInstalled() ? 'installed' : 'not installed'}');
+    lines.add('running: ${isRunning ? 'yes' : 'no'}');
+    if (Platform.isWindows) {
+      final ts = await Process.run('netsh', ['interface', 'tcp', 'show', 'global']);
+      final text = '${ts.stdout}';
+      lines.add('tcp timestamps: ${text.toLowerCase().contains('timestamps') && text.toLowerCase().contains('enabled') ? 'enabled' : 'disabled'}');
+    }
+    return lines.join('\n');
+  }
+
+  /// Mirrors utils/check_updates.enabled — zapret's own updater flag.
+  bool get autoUpdateCheck {
+    final dir = root;
+    if (dir == null) return false;
+    return File(p.join(dir.path, 'utils', 'check_updates.enabled')).existsSync();
+  }
+
+  Future<void> setAutoUpdateCheck(bool enabled) async {
+    final dir = root;
+    if (dir == null) return;
+    final file = File(p.join(dir.path, 'utils', 'check_updates.enabled'));
+    if (enabled) {
+      await file.parent.create(recursive: true);
+      await file.writeAsString('ENABLED');
+    } else if (await file.exists()) {
+      await file.delete();
+    }
+    notifyListeners();
   }
 
   /// winws refuses to start when a hostlist file is missing or empty, so the
@@ -252,18 +640,23 @@ class ZapretService extends ChangeNotifier {
 
   Future<bool> start(ZapretStrategy strategy) async {
     if (!isSupported) return false;
-    await stop();
+    await stop(sweep: false);
     lastError = null;
     _log.clear();
     try {
       _ensureUserLists();
       _writeUserList(loadDomains());
+      await refreshGameLists();
+      if (servicePresent) {
+        await _sc(['config', 'zapret', 'binPath=', _serviceCommand(strategy)]);
+        await _sc(['start', 'zapret']);
+        await serviceInstalled();
+        _runningStrategyId = strategy.id;
+        return serviceRunning;
+      }
       final args = parseArgs(strategy);
       if (args.isEmpty) throw Exception('strategy has no winws arguments');
       final exe = p.join(root!.path, 'bin', 'winws.exe');
-      // Any stale instance (started by the .bat manually) would hold the
-      // WinDivert filter; take it over.
-      await Process.run('taskkill', ['/F', '/IM', 'winws.exe']);
       final process = await Process.start(exe, args, workingDirectory: p.join(root!.path, 'bin'));
       _process = process;
       _runningStrategyId = strategy.id;
@@ -313,15 +706,13 @@ class ZapretService extends ChangeNotifier {
       process.kill();
       try {
         await process.exitCode.timeout(const Duration(milliseconds: 800));
-      } catch (_) {}
+      } on TimeoutException {
+        final killed = await Process.run('taskkill', ['/F', '/PID', '${process.pid}']);
+        if (killed.exitCode != 0) throw StateError('Cannot stop winws: ${killed.stdout}');
+        await process.exitCode;
+      }
     }
-    // WinDivert driver handles survive a plain kill sometimes; make sure no
-    // winws is left behind.
-    if (sweep) {
-      try {
-        await Process.run('taskkill', ['/F', '/IM', 'winws.exe']).timeout(const Duration(seconds: 3));
-      } catch (_) {}
-    }
+    if (servicePresent && serviceRunning) await _stopService();
     notifyListeners();
   }
 }

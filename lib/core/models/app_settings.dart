@@ -39,6 +39,12 @@ class AppSettings {
     this.zapretStrategy = 'general',
     this.zapretAutoStart = false,
     this.zapretGameFilter = false,
+    this.zapretGameMode = 'off',
+    this.zapretGameTcp = '1024-65535',
+    this.zapretGameUdp = '1024-65535',
+    this.zapretAutoUpdateCheck = true,
+    this.zapretSkippedVersion,
+    this.zapretCheckTargets = const ['youtube', 'discord'],
     this.closeAction = 'ask',
     this.language = LanguagePreference.ru,
     this.seenWelcome = false,
@@ -89,6 +95,15 @@ class AppSettings {
   String zapretStrategy;
   bool zapretAutoStart;
   bool zapretGameFilter;
+  /// Game filter mode: off | all | tcp | udp (Flowseal's Game Filter).
+  String zapretGameMode;
+  String zapretGameTcp;
+  String zapretGameUdp;
+  /// Mirrors utils/check_updates.enabled.
+  bool zapretAutoUpdateCheck;
+  String? zapretSkippedVersion;
+  /// What the strategy analysis checks: youtube | discord | games.
+  List<String> zapretCheckTargets;
   /// Desktop close button: ask | tray | exit.
   String closeAction;
   LanguagePreference language;
@@ -142,6 +157,12 @@ class AppSettings {
         'zapretStrategy': zapretStrategy,
         'zapretAutoStart': zapretAutoStart,
         'zapretGameFilter': zapretGameFilter,
+        'zapretGameMode': zapretGameMode,
+        'zapretGameTcp': zapretGameTcp,
+        'zapretGameUdp': zapretGameUdp,
+        'zapretAutoUpdateCheck': zapretAutoUpdateCheck,
+        'zapretSkippedVersion': zapretSkippedVersion,
+        'zapretCheckTargets': zapretCheckTargets,
         'closeAction': closeAction,
         'language': language.name,
         'seenWelcome': seenWelcome,
@@ -194,6 +215,17 @@ class AppSettings {
       zapretStrategy: (json['zapretStrategy'] as String?) ?? 'general',
       zapretAutoStart: json['zapretAutoStart'] == true,
       zapretGameFilter: json['zapretGameFilter'] == true,
+      zapretGameMode: (json['zapretGameMode'] as String?) ??
+          (json['zapretGameFilter'] == true ? 'all' : 'off'),
+      zapretGameTcp: (json['zapretGameTcp'] as String?) ?? '1024-65535',
+      zapretGameUdp: (json['zapretGameUdp'] as String?) ?? '1024-65535',
+      zapretAutoUpdateCheck: json['zapretAutoUpdateCheck'] != false,
+      zapretSkippedVersion: json['zapretSkippedVersion'] as String?,
+      zapretCheckTargets: (json['zapretCheckTargets'] as List?)
+              ?.map((e) => e.toString())
+              .where((e) => const ['youtube', 'discord'].contains(e) || RegExp(r'^game:[A-Za-z0-9][A-Za-z0-9_-]{0,100}$').hasMatch(e))
+              .toList() ??
+          const ['youtube', 'discord'],
       closeAction: (json['closeAction'] as String?) ?? 'ask',
       language: _enum(
         LanguagePreference.values,
