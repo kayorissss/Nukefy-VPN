@@ -62,6 +62,7 @@ class ZapretService extends ChangeNotifier {
   bool servicePresent = false;
   bool serviceRunning = false;
   bool busy = false;
+  bool _closing = false;
 
   Future<T> exclusive<T>(Future<T> Function() action) async {
     if (busy) throw StateError('zapret-busy');
@@ -75,7 +76,7 @@ class ZapretService extends ChangeNotifier {
     gameMode = settings.zapretGameMode;
     gameTcpRange = settings.zapretGameTcp;
     gameUdpRange = settings.zapretGameUdp;
-    if (!validPorts(gameTcpRange) || !validPorts(gameUdpRange)) {
+    if (!const ['off', 'all', 'tcp', 'udp'].contains(gameMode) || !validPorts(gameTcpRange) || !validPorts(gameUdpRange)) {
       throw const FormatException('Invalid game filter ports');
     }
   }
@@ -465,6 +466,16 @@ class ZapretService extends ChangeNotifier {
     serviceRunning = false;
   }
 
+  Future<void> _startService() async {
+    await _sc(['start', 'zapret']);
+    final clock = Stopwatch()..start();
+    while (await _serviceState() != 4) {
+      if (clock.elapsed > const Duration(seconds: 15)) throw StateError('zapret service did not reach RUNNING');
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    await serviceInstalled();
+  }
+
   String _serviceCommand(ZapretStrategy strategy) {
     final args = parseArgs(strategy);
     if (args.isEmpty) throw StateError('Empty strategy');
@@ -479,8 +490,7 @@ class ZapretService extends ChangeNotifier {
     if (await serviceInstalled()) throw StateError('Service already installed');
     await _sc(['create', 'zapret', 'binPath=', _serviceCommand(strategy), 'start=', 'auto', 'DisplayName=', 'zapret (Nukefy VPN)']);
     servicePresent = true;
-    await _sc(['start', 'zapret']);
-    await serviceInstalled();
+    await _startService();
     _runningStrategyId = strategy.id;
     await StorageService.instance.write('zapret_service_strategy', strategy.id);
   }
@@ -652,8 +662,9 @@ class ZapretService extends ChangeNotifier {
   }
 
   Future<bool> start(ZapretStrategy strategy) async {
-    if (!isSupported) return false;
+    if (!isSupported || _closing) return false;
     await stop();
+    if (_closing) return false;
     lastError = null;
     _append('> ${strategy.id}');
     try {
@@ -662,8 +673,7 @@ class ZapretService extends ChangeNotifier {
       await refreshGameLists();
       if (servicePresent) {
         await _sc(['config', 'zapret', 'binPath=', _serviceCommand(strategy)]);
-        await _sc(['start', 'zapret']);
-        await serviceInstalled();
+        await _startService();
         _runningStrategyId = strategy.id;
         await StorageService.instance.write('zapret_service_strategy', strategy.id);
         return serviceRunning;
@@ -708,6 +718,12 @@ class ZapretService extends ChangeNotifier {
     _log.add(line);
     if (_log.length > 200) _log.removeAt(0);
     logRevision.value++;
+  }
+
+  /// Prevent an in-flight analysis from spawning another child on exit.
+  Future<void> shutdown() async {
+    _closing = true;
+    await stop();
   }
 
   /// Stops only our process or the explicitly managed zapret service.

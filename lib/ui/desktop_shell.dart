@@ -177,7 +177,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     await windowManager.hide();
     final vpn = context.read<VpnProvider>();
     await Future.wait<void>([
-      _bounded(() => ZapretService.instance.stop()),
+      _bounded(() => ZapretService.instance.shutdown()),
       _bounded(vpn.disconnect),
     ]);
     await windowManager.setPreventClose(false);

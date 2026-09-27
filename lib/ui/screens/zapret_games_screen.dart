@@ -135,6 +135,6 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
       ? [FilledButton.icon(onPressed: enabled ? () => _install(game) : null, icon: const Icon(Icons.add, size: 18), label: Text(s.t('add')))]
       : [TextButton(onPressed: enabled ? () => _view(game) : null, child: Text(s.t('zShowDomains'))), IconButton(tooltip: s.t('delete'), onPressed: enabled ? () => _operation(() async { await _games.remove(game.id); return true; }) : null, icon: const Icon(Icons.delete_outline, size: 20))]);
     return Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: p.card, border: Border.all(color: p.border), borderRadius: BorderRadius.circular(18)),
-      child: _grid ? SizedBox(height: 130, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const Spacer(), actions])) : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const SizedBox(height: 10), actions]));
+      child: _grid ? SizedBox(height: 130 * MediaQuery.textScalerOf(context).scale(1), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const Spacer(), actions])) : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const SizedBox(height: 10), actions]));
   }
 }

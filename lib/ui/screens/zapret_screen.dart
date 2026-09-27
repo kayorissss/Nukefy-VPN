@@ -74,7 +74,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
     if (_zapret.busy) return;
     setState(() => _error = null);
     try { await _zapret.exclusive(action); }
-    catch (error) { if (mounted) setState(() => _error = '$error'); }
+    catch (error) { if (mounted) setState(() => _error = '$error'.contains('ipset-backup-missing') ? s.t('zNoIpsetBackup') : '$error'); }
   }
 
   Future<void> _loadTargets() async {
@@ -307,7 +307,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
         final count = (constraints.maxWidth / 250).floor().clamp(1, 8);
         final width = (constraints.maxWidth - 12 * (count - 1)) / count;
         return Wrap(spacing: 12, runSpacing: 12, children: [for (final strategy in _strategies)
-          SizedBox(width: width, height: 186, child: _tile(strategy, strategy.id == chosen?.id, busy)),
+          SizedBox(width: width, height: 186 * MediaQuery.textScalerOf(context).scale(1), child: _tile(strategy, strategy.id == chosen?.id, busy)),
         ]);
       }),
     ]);

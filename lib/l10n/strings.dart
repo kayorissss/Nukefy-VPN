@@ -4,6 +4,7 @@ class S {
   final String code;
 
   static const _ru = {
+    'zNoIpsetBackup': 'Сохранённого списка IPSet нет. Нажмите «Обновить IPSet» в инструментах, затем выберите loaded.',
     'zHostsApply': 'Применить к hosts',
     'zHostsWarning': 'Изменится системный hosts: соответствующие домены будут направлены на IP из списка Flowseal. Существующие записи сохраняются; резервная копия создаётся рядом с hosts. Нужны права администратора. Применяйте только если доверяете этим записям.',
     'zActivate': 'Активировать',
@@ -426,7 +427,7 @@ class S {
     'zapretDomainRemoved': 'Домен удалён',
     'zapretDomainOnePerLine': 'Можно несколько — по одному на строку',
     'zapretApplyHint': 'Домены применяются при следующем запуске zapret.',
-    'zapretAnalyzeVpnOn': 'VPN включён: проверка пойдёт через него, а не через zapret. Для честного анализа отключите VPN.',
+    'zapretAnalyzeVpnOn': 'Сначала отключите VPN: TUN может перехватить даже прямые запросы анализа.',
     'zapretSubMain': 'По умолчанию',
     'zapretSubAlt': 'Альтернатива',
     'zapretSubFakeAuto': 'Fake TLS: авто-подбор',
@@ -447,6 +448,7 @@ class S {
   };
 
   static const _en = {
+    'zNoIpsetBackup': 'No saved IPSet list. Use Update IPSet under tools, then select loaded.',
     'zHostsApply': 'Apply to hosts',
     'zHostsWarning': 'This changes the system hosts file: these domains will resolve to IP addresses from Flowseal. Existing entries are preserved and a backup is saved beside hosts. Administrator rights required. Apply only if you trust these entries.',
     'zActivate': 'Activate',
@@ -869,7 +871,7 @@ class S {
     'zapretDomainRemoved': 'Domain removed',
     'zapretDomainOnePerLine': 'Several at once — one per line',
     'zapretApplyHint': 'Domains are applied the next time zapret starts.',
-    'zapretAnalyzeVpnOn': 'The VPN is on, so the checks go through it instead of zapret. Disconnect it for an honest analysis.',
+    'zapretAnalyzeVpnOn': 'Disconnect VPN first: TUN can intercept even direct analysis requests.',
     'zapretSubMain': 'Default',
     'zapretSubAlt': 'Alternative',
     'zapretSubFakeAuto': 'Fake TLS, auto',
