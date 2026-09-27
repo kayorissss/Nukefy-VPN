@@ -189,7 +189,7 @@ class MusicService extends ChangeNotifier {
     final added = <MusicTrack>[];
     try {
       final directory = await _directory;
-      for (final item in picked.files) {
+      for (final item in picked) {
         final sourcePath = item.path;
         if (sourcePath == null || sourcePath.isEmpty) continue;
         final source = File(sourcePath);
