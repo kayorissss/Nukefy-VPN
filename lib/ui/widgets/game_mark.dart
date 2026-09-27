@@ -1,35 +1,38 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 
-/// Platform marks for the catalogue. IDs are upstream filenames, so matching
-/// by stable keywords keeps new game entries from losing their platform icon.
+/// Game/platform marks downloaded from the CC0 Simple Icons catalog. IDs are
+/// upstream filenames, so matching stable words also covers new catalog rows.
 class GameMark extends StatelessWidget {
   const GameMark({super.key, required this.id, this.size = 28});
   final String id;
   final double size;
 
-  static const _marks = {
-    'steam': 'steam',
+  static const _marks = <String, String>{
+    'battledotnet': 'battle',
+    'battlenet': 'battle',
+    'cloudflare': 'cloudflare',
     'epic': 'epicgames',
+    'electronicarts': 'ea',
+    'fortnite': 'fortnite',
+    'leagueoflegends': 'leagueoflegends',
+    'origin': 'origin',
+    'photon': 'photon',
     'riot': 'riotgames',
-    'valorant': 'riotgames',
-    'leagueoflegends': 'riotgames',
-    'league_of_legends': 'riotgames',
-    'battlenet': 'battledotnet',
-    'battle.net': 'battledotnet',
+    'valorant': 'valorant',
+    'roblox': 'roblox',
+    'steam': 'steam',
     'ubisoft': 'ubisoft',
     'rainbowsix': 'ubisoft',
-    'rainbow_six': 'ubisoft',
-    'roblox': 'roblox',
-    'ea_': 'ea',
-    'origin': 'ea',
-    'battlefield': 'ea',
+    'vrchat': 'vrchat',
   };
 
   String? _markFor(String value) {
-    final normalized = value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9._]'), '');
+    final normalized = value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (normalized == 'ea' || normalized.startsWith('eagames')) return 'ea';
     for (final entry in _marks.entries) {
-      if (normalized.contains(entry.key.replaceAll(RegExp(r'[^a-z0-9._]'), ''))) return entry.value;
+      final needle = entry.key.replaceAll(RegExp(r'[^a-z0-9]'), '');
+      if (normalized.contains(needle)) return entry.value;
     }
     return null;
   }
@@ -51,15 +54,23 @@ class GameMark extends StatelessWidget {
   }
 
   Widget _fallback(BuildContext context) {
-    final letters = id.replaceAll(RegExp('[^A-Za-z0-9]'), '');
-    return SizedBox(
+    final compact = id.replaceAll(RegExp('[^A-Za-z0-9]'), '');
+    final letters = compact.isEmpty
+        ? '•'
+        : compact.substring(0, compact.length.clamp(1, 2).toInt()).toUpperCase();
+    final p = context.palette;
+    return Container(
       width: size,
       height: size,
-      child: Icon(
-        Icons.sports_esports_rounded,
-        size: size * .72,
-        color: context.palette.accent,
-        semanticLabel: letters.isEmpty ? null : letters,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: p.accent.withValues(alpha: .14),
+        border: Border.all(color: p.accent.withValues(alpha: .38)),
+      ),
+      child: Text(
+        letters,
+        style: TextStyle(fontSize: size * .34, fontWeight: FontWeight.w800, color: p.accent),
       ),
     );
   }

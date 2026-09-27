@@ -1,4 +1,3 @@
-import '../widgets/responsive_sections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -93,32 +92,61 @@ class _JammersScreenState extends State<JammersScreen> {
 
     return SafeArea(
       bottom: false,
-      child: ResponsiveSections(
+      child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
-        children: [
-          _VerdictCard(verdict: _verdict, strings: s)
-              .animate()
-              .fadeIn(duration: 350.ms)
-              .slideY(begin: 0.08, curve: Curves.easeOutCubic),
-          const SizedBox(height: 14),
-          _HostGroup(title: s.t('jammersRu'), hosts: AppConstants.jammerTargetsRu, results: _results, delay: 120.ms),
-          const SizedBox(height: 14),
-          _HostGroup(title: s.t('jammersOther'), hosts: AppConstants.jammerTargetsOther, results: _results, delay: 260.ms),
-          const SizedBox(height: 18),
-          Center(
-            child: FilledButton.tonalIcon(
-              style: FilledButton.styleFrom(
-                backgroundColor: p.accent.withValues(alpha: 0.12),
-                foregroundColor: p.accent,
-              ),
-              onPressed: _busy ? null : _check,
-              icon: _busy
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.refresh_rounded),
-              label: Text(s.t('checkAgain')),
-            ),
-          ).animate().fadeIn(delay: 420.ms),
-        ],
+        child: LayoutBuilder(builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 900;
+          final ru = _HostGroup(
+            title: s.t('jammersRu'),
+            hosts: AppConstants.jammerTargetsRu,
+            results: _results,
+            delay: 120.ms,
+          );
+          final other = _HostGroup(
+            title: s.t('jammersOther'),
+            hosts: AppConstants.jammerTargetsOther,
+            results: _results,
+            delay: 260.ms,
+          );
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _VerdictCard(verdict: _verdict, strings: s)
+                  .animate()
+                  .fadeIn(duration: 350.ms)
+                  .slideY(begin: 0.08, curve: Curves.easeOutCubic),
+              const SizedBox(height: 16),
+              if (wide)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: ru),
+                    const SizedBox(width: 16),
+                    Expanded(child: other),
+                  ],
+                )
+              else ...[
+                ru,
+                const SizedBox(height: 14),
+                other,
+              ],
+              const SizedBox(height: 18),
+              Center(
+                child: FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: p.accent.withValues(alpha: 0.12),
+                    foregroundColor: p.accent,
+                  ),
+                  onPressed: _busy ? null : _check,
+                  icon: _busy
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.refresh_rounded),
+                  label: Text(s.t('checkAgain')),
+                ),
+              ).animate().fadeIn(delay: 420.ms),
+            ],
+          );
+        }),
       ),
     );
   }
