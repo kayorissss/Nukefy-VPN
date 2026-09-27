@@ -161,22 +161,42 @@ jobs:
           Get-ChildItem $dest
       - name: Build portable single exe
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $ErrorActionPreference = 'Stop'
           $ver = "${{ env.RELEASE_TAG }}".TrimStart('v')
           if ($ver -notmatch '^\d+\.\d+\.\d+$') { $ver = '0.0.0' }
-          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath payload.zip -CompressionLevel Optimal
-          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-          $info = "using System.Reflection; [assembly: AssemblyTitle(""Nukefy VPN"")] [assembly: AssemblyProduct(""Nukefy VPN"")] [assembly: AssemblyCompany(""@kayorisan"")] [assembly: AssemblyVersion(""$ver.0"")] [assembly: AssemblyFileVersion(""$ver.0"")]"
-          Set-Content -Path AssemblyInfo.cs -Value $info
-          & $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:NukefyVPN.exe `
-            /win32icon:windows/runner/resources/app_icon.ico `
-            /win32manifest:windows/portable/launcher.manifest `
-            /resource:payload.zip,payload.zip `
-            /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /reference:System.Windows.Forms.dll `
-            windows/portable/Launcher.cs AssemblyInfo.cs
-          if ($LASTEXITCODE -ne 0) { throw "csc failed" }
-          Get-Item NukefyVPN.exe | Format-List Name,Length
+          $log = @()
+          try {
+            Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath payload.zip -CompressionLevel Optimal -ErrorAction Stop
+            $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+            $log += "csc: $csc exists=$(Test-Path $csc)"
+            $lines = @(
+              'using System.Reflection;',
+              '[assembly: AssemblyTitle("Nukefy VPN")]',
+              '[assembly: AssemblyProduct("Nukefy VPN")]',
+              '[assembly: AssemblyCompany("@kayorisan")]',
+              "[assembly: AssemblyVersion(`"$ver.0`")]",
+              "[assembly: AssemblyFileVersion(`"$ver.0`")]"
+            )
+            Set-Content -Path AssemblyInfo.cs -Value $lines
+            $out = & $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:NukefyVPN.exe `
+              /win32icon:windows/runner/resources/app_icon.ico `
+              /win32manifest:windows/portable/launcher.manifest `
+              /resource:payload.zip,payload.zip `
+              /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /reference:System.Windows.Forms.dll `
+              windows/portable/Launcher.cs AssemblyInfo.cs 2>&1
+            $log += $out
+            if ($LASTEXITCODE -ne 0) { throw "csc exit $LASTEXITCODE" }
+            if (-not (Test-Path NukefyVPN.exe)) { throw 'NukefyVPN.exe not produced' }
+            Get-Item NukefyVPN.exe | Format-List Name,Length
+          } catch {
+            $log += "ERROR: $_"
+            $fence = '```'
+            $body = "Portable exe build failed:`n`n$fence`n" + ($log -join "`n") + "`n$fence"
+            gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" | Out-Null
+            throw
+          }
       - name: Build installer (Inno Setup)
         shell: pwsh
         run: |
