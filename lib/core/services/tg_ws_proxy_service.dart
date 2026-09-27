@@ -106,7 +106,7 @@ class TgWsProxyService extends ChangeNotifier {
   }
 
   Future<File> download() async {
-    if (!supported) throw const UnsupportedError('tg-ws-windows-only');
+    if (!supported) throw UnsupportedError('tg-ws-windows-only');
     if (_busy) throw StateError('tg-ws-busy');
     _busy = true;
     notifyListeners();
@@ -139,10 +139,10 @@ class TgWsProxyService extends ChangeNotifier {
   }
 
   Future<void> start() async {
-    if (!supported) throw const UnsupportedError('tg-ws-windows-only');
+    if (!supported) throw UnsupportedError('tg-ws-windows-only');
     if (_process != null) return;
     final file = await binaryFile();
-    if (file == null) throw const StateError('tg-ws-not-installed');
+    if (file == null) throw StateError('tg-ws-not-installed');
     try {
       final process = await Process.start(
         file.path,

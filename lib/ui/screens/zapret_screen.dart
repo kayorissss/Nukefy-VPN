@@ -704,11 +704,13 @@ class _ZapretScreenState extends State<ZapretScreen> {
                                     await _updater.install(_update!, (progress) {
                                       if (mounted) setState(() => _download = progress.fraction);
                                     });
-                                    if (mounted) setState(() {
-                                      _strategies = _zapret.strategies();
-                                      _update = null;
-                                      _download = null;
-                                    });
+                                    if (mounted) {
+                                      setState(() {
+                                        _strategies = _zapret.strategies();
+                                        _update = null;
+                                        _download = null;
+                                      });
+                                    }
                                   }),
                             child: Text(s.t('zInstall')),
                           ),

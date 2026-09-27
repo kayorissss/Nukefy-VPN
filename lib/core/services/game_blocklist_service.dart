@@ -212,7 +212,7 @@ class GameBlocklistService {
               ))
           .toList()
         ..sort((a, b) => a.name.compareTo(b.name));
-      if (list.isEmpty) throw const StateError('Empty game catalogue');
+      if (list.isEmpty) throw StateError('Empty game catalogue');
       _usedFallback = false;
       await _saveCatalog(list, source: 'github');
       return list;
