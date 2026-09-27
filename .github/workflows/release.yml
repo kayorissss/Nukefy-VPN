@@ -181,11 +181,11 @@ jobs:
             )
             Set-Content -Path AssemblyInfo.cs -Value $lines
             $out = & $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:NukefyVPN.exe `
-              /win32icon:windows/runner/resources/app_icon.ico `
-              /win32manifest:windows/portable/launcher.manifest `
+              /win32icon:windows\runner\resources\app_icon.ico `
+              /win32manifest:windows\portable\launcher.manifest `
               /resource:payload.zip,payload.zip `
               /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /reference:System.Windows.Forms.dll `
-              windows/portable/Launcher.cs AssemblyInfo.cs 2>&1
+              windows\portable\Launcher.cs AssemblyInfo.cs 2>&1
             $log += $out
             if ($LASTEXITCODE -ne 0) { throw "csc exit $LASTEXITCODE" }
             if (-not (Test-Path NukefyVPN.exe)) { throw 'NukefyVPN.exe not produced' }
