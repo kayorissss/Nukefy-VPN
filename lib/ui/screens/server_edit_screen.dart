@@ -61,9 +61,9 @@ class _ServerEditScreenState extends State<ServerEditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(s.t('editJson'), style: AppTextStyles.bodySecondary),
+            Text(s.t('editJson'), style: context.palette.secondaryStyle),
             const SizedBox(height: 8),
-            Text(s.t('chainHint'), style: AppTextStyles.bodySecondary),
+            Text(s.t('chainHint'), style: context.palette.secondaryStyle),
             DropdownButton<String?>(
               value: _detour,
               isExpanded: true,

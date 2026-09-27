@@ -79,6 +79,15 @@ Future<void> _main() async {
   final stats = StatsProvider(StorageService.instance);
   final vpn = VpnProvider(VpnPlatform());
   await guard('load', () => Future.wait([settings.load(), servers.load(), stats.load()]));
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    // Match the window to the saved theme: a light-theme start used to flash
+    // a dark rectangle before the first frame.
+    final systemDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    final dark = settings.themeMode == ThemeMode.dark || (settings.themeMode == ThemeMode.system && systemDark);
+    try {
+      await windowManager.setBackgroundColor(dark ? const Color(0xFF0D0D0D) : const Color(0xFFF2F4F8));
+    } catch (_) {}
+  }
   vpn.bind(stats: stats, servers: servers, settings: settings);
   await guard('core', vpn.refreshCore, seconds: 5);
 

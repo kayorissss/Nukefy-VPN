@@ -122,9 +122,25 @@ class NukefyPalette extends ThemeExtension<NukefyPalette> {
     return copyWith(accent: isDark ? pair.dark : pair.light, accent2: pair.secondary);
   }
 
+  /// Real interpolation: `AnimatedTheme` cross-fades the whole palette
+  /// instead of swapping the colours halfway through.
   @override
-  NukefyPalette lerp(ThemeExtension<NukefyPalette>? other, double t) =>
-      t < 0.5 ? this : (other as NukefyPalette? ?? this);
+  NukefyPalette lerp(ThemeExtension<NukefyPalette>? other, double t) {
+    if (other is! NukefyPalette) return this;
+    return NukefyPalette(
+      background: Color.lerp(background, other.background, t) ?? background,
+      card: Color.lerp(card, other.card, t) ?? card,
+      surface: Color.lerp(surface, other.surface, t) ?? surface,
+      border: Color.lerp(border, other.border, t) ?? border,
+      text: Color.lerp(text, other.text, t) ?? text,
+      textSecondary: Color.lerp(textSecondary, other.textSecondary, t) ?? textSecondary,
+      textDisabled: Color.lerp(textDisabled, other.textDisabled, t) ?? textDisabled,
+      accent: Color.lerp(accent, other.accent, t) ?? accent,
+      accent2: Color.lerp(accent2, other.accent2, t) ?? accent2,
+      success: Color.lerp(success, other.success, t) ?? success,
+      isDark: t < 0.5 ? isDark : other.isDark,
+    );
+  }
 }
 
 extension NukefyPaletteContext on BuildContext {

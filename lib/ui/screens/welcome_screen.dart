@@ -34,7 +34,7 @@ class WelcomeScreen extends StatelessWidget {
                     .animate()
                     .fadeIn(delay: 120.ms),
                 const SizedBox(height: 10),
-                Text(s.t('welcomeBody'), textAlign: TextAlign.center, style: AppTextStyles.bodySecondary),
+                Text(s.t('welcomeBody'), textAlign: TextAlign.center, style: context.palette.secondaryStyle),
                 const Spacer(),
                 _WelcomeButton(icon: Icons.content_paste_rounded, label: s.t('paste'), onTap: () => ImportActions.paste(context)),
                 const SizedBox(height: 10),

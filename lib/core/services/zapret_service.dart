@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import 'storage_service.dart';
+
 /// One `general*.bat` from Flowseal/zapret-discord-youtube, reduced to the
 /// arguments it passes to `winws.exe`.
 class ZapretStrategy {
@@ -26,6 +28,13 @@ class ZapretService extends ChangeNotifier {
   String? lastError;
   final List<String> _log = [];
   bool gameFilter = false;
+
+  /// Name of the list winws reads user domains from.
+  static const String userListName = 'list-general-user.txt';
+  /// The distributed list every strategy already points at.
+  static const String defaultListName = 'list-general.txt';
+  static const String _domainsKey = 'zapret_domains';
+  static const String _placeholder = 'domain.example.abc';
 
   bool get isSupported => Platform.isWindows && root != null;
   bool get isRunning => _process != null;
@@ -78,7 +87,12 @@ class ZapretService extends ChangeNotifier {
 
   /// Extracts the `winws.exe` argument list from a .bat (joins `^`
   /// continuations, expands %BIN%/%LISTS%/game filter, keeps quoting).
-  List<String> parseArgs(ZapretStrategy strategy) {
+  ///
+  /// When [withUserList] is set, every `--hostlist` pointing at the shipped
+  /// list also gets the user list next to it, so domains added in the app are
+  /// desynced by every strategy — including the ones whose .bat never
+  /// mentions `list-general-user.txt`.
+  List<String> parseArgs(ZapretStrategy strategy, {bool withUserList = true}) {
     final dir = root!;
     final bin = '${p.join(dir.path, 'bin')}\\';
     final lists = '${p.join(dir.path, 'lists')}\\';
@@ -110,7 +124,92 @@ class ZapretService extends ChangeNotifier {
         .replaceAll('%GameFilterTCP%', gameTcp)
         .replaceAll('%GameFilterUDP%', gameUdp)
         .replaceAll('%GameFilter%', gameTcp);
-    return _tokenize(command);
+    final args = _tokenize(command);
+    if (!withUserList || _userListPath == null) return args;
+    if (args.any((a) => a.toLowerCase().contains(userListName.toLowerCase()))) return args;
+    final out = <String>[];
+    for (final arg in args) {
+      out.add(arg);
+      // `--hostlist="...\list-general.txt"` → also load the user domains.
+      final lower = arg.toLowerCase();
+      final isHostlist = lower.startsWith('--hostlist=') || lower.startsWith('--hostlist-domains=');
+      if (isHostlist && lower.contains(defaultListName.toLowerCase())) {
+        out.add('${arg.split('=').first}=$_userListPath');
+      }
+    }
+    return out;
+  }
+
+  /// Absolute path of the user domain list, or null when zapret is absent.
+  String? get _userListPath {
+    final dir = root;
+    if (dir == null) return null;
+    return p.join(dir.path, 'lists', userListName);
+  }
+
+  /// Domains the user asked to unblock ("добавить домен для обхода").
+  ///
+  /// Kept in the app storage and mirrored into the zapret list file, so it
+  /// survives a reinstall of the app (unlike the .txt next to winws).
+  List<String> loadDomains() {
+    final json = StorageService.instance.readJson(_domainsKey);
+    var items = <String>[];
+    final stored = (json?['items'] as List?) ?? const [];
+    items = stored.whereType<String>().map(normalizeDomain).where((e) => e.isNotEmpty).toList();
+    if (items.isEmpty) {
+      // First run after an upgrade: adopt whatever is already in the file.
+      final file = _userListPath;
+      if (file != null && File(file).existsSync()) {
+        items = File(file)
+            .readAsStringSync(encoding: const Utf8Codec(allowMalformed: true))
+            .split(RegExp(r'\r?\n'))
+            .map(normalizeDomain)
+            .where((e) => e.isNotEmpty && e != _placeholder)
+            .toList();
+      }
+    }
+    return items;
+  }
+
+  Future<void> saveDomains(List<String> domains) async {
+    final clean = domains.map(normalizeDomain).where((e) => e.isNotEmpty).toList();
+    await StorageService.instance.writeJson(_domainsKey, {'items': clean});
+    _writeUserList(clean);
+    notifyListeners();
+  }
+
+  /// `https://Aniwids.fun/watch` → `aniwids.fun`. Empty when there is
+  /// nothing domain-like left.
+  static String normalizeDomain(String value) {
+    var text = value.trim().toLowerCase();
+    if (text.isEmpty) return '';
+    text = text.replaceAll(RegExp(r'^https?://'), '');
+    text = text.split(RegExp(r'[/?#\s]')).first;
+    text = text.replaceAll(RegExp(r'^www\.'), '');
+    return text.trim();
+  }
+
+  /// Rough shape check for the "add domain" dialog.
+  static bool looksLikeDomain(String value) {
+    return RegExp(r'^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$').hasMatch(value);
+  }
+
+  /// winws refuses to start when a hostlist file is missing or empty, so the
+  /// placeholder stays until the user adds a real domain.
+  void _writeUserList(List<String> domains) {
+    final path = _userListPath;
+    if (path == null) return;
+    final file = File(path);
+    final body = StringBuffer('# Nukefy VPN — your domains (one per line)\n');
+    if (domains.isEmpty) {
+      body.writeln(_placeholder);
+    } else {
+      for (final domain in domains) {
+        body.writeln(domain);
+      }
+    }
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync(body.toString());
   }
 
   static List<String> _tokenize(String input) {
@@ -158,6 +257,7 @@ class ZapretService extends ChangeNotifier {
     _log.clear();
     try {
       _ensureUserLists();
+      _writeUserList(loadDomains());
       final args = parseArgs(strategy);
       if (args.isEmpty) throw Exception('strategy has no winws arguments');
       final exe = p.join(root!.path, 'bin', 'winws.exe');
@@ -202,21 +302,26 @@ class ZapretService extends ChangeNotifier {
     if (_log.length > 200) _log.removeAt(0);
   }
 
-  Future<void> stop() async {
+  /// Stops winws. [sweep] also kills a stray winws started outside the app
+  /// (or left over from a previous run); it costs one extra process spawn,
+  /// so it is skipped when the caller knows nothing is running.
+  Future<void> stop({bool sweep = true}) async {
     final process = _process;
     _process = null;
     _runningStrategyId = null;
     if (process != null) {
       process.kill();
       try {
-        await process.exitCode.timeout(const Duration(seconds: 3));
+        await process.exitCode.timeout(const Duration(milliseconds: 800));
       } catch (_) {}
     }
     // WinDivert driver handles survive a plain kill sometimes; make sure no
     // winws is left behind.
-    try {
-      await Process.run('taskkill', ['/F', '/IM', 'winws.exe']);
-    } catch (_) {}
+    if (sweep) {
+      try {
+        await Process.run('taskkill', ['/F', '/IM', 'winws.exe']).timeout(const Duration(seconds: 3));
+      } catch (_) {}
+    }
     notifyListeners();
   }
 }

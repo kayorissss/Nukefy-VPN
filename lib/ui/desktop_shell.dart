@@ -170,11 +170,27 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     }
   }
 
+  /// Hiding the window first makes the exit feel instant; the cleanup below
+  /// (winws, sing-box) runs while it is already gone and is bounded, so a
+  /// stuck helper process can never hold the quit for long.
   Future<void> _quit() async {
-    await ZapretService.instance.stop();
-    await context.read<VpnProvider>().disconnect();
+    await windowManager.hide();
+    final vpn = context.read<VpnProvider>();
+    await Future.wait<void>([
+      _bounded(() => ZapretService.instance.stop()),
+      _bounded(vpn.disconnect),
+    ]);
     await windowManager.setPreventClose(false);
     await windowManager.destroy();
+    // The window is gone; make sure the process goes with it instead of
+    // lingering until the engine winds down.
+    exit(0);
+  }
+
+  /// Runs [run] but never longer than [seconds] — a helper that refuses to
+  /// die must not block the exit.
+  Future<void> _bounded(Future<void> Function() run, {int seconds = 3}) {
+    return run().timeout(Duration(seconds: seconds), onTimeout: () => Future<void>.value());
   }
 
   @override

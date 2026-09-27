@@ -99,10 +99,12 @@ class SettingsScreen extends StatelessWidget {
                         for (final name in const ['default', 'stealth', 'violet', 'pink', 'crimson', 'emerald'])
                           _IconChoice(
                             name: name,
+                            label: _iconLabel(s, name),
                             selected: value.appIcon == name,
                             onTap: () async {
                               await settings.update((item) => item.appIcon = name);
                               await VpnPlatform().setAppIcon(name);
+                              if (context.mounted) showNukefySnack(context, s.t('appIconChanged'));
                             },
                           ),
                       ],
@@ -590,47 +592,85 @@ class _CoreCard extends StatelessWidget {
     final p = context.palette;
     final core = vpn.core;
     final ready = core?.available ?? false;
-    final color = core == null ? p.textSecondary : (ready ? p.success : AppColors.warning);
-    final status = core == null
+    final checking = core == null;
+    final color = checking ? p.textSecondary : (ready ? p.success : AppColors.warning);
+    final status = checking
         ? s.t('checking')
         : ready
-            ? '${s.t('coreInstalledState')}${core.version == null ? '' : ' · sing-box ${core.version}'}'
+            ? s.t('coreInstalledState')
             : s.t('coreMissing');
+    final detail = core == null
+        ? null
+        : ready
+            ? (core.version == null ? 'sing-box' : 'sing-box ${core.version}')
+            : s.t('coreMissingHint');
     return SectionCard(
       title: s.t('core'),
       icon: Icons.memory_rounded,
+      trailing: IconButton(
+        tooltip: s.t('refresh'),
+        onPressed: () => vpn.refreshCore(),
+        icon: Icon(Icons.refresh_rounded, color: p.textSecondary),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Status: icon badge on the left, one text block next to it — the
+          // old row floated a bare string between a dot and a button.
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
-                width: 10,
-                height: 10,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  checking
+                      ? Icons.hourglass_top_rounded
+                      : ready
+                          ? Icons.verified_rounded
+                          : Icons.download_rounded,
+                  size: 18,
                   color: color,
-                  boxShadow: [BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 8)],
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: Text(status, key: ValueKey(status), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      child: Text(
+                        status,
+                        key: ValueKey(status),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700, color: p.text),
+                      ),
+                    ),
+                    if (detail != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        detail,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.monoValue.copyWith(fontSize: 12, color: p.textSecondary),
+                      ),
+                    ],
+                  ],
                 ),
-              ),
-              IconButton(
-                tooltip: s.t('refresh'),
-                onPressed: () => vpn.refreshCore(),
-                icon: Icon(Icons.refresh_rounded, color: p.textSecondary),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(s.t('coreWindows'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          Text(s.t('coreWindows'), style: context.palette.secondaryStyle),
+          const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
             child: ready
@@ -732,7 +772,7 @@ class _MoreCardState extends State<_MoreCard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(widget.title.toUpperCase(), style: AppTextStyles.section),
+                        Text(widget.title.toUpperCase(), style: context.palette.sectionStyle),
                         if (widget.description != null)
                           Text(widget.description!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12)),
                       ],
@@ -868,27 +908,52 @@ class _Swatch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final onColor = color.computeLuminance() > 0.55 ? Colors.black : Colors.white;
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color,
-          border: Border.all(color: selected ? p.text : Colors.transparent, width: 2.5),
-          boxShadow: selected ? [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 12)] : null,
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutBack,
+        scale: selected ? 1.12 : 1,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color,
+            border: Border.all(color: selected ? p.text : p.border, width: selected ? 3 : 1.5),
+            boxShadow: selected
+                ? [BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 14, spreadRadius: 1)]
+                : [BoxShadow(color: Colors.black.withValues(alpha: p.isDark ? 0.35 : 0.08), blurRadius: 6)],
+          ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: selected
+                ? Icon(Icons.check_rounded, key: const ValueKey('on'), size: 18, color: onColor)
+                : const SizedBox.shrink(key: ValueKey('off')),
+          ),
         ),
-        child: selected ? Icon(Icons.check_rounded, size: 18, color: p.isDark ? Colors.black : Colors.white) : null,
       ),
     );
   }
 }
 
+/// Name of a launcher icon variant.
+String _iconLabel(S s, String name) => switch (name) {
+      'default' => s.t('appIconDefault'),
+      'stealth' => s.t('appIconStealth'),
+      'violet' => s.t('appIconViolet'),
+      'pink' => s.t('appIconPink'),
+      'crimson' => s.t('appIconCrimson'),
+      'emerald' => s.t('appIconEmerald'),
+      _ => name,
+    };
+
 class _IconChoice extends StatelessWidget {
-  const _IconChoice({required this.name, required this.selected, required this.onTap});
+  const _IconChoice({required this.name, required this.label, required this.selected, required this.onTap});
   final String name;
+  final String label;
   final bool selected;
   final VoidCallback onTap;
 
@@ -898,16 +963,66 @@ class _IconChoice extends StatelessWidget {
     final asset = name == 'default' ? 'assets/icons/app_icon.png' : 'assets/icons/app_icon_$name.png';
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(17),
-          border: Border.all(color: selected ? p.accent : p.border, width: selected ? 2 : 1),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(13),
-          child: Image.asset(asset, width: 48, height: 48, filterQuality: FilterQuality.medium),
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutBack,
+        scale: selected ? 1.05 : 1,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: selected ? p.accent : p.border, width: selected ? 2.4 : 1),
+                    boxShadow: selected ? [BoxShadow(color: p.accent.withValues(alpha: 0.45), blurRadius: 12)] : null,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.asset(asset, width: 48, height: 48, filterQuality: FilterQuality.medium),
+                  ),
+                ),
+                if (selected)
+                  Positioned(
+                    right: -3,
+                    top: -3,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        color: p.accent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: p.card, width: 2),
+                      ),
+                      child: Icon(
+                        Icons.check_rounded,
+                        size: 11,
+                        color: p.isDark ? const Color(0xFF07131A) : Colors.white,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 7),
+            SizedBox(
+              width: 64,
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.tab.copyWith(
+                  fontSize: 8,
+                  letterSpacing: 0.4,
+                  color: selected ? p.accent : p.textSecondary,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

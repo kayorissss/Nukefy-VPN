@@ -34,6 +34,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
   int? _jitter;
   int? _down;
   int? _up;
+  String? _server;
   String? _error;
   List<SpeedTestResult> _history = const [];
 
@@ -86,6 +87,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
       _phase = SpeedPhase.ping;
       _liveBps = 0;
       _ping = _jitter = _down = _up = null;
+      _server = null;
     });
     _animateNeedle(0);
     try {
@@ -99,8 +101,11 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
             _liveBps = progress.bps;
             _ping = progress.pingMs ?? _ping;
             _jitter = progress.jitterMs ?? _jitter;
-            if (progress.phase == SpeedPhase.download) _lastDownLive = progress.bps;
-            if (progress.phase == SpeedPhase.upload && _down == null) _down = _lastDownLive;
+            if (progress.phase == SpeedPhase.download) {
+              _down = progress.bps;
+            } else if (progress.phase == SpeedPhase.upload && progress.bps > 0) {
+              _up = progress.bps;
+            }
           });
           _animateNeedle(progress.bps);
         },
@@ -111,24 +116,39 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
         _up = result.uploadBps;
         _ping = result.pingMs;
         _jitter = result.jitterMs;
+        _server = result.server;
         _history = [result, ..._history].take(30).toList();
       });
       HapticFeedback.lightImpact();
       await _saveHistory();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '$error'.replaceFirst('Exception: ', ''));
+      setState(() => _error = _errorText(error));
     } finally {
       if (mounted) {
         setState(() {
           _running = false;
           _phase = SpeedPhase.done;
+          _liveBps = 0;
         });
       }
     }
   }
 
-  int _lastDownLive = 0;
+  /// Turns a failure into a sentence. Raw Dio text never reaches the screen.
+  String _errorText(Object error) {
+    if (error is SpeedTestException) {
+      return switch (error.code) {
+        'blocked' => _s.t('speedBlocked'),
+        'server-error' => _s.t('speedServerError'),
+        'timeout' => _s.t('speedTimeout'),
+        _ => _s.t('speedNoConnection'),
+      };
+    }
+    return _s.t('speedNoConnection');
+  }
+
+  S get _s => context.read<SettingsProvider>().strings;
 
   bool get _isMobile => Theme.of(context).platform == TargetPlatform.android || Theme.of(context).platform == TargetPlatform.iOS;
 
@@ -193,7 +213,8 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                           children: [
                             Text(
                               _running || _down != null
-                                  ? SpeedTestService.mbps(_running ? _liveBps : (_down ?? 0)).toStringAsFixed(_liveBps > 100e6 ? 0 : 1)
+                                  ? SpeedTestService.mbps(_running ? _liveBps : (_down ?? 0))
+                                      .toStringAsFixed(_liveBps > 100e6 ? 0 : 1)
                                   : '—',
                               style: AppTextStyles.metric.copyWith(fontSize: 44, color: p.text, height: 1),
                             ),
@@ -221,8 +242,18 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                 children: [
                   _Metric(label: s.t('ping'), value: _ping == null ? '—' : '$_ping', unit: 'ms', color: p.accent2),
                   _Metric(label: s.t('jitter'), value: _jitter == null ? '—' : '$_jitter', unit: 'ms', color: p.accent2),
-                  _Metric(label: s.t('download'), value: _down == null ? '—' : SpeedTestService.mbps(_down!).toStringAsFixed(1), unit: 'Mbit/s', color: p.success),
-                  _Metric(label: s.t('upload'), value: _up == null ? '—' : SpeedTestService.mbps(_up!).toStringAsFixed(1), unit: 'Mbit/s', color: p.accent),
+                  _Metric(
+                    label: s.t('download'),
+                    value: _down == null ? '—' : SpeedTestService.mbps(_down!).toStringAsFixed(1),
+                    unit: 'Mbit/s',
+                    color: p.success,
+                  ),
+                  _Metric(
+                    label: s.t('upload'),
+                    value: _up == null ? '—' : SpeedTestService.mbps(_up!).toStringAsFixed(1),
+                    unit: 'Mbit/s',
+                    color: p.accent,
+                  ),
                 ],
               ),
               const SizedBox(height: 18),
@@ -266,9 +297,33 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                   style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12),
                 ),
               ),
+              if (_server != null) ...[
+                const SizedBox(height: 4),
+                Center(
+                  child: Text(
+                    '${s.t('speedServer')}: $_server',
+                    style: AppTextStyles.bodySecondary.copyWith(color: p.textDisabled, fontSize: 11.5),
+                  ),
+                ),
+              ],
               if (_error != null) ...[
-                const SizedBox(height: 10),
-                Center(child: Text(_error!, style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error))),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.error_outline_rounded, size: 18, color: AppColors.error),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(_error!, style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error))),
+                    ],
+                  ),
+                ),
               ],
               const SizedBox(height: 26),
               Text(s.t('speedTestHistory').toUpperCase(), style: AppTextStyles.section.copyWith(color: p.textSecondary)),
@@ -326,6 +381,7 @@ class _HistoryRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.palette;
     final when = FormatUtils.timeAgo(item.at, ru: strings.code == 'ru');
+    final upload = item.uploadBps == null ? '—' : SpeedTestService.mbps(item.uploadBps!).toStringAsFixed(1);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -348,14 +404,15 @@ class _HistoryRow extends StatelessWidget {
                     Text(' ${SpeedTestService.mbps(item.downloadBps).toStringAsFixed(1)}', style: AppTextStyles.metric.copyWith(fontSize: 14, color: p.text)),
                     const SizedBox(width: 12),
                     Icon(Icons.arrow_upward_rounded, size: 14, color: p.accent),
-                    Text(' ${SpeedTestService.mbps(item.uploadBps).toStringAsFixed(1)}', style: AppTextStyles.metric.copyWith(fontSize: 14, color: p.text)),
+                    Text(' $upload', style: AppTextStyles.metric.copyWith(fontSize: 14, color: p.text)),
                     const SizedBox(width: 12),
                     Text('${item.pingMs} ms', style: AppTextStyles.metric.copyWith(fontSize: 13, color: p.accent2)),
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$when · ${item.viaVpn ? strings.t('viaVpn') : strings.t('direct')} · ${strings.t('jitter').toLowerCase()} ${item.jitterMs} ms',
+                  '$when · ${item.viaVpn ? strings.t('viaVpn') : strings.t('direct')} · ${strings.t('jitter').toLowerCase()} ${item.jitterMs} ms'
+                  '${item.server == null ? '' : ' · ${item.server}'}',
                   style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 11.5),
                 ),
               ],

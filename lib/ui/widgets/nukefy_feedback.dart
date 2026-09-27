@@ -25,7 +25,7 @@ Future<bool> confirmDialog(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title, style: AppTextStyles.headline),
-      content: Text(body, style: AppTextStyles.bodySecondary),
+      content: Text(body, style: context.palette.secondaryStyle),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: Text(cancel)),
         FilledButton(

@@ -20,14 +20,14 @@ class RoutingScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(s.t('geosite'), style: AppTextStyles.bodySecondary),
+          Text(s.t('geosite'), style: context.palette.secondaryStyle),
           const SizedBox(height: 8),
           ...RoutingMode.values.map((item) {
             return RadioListTile<RoutingMode>(
               value: item,
               groupValue: mode,
               title: Text(_label(s, item), style: AppTextStyles.bodyRegular),
-              subtitle: Text(_desc(s, item), style: AppTextStyles.bodySecondary),
+              subtitle: Text(_desc(s, item), style: context.palette.secondaryStyle),
               onChanged: (next) {
                 if (next != null) settings.update((value) => value.routingMode = next);
               },
@@ -52,7 +52,7 @@ class RoutingScreen extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(rule.value, style: AppTextStyles.monoValue),
-              subtitle: Text('${rule.kind} · ${_action(s, rule.action)}', style: AppTextStyles.bodySecondary),
+              subtitle: Text('${rule.kind} · ${_action(s, rule.action)}', style: context.palette.secondaryStyle),
               trailing: IconButton(
                 icon: const Icon(Icons.close_rounded),
                 onPressed: () {

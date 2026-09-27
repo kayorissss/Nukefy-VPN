@@ -156,7 +156,7 @@ class ServersScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                         Text(s.t('emptyServers'), style: AppTextStyles.headline),
                         const SizedBox(height: 6),
-                        Text(s.t('emptyHint'), textAlign: TextAlign.center, style: AppTextStyles.bodySecondary),
+                        Text(s.t('emptyHint'), textAlign: TextAlign.center, style: context.palette.secondaryStyle),
                       ],
                     ),
                   ),
@@ -344,7 +344,7 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
                               '${s.t('serversCount')}: ${widget.servers.length} · ${s.t('updated')}: $updated',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.bodySecondary,
+                              style: context.palette.secondaryStyle,
                             ),
                           ],
                         ),
@@ -726,7 +726,7 @@ Future<void> _editSubscription(BuildContext context, SubscriptionModel sub) asyn
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Expanded(child: Text(s.t('interval'), style: AppTextStyles.bodySecondary)),
+                  Expanded(child: Text(s.t('interval'), style: context.palette.secondaryStyle)),
                   NukefyDropdown<UpdateInterval>(
                     value: interval,
                     items: {for (final e in UpdateInterval.values) e: _intervalLabel(s, e)},

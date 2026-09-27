@@ -255,8 +255,16 @@ class VpnPlatform {
     if (process == null) return;
     process.kill();
     try {
-      await process.exitCode.timeout(const Duration(seconds: 3));
-    } catch (_) {}
+      // Killing is immediate; waiting seconds here only made quitting the
+      // app feel broken.
+      await process.exitCode.timeout(const Duration(milliseconds: 1200));
+    } catch (_) {
+      if (Platform.isWindows) {
+        try {
+          await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe']).timeout(const Duration(seconds: 3));
+        } catch (_) {}
+      }
+    }
   }
 
   Future<bool> isRunning() async {
