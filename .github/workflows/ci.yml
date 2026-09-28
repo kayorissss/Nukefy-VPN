@@ -69,6 +69,18 @@ jobs:
         with:
           name: android-build-log
           path: android-build.log
+      - name: Publish Android build diagnostics
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo 'Android APK build failed:'
+            echo '```'
+            tail -n 180 android-build.log
+            echo '```'
+          } > android-comment.md
+          gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" -F body=@android-comment.md || true
       - name: Verify APK identity and signature
         run: |
           set -e
