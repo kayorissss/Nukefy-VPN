@@ -554,7 +554,9 @@ class _SideRail extends StatelessWidget {
                           !(tabs[i].destination == NavDestination.settings &&
                               (destination == NavDestination.settingsGeneral || destination == NavDestination.settingsAppearance || destination == NavDestination.settingsDns || destination == NavDestination.settingsAbout)),
                       collapsed: collapsed,
-                      onTap: () => nav.go(tabs[i].destination),
+                      onTap: () => nav.go(
+                        tabs[i].destination == NavDestination.settings ? NavDestination.settingsGeneral : tabs[i].destination,
+                      ),
                       onDoubleTap: Platform.isWindows && tabs[i].destination == NavDestination.zapret
                           ? nav.toggleZapret
                           : (tabs[i].destination == NavDestination.settings ? nav.toggleSettings : null),
