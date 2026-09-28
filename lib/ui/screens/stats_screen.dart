@@ -1,15 +1,37 @@
+import '../widgets/nukefy_feedback.dart';
+import '../widgets/responsive_sections.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/stats_provider.dart';
 import '../../core/theme/app_colors.dart';
-import 'speed_test_screen.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
 
-class StatsScreen extends StatelessWidget {
+class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
+
+  @override
+  State<StatsScreen> createState() => _StatsScreenState();
+}
+
+class _StatsScreenState extends State<StatsScreen> {
+  int _logPage = 0;
+
+  Future<void> _clearLogs() async {
+    final s = context.read<SettingsProvider>().strings;
+    final confirmed = await confirmDialog(
+      context,
+      title: s.t('clear'),
+      body: s.t('clearStatsBody'),
+      confirm: s.t('clear'),
+      cancel: s.t('cancel'),
+    );
+    if (!confirmed || !mounted) return;
+    context.read<StatsProvider>().clearLogs();
+    setState(() => _logPage = 0);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,14 +41,14 @@ class StatsScreen extends StatelessWidget {
     final p = context.palette;
     return SafeArea(
       bottom: false,
-      child: ListView(
+      child: ResponsiveSections(
         padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.paddingOf(context).bottom + 100),
         children: [
-          _SpeedTestButton(label: s.t('speedTest'), hint: s.t('speedTestHint')),
-          const SizedBox(height: 12),
-          // Current speed, large.
+          // Session summary stays above the graph: duration first, then the
+          // live down/up pair. This mirrors the order people scan while
+          // troubleshooting a connection.
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
             decoration: BoxDecoration(
               color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(22),
@@ -35,26 +57,19 @@ class StatsScreen extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: _SpeedNow(
-                    icon: Icons.arrow_downward_rounded,
-                    caption: s.t('trafficDown'),
-                    value: FormatUtils.speed(stats.downBps),
-                    color: AppColors.success,
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.t('statsSessionTime').toUpperCase(), style: context.palette.captionStyle),
+                      const SizedBox(height: 8),
+                      Text(FormatUtils.duration(stats.sessionDuration), style: AppTextStyles.metric.copyWith(fontFamily: AppTextStyles.mono, fontSize: 30)),
+                    ],
                   ),
                 ),
-                Container(
-                  width: 1,
-                  height: 62,
-                  color: Theme.of(context).dividerColor,
-                ),
-                Expanded(
-                  child: _SpeedNow(
-                    icon: Icons.arrow_upward_rounded,
-                    caption: s.t('upload'),
-                    value: FormatUtils.speed(stats.upBps),
-                    color: p.accent,
-                  ),
-                ),
+                Container(width: 1, height: 58, color: Theme.of(context).dividerColor),
+                Expanded(child: _SpeedNow(icon: Icons.arrow_downward_rounded, caption: s.t('trafficDown'), value: FormatUtils.speed(stats.downBps), color: p.success)),
+                Expanded(child: _SpeedNow(icon: Icons.arrow_upward_rounded, caption: s.t('upload'), value: FormatUtils.speed(stats.upBps), color: p.accent)),
               ],
             ),
           ),
@@ -72,11 +87,11 @@ class StatsScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _Legend(color: AppColors.success, label: s.t('trafficDown')),
+                    _Legend(color: p.success, label: s.t('trafficDown')),
                     const SizedBox(width: 14),
                     _Legend(color: p.accent, label: s.t('upload')),
                     const Spacer(),
-                    Text(s.t('statsNow'), style: AppTextStyles.metricCaption),
+                    Text(s.t('statsNow'), style: context.palette.captionStyle),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -91,82 +106,78 @@ class StatsScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          // Session time.
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(s.t('statsSessionTime').toUpperCase(), style: AppTextStyles.metricCaption),
-                const SizedBox(height: 8),
-                Text(
-                  FormatUtils.duration(stats.sessionDuration),
-                  style: AppTextStyles.metric.copyWith(
-                    fontFamily: AppTextStyles.mono,
-                    fontSize: 34,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _TrafficCard(
-                  title: s.t('statsSessionTraffic'),
-                  up: stats.sessionUp,
-                  down: stats.sessionDown,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _TrafficCard(
-                  title: s.t('statsAllTime'),
-                  up: settings.settings.allTimeUp + stats.sessionUp,
-                  down: settings.settings.allTimeDown + stats.sessionDown,
-                ),
-              ),
-            ],
-          ),
           const SizedBox(height: 18),
           Row(
             children: [
-              Text(s.t('log').toUpperCase(), style: AppTextStyles.section),
+              Text(s.t('log').toUpperCase(), style: context.palette.sectionStyle),
               const Spacer(),
-              TextButton(onPressed: stats.clearLogs, child: Text(s.t('clear'))),
+              TextButton(onPressed: _clearLogs, child: Text(s.t('clear'))),
             ],
           ),
           if (stats.logs.isEmpty)
             Padding(
               padding: const EdgeInsets.all(24),
-              child: Text(s.t('logEmpty'), style: AppTextStyles.bodySecondary),
+              child: Text(s.t('logEmpty'), style: context.palette.secondaryStyle),
             )
-          else
-            ...stats.logs.map((entry) {
-              final color = switch (entry.status) {
-                'connected' => p.success,
-                'error' => AppColors.error,
-                _ => p.textSecondary,
-              };
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(entry.serverName, style: AppTextStyles.bodyRegular),
-                subtitle: Text(
-                  '${FormatUtils.clock(entry.time)} · ${entry.status}${entry.message == null ? '' : ' · ${entry.message}'}',
-                  style: AppTextStyles.bodySecondary,
-                ),
-                leading: Icon(Icons.circle, size: 10, color: color),
-              );
-            }),
+          else ...[
+            Builder(
+              builder: (context) {
+                const pageSize = 8;
+                final newestFirst = stats.logs.reversed.toList(growable: false);
+                final pageCount = (newestFirst.length / pageSize).ceil();
+                final page = _logPage.clamp(0, pageCount - 1);
+                final entries = newestFirst.skip(page * pageSize).take(pageSize);
+                return Column(
+                  children: [
+                    for (final entry in entries)
+                      _JournalLine(entry: entry, palette: p),
+                    if (pageCount > 1)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(onPressed: page > 0 ? () => setState(() => _logPage = page - 1) : null, icon: const Icon(Icons.chevron_left_rounded)),
+                          Text('${page + 1} / $pageCount', style: context.palette.captionStyle),
+                          IconButton(onPressed: page + 1 < pageCount ? () => setState(() => _logPage = page + 1) : null, icon: const Icon(Icons.chevron_right_rounded)),
+                        ],
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _JournalLine extends StatelessWidget {
+  const _JournalLine({required this.entry, required this.palette});
+
+  final dynamic entry;
+  final NukefyPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (entry.status) {
+      'connected' => palette.success,
+      'error' => AppColors.error,
+      _ => palette.textSecondary,
+    };
+    final message = entry.message == null ? '' : ' · ${entry.message}';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(color: palette.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: palette.border)),
+        child: Row(
+          children: [
+            Icon(Icons.circle, size: 8, color: color),
+            const SizedBox(width: 9),
+            Expanded(child: Text('${FormatUtils.clock(entry.time)} · ${entry.serverName} · ${entry.status}$message', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodySecondary.copyWith(color: palette.textSecondary))),
+          ],
+        ),
       ),
     );
   }
@@ -185,7 +196,7 @@ class _Legend extends StatelessWidget {
       children: [
         Container(width: 10, height: 3, color: color),
         const SizedBox(width: 6),
-        Text(label, style: AppTextStyles.bodySecondary),
+        Text(label, style: context.palette.secondaryStyle),
       ],
     );
   }
@@ -228,49 +239,6 @@ class _SpeedNow extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _TrafficCard extends StatelessWidget {
-  const _TrafficCard({
-    required this.title,
-    required this.up,
-    required this.down,
-  });
-
-  final String title;
-  final int up;
-  final int down;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<SettingsProvider>().strings;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Theme.of(context).dividerColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title.toUpperCase(), style: AppTextStyles.metricCaption),
-          const SizedBox(height: 10),
-          Text(
-            '↓ ${FormatUtils.bytes(down)}',
-            style: AppTextStyles.monoValue.copyWith(color: AppColors.success, fontSize: 15),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '↑ ${FormatUtils.bytes(up)}',
-            style: AppTextStyles.monoValue.copyWith(color: context.palette.accent, fontSize: 15),
-          ),
-          const SizedBox(height: 6),
-          Text('${s.t('received')} / ${s.t('sent')}', style: AppTextStyles.bodySecondary),
-        ],
-      ),
     );
   }
 }
@@ -353,56 +321,4 @@ class _SpeedChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SpeedChartPainter oldDelegate) => true;
-}
-
-
-class _SpeedTestButton extends StatelessWidget {
-  const _SpeedTestButton({required this.label, required this.hint});
-  final String label;
-  final String hint;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SpeedTestScreen())),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [p.accent.withValues(alpha: p.isDark ? 0.22 : 0.16), p.accent2.withValues(alpha: 0.12)],
-          ),
-          border: Border.all(color: p.accent.withValues(alpha: 0.4)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: LinearGradient(colors: [p.accent, p.accent2]),
-              ),
-              child: Icon(Icons.speed_rounded, color: p.isDark ? const Color(0xFF07131A) : Colors.white, size: 26),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: AppTextStyles.headline.copyWith(fontSize: 15)),
-                  const SizedBox(height: 3),
-                  Text(hint, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded, color: p.textSecondary),
-          ],
-        ),
-      ),
-    );
-  }
 }

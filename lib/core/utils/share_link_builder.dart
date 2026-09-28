@@ -17,6 +17,10 @@ class ShareLinkBuilder {
         return _vless(server, outbound);
       case 'trojan':
         return _trojan(server, outbound);
+      case 'anytls':
+        return _anytls(server, outbound);
+      case 'mieru':
+        return _mieru(server, outbound);
       case 'vmess':
         return _vmess(server, outbound);
       case 'shadowsocks':
@@ -57,6 +61,32 @@ class ShareLinkBuilder {
       query: {
         ..._tlsQuery(outbound['tls']),
         ..._transportQuery(outbound['transport']),
+      },
+      name: server.name,
+    );
+  }
+
+  static String _anytls(ServerModel server, Map<String, dynamic> outbound) {
+    return _uri(
+      scheme: 'anytls',
+      user: '${outbound['password'] ?? ''}',
+      host: server.address,
+      port: server.port,
+      query: _tlsQuery(outbound['tls']),
+      name: server.name,
+    );
+  }
+
+  static String _mieru(ServerModel server, Map<String, dynamic> outbound) {
+    return _uri(
+      scheme: 'mieru',
+      user: '${outbound['username'] ?? ''}:${outbound['password'] ?? ''}',
+      host: server.address,
+      port: server.port,
+      query: {
+        'transport': '${outbound['transport'] ?? 'TCP'}',
+        if (outbound['traffic_pattern'] != null)
+          'traffic_pattern': '${outbound['traffic_pattern']}',
       },
       name: server.name,
     );

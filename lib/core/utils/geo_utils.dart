@@ -1,4 +1,17 @@
 class GeoUtils {
+  static String displayName(String name, String? country) {
+    final code = country?.toUpperCase();
+    if (code == null || !_namesEn.containsKey(code)) return name;
+    var result = name.replaceAll(flagEmoji(code), '').trim();
+    final token = code == 'GB' ? '(?:GB|UK)' : RegExp.escape(code);
+    final prefix = RegExp(
+      r'^\[?(?:' + token + r')\]?(?:[\s|:·—-]+|$)',
+      caseSensitive: false,
+    );
+    result = result.replaceFirst(prefix, '').trim();
+    return result.isEmpty ? countryName(code, ru: false) : result;
+  }
+
   static String flagEmoji(String? code) {
     if (code == null || code.length != 2) return '🌐';
     final upper = code.toUpperCase();

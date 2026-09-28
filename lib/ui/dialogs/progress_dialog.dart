@@ -36,7 +36,7 @@ class NukefyProgressDialog extends StatelessWidget {
           children: [
             Text(title, style: AppTextStyles.headline),
             const SizedBox(height: 6),
-            Text(subtitle, textAlign: TextAlign.center, style: AppTextStyles.bodySecondary),
+            Text(subtitle, textAlign: TextAlign.center, style: context.palette.secondaryStyle),
             const SizedBox(height: 18),
             SizedBox(
               width: 132,
@@ -72,7 +72,7 @@ class NukefyProgressDialog extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '${strings.t('speed')} ${FormatUtils.speed(progress!.bps)} · ${strings.t('remaining')} ${FormatUtils.eta(progress!.eta)}',
-                style: AppTextStyles.bodySecondary,
+                style: context.palette.secondaryStyle,
               ),
             ],
           ],

@@ -5,8 +5,15 @@ import 'app_colors.dart';
 import 'app_text_styles.dart';
 
 class AppTheme {
-  static ThemeData dark([String accent = 'cyan']) => _build(NukefyPalette.dark.withAccent(accent));
-  static ThemeData light([String accent = 'cyan']) => _build(NukefyPalette.light.withAccent(accent));
+  static ThemeData dark([String accent = 'cyan', String visualTheme = 'midnight']) {
+    final palette = NukefyPalette.dark.withTheme(visualTheme);
+    return _build(visualTheme == 'midnight' ? palette.withAccent(accent) : palette);
+  }
+
+  static ThemeData light([String accent = 'cyan', String visualTheme = 'midnight']) {
+    final palette = NukefyPalette.light.withTheme(visualTheme);
+    return _build(visualTheme == 'midnight' ? palette.withAccent(accent) : palette);
+  }
 
   /// Transparent system bars so the app background continues under the
   /// status bar and the gesture bar.
@@ -29,10 +36,10 @@ class AppTheme {
     final scheme = ColorScheme(
       brightness: brightness,
       primary: p.accent,
-      onPrimary: const Color(0xFF041316),
+      onPrimary: p.isDark ? Colors.black : Colors.white,
       secondary: p.accent2,
-      onSecondary: Colors.white,
-      error: AppColors.error,
+      onSecondary: p.isDark ? Colors.black : Colors.white,
+      error: p.error,
       onError: Colors.white,
       surface: p.card,
       onSurface: p.text,
@@ -258,7 +265,7 @@ class AppTheme {
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return const Color(0xFF041316);
+          if (states.contains(WidgetState.selected)) return p.isDark ? Colors.black : Colors.white;
           return p.textSecondary;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
@@ -281,7 +288,7 @@ class AppTheme {
         fillColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected) ? p.accent : Colors.transparent,
         ),
-        checkColor: const WidgetStatePropertyAll(Color(0xFF041316)),
+        checkColor: WidgetStatePropertyAll(p.isDark ? Colors.black : Colors.white),
         side: BorderSide(color: p.textSecondary, width: 1.5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
@@ -298,6 +305,9 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       tooltipTheme: TooltipThemeData(
+        waitDuration: const Duration(milliseconds: 750),
+        showDuration: const Duration(milliseconds: 3200),
+        exitDuration: const Duration(milliseconds: 120),
         decoration: BoxDecoration(
           color: p.surface,
           borderRadius: BorderRadius.circular(10),

@@ -49,6 +49,7 @@ class SettingsProvider extends ChangeNotifier {
     await _storage.setBootFlags(
       launchOnBoot: settings.launchOnBoot,
       autoConnect: settings.autoConnect,
+      startInTray: settings.startInTray,
     );
     notifyListeners();
   }
@@ -65,6 +66,7 @@ class SettingsProvider extends ChangeNotifier {
     await _storage.setBootFlags(
       launchOnBoot: settings.launchOnBoot,
       autoConnect: settings.autoConnect,
+      startInTray: settings.startInTray,
     );
     notifyListeners();
   }

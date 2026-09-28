@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -15,8 +17,12 @@ import 'core/constants/app_constants.dart';
 import 'core/models/vpn_status.dart';
 import 'core/providers/vpn_provider.dart';
 import 'core/services/app_log.dart';
+import 'core/services/desktop_instance_guard.dart';
+import 'core/services/music_audio_handler.dart';
+import 'core/services/music_service.dart';
 import 'core/services/storage_service.dart';
 import 'core/services/subscription_service.dart';
+import 'core/services/tg_ws_proxy_service.dart';
 import 'core/services/vpn_platform.dart';
 import 'core/services/zapret_service.dart';
 import 'ui/desktop_shell.dart';
@@ -38,11 +44,28 @@ Future<void> _main() async {
   await AppLog.init();
   AppLog.log('start ${AppConstants.version} ${Platform.operatingSystem} ${Platform.operatingSystemVersion} args=${Platform.executableArguments}');
   if (Platform.isAndroid || Platform.isIOS) {
+    // Music, file pickers and the VPN controls keep a single stable layout.
+    // Never let a sensor rotation move the app into landscape.
+    await SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
     // Draw behind the status and gesture bars; colours come from AppTheme.overlay.
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
+  DesktopInstanceGuard? desktopGuard;
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
+    desktopGuard = DesktopInstanceGuard();
+    final primary = await desktopGuard.acquire(
+      onShow: () async {
+        // A second taskbar/tray launch talks to the existing process instead
+        // of creating a second Flutter engine and losing the entered server.
+        await windowManager.show();
+        await windowManager.focus();
+      },
+    );
+    if (!primary) {
+      AppLog.log('second desktop launch forwarded to the existing window');
+      exit(0);
+    }
     const options = WindowOptions(
       size: Size(1100, 760),
       minimumSize: Size(860, 640),
@@ -52,12 +75,20 @@ Future<void> _main() async {
       backgroundColor: Color(0xFF0D0D0D),
     );
     windowManager.waitUntilReadyToShow(options, () async {
-      // Show first, then maximize: maximizing a hidden window on some
-      // Windows builds left it painted but not receiving input.
+      // Do not maximize during startup.  The old show → maximize sequence
+      // caused a visible full-screen flash and, on tray launches, sometimes
+      // left the first Flutter frame behind a second non-interactive window.
+      // Always restore the predictable normal size before the first frame.
+      try {
+        await windowManager.unmaximize();
+        await windowManager.setSize(options.size!);
+        await windowManager.center();
+      } catch (error) {
+        AppLog.log('window restore failed: $error');
+      }
       await windowManager.show();
       await windowManager.focus();
-      await windowManager.maximize();
-      AppLog.log('window shown');
+      AppLog.log('window shown at normal size');
     });
   }
 
@@ -77,8 +108,37 @@ Future<void> _main() async {
   final settings = SettingsProvider(StorageService.instance);
   final servers = ServersProvider(StorageService.instance, SubscriptionService());
   final stats = StatsProvider(StorageService.instance);
+  AudioHandler? musicHandler;
+  if (Platform.isAndroid) {
+    try {
+      musicHandler = await AudioService.init(
+        builder: MusicAudioHandler.new,
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'com.nukefy.vpn.music',
+          androidNotificationChannelName: 'Nukefy music',
+          androidNotificationOngoing: false,
+          androidStopForegroundOnPause: false,
+          androidNotificationIcon: 'mipmap/ic_launcher',
+          androidResumeOnClick: true,
+          androidNotificationClickStartsActivity: true,
+        ),
+      );
+    } catch (error) {
+      AppLog.log('music background init failed: $error');
+    }
+  }
+  final music = MusicService(StorageService.instance, backgroundHandler: musicHandler);
   final vpn = VpnProvider(VpnPlatform());
-  await guard('load', () => Future.wait([settings.load(), servers.load(), stats.load()]));
+  await guard('load', () => Future.wait([settings.load(), servers.load(), stats.load(), music.load()]));
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    // Match the window to the saved theme: a light-theme start used to flash
+    // a dark rectangle before the first frame.
+    final systemDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    final dark = settings.themeMode == ThemeMode.dark || (settings.themeMode == ThemeMode.system && systemDark);
+    try {
+      await windowManager.setBackgroundColor(dark ? const Color(0xFF0D0D0D) : const Color(0xFFF2F4F8));
+    } catch (_) {}
+  }
   vpn.bind(stats: stats, servers: servers, settings: settings);
   await guard('core', vpn.refreshCore, seconds: 5);
 
@@ -88,6 +148,9 @@ Future<void> _main() async {
         ChangeNotifierProvider.value(value: settings),
         ChangeNotifierProvider.value(value: servers),
         ChangeNotifierProvider.value(value: stats),
+        ChangeNotifierProvider.value(value: music),
+        ChangeNotifierProvider.value(value: TgWsProxyService.instance),
+        ChangeNotifierProvider.value(value: ZapretService.instance),
         ChangeNotifierProvider.value(value: vpn),
         ChangeNotifierProvider(create: (_) => NavProvider()),
       ],
@@ -110,18 +173,37 @@ Future<void> _main() async {
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     AppLog.log('first frame after ${DateTime.now().difference(startedAt).inMilliseconds}ms');
-    if (Platform.isWindows && settings.settings.zapretAutoStart) {
-      final list = ZapretService.instance.strategies();
-      final chosen = list.where((e) => e.id == settings.settings.zapretStrategy).firstOrNull ?? list.firstOrNull;
-      if (chosen != null) {
-        ZapretService.instance.gameFilter = settings.settings.zapretGameFilter;
-        unawaited(ZapretService.instance.start(chosen).then((ok) => AppLog.log('zapret autostart ok=$ok ${ZapretService.instance.lastError ?? ''}')));
+    if (Platform.isWindows) {
+      final zapret = ZapretService.instance;
+      try {
+        await zapret.exclusive(() async {
+          await zapret.refreshGameLists();
+          await zapret.serviceInstalled();
+          if (settings.settings.zapretAutoStart && !zapret.servicePresent) {
+            final list = zapret.strategies();
+            final chosen = list.where((e) => e.id == settings.settings.zapretStrategy).firstOrNull ?? list.firstOrNull;
+            if (chosen != null) {
+              zapret.configure(settings.settings);
+              final ok = await zapret.start(chosen);
+              AppLog.log('zapret autostart ok=$ok ${zapret.lastError ?? ''}');
+            }
+          }
+        });
+      } catch (error) {
+        zapret.lastError = '$error';
+        AppLog.log('zapret startup failed: $error');
       }
     }
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       // Safety net: if waitUntilReadyToShow never fired, show the window now.
       try {
-        if (!await windowManager.isVisible()) await windowManager.show();
+        final loginLaunch = Platform.executableArguments.contains('--autostart');
+        if (loginLaunch && settings.settings.startInTray) {
+          await windowManager.hide();
+        } else if (!await windowManager.isVisible()) {
+          await windowManager.show();
+          await windowManager.focus();
+        }
       } catch (_) {}
     }
     final action = await VpnPlatform().consumeLaunchAction();
@@ -132,11 +214,43 @@ Future<void> _main() async {
       await vpn.connect(selected);
     }
     final context = navigatorKey.currentContext;
-    if (context != null && settings.settings.checkUpdatesOnStart) {
-      await checkUpdatesFlow(context, silentIfCurrent: true);
+    if (context != null) {
+      await _ensureNotificationPermission(context, settings);
+      if (settings.settings.checkUpdatesOnStart) {
+        await checkUpdatesFlow(context, silentIfCurrent: true);
+      }
     }
   });
 }
+
+Future<void> _ensureNotificationPermission(BuildContext context, SettingsProvider settings) async {
+  if (!Platform.isAndroid || !settings.settings.notifications) return;
+  final current = await Permission.notification.status;
+  if (current.isGranted || current.isLimited) return;
+  final marker = StorageService.instance.readJson('notification_permission_prompt');
+  final alreadyPrompted = marker?['version'] == AppConstants.version;
+  var status = current;
+  if (!alreadyPrompted) {
+    if (status.isDenied) status = await Permission.notification.request();
+    await StorageService.instance.writeJson('notification_permission_prompt', {
+      'version': AppConstants.version,
+    });
+  }
+  if (status.isGranted || status.isLimited || alreadyPrompted || !context.mounted) return;
+  final openSettings = await showDialog<bool>(
+    context: context,
+    builder: (dialog) => AlertDialog(
+      title: Text(settings.strings.t('notificationPermissionTitle')),
+      content: Text(settings.strings.t('notificationPermissionBody')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(settings.strings.t('notificationPermissionLater'))),
+        FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(settings.strings.t('notificationPermissionSettings'))),
+      ],
+    ),
+  );
+  if (openSettings == true) await openAppSettings();
+}
+
 
 class _ResumeActions extends WidgetsBindingObserver {
   _ResumeActions(this.onResume);

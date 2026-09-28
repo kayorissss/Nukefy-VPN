@@ -42,7 +42,7 @@ class HomeScreen extends StatelessWidget {
     final statusColor = switch (vpn.status) {
       VpnStatus.connected => p.success,
       VpnStatus.connecting => p.accent,
-      VpnStatus.error => AppColors.error,
+      VpnStatus.error => p.error,
       VpnStatus.disconnected => p.textSecondary,
     };
 
@@ -63,7 +63,7 @@ class HomeScreen extends StatelessWidget {
                     const Spacer(),
                     _RoundIcon(
                       icon: Icons.tune_rounded,
-                      onTap: () => context.read<NavProvider>().setIndex(Platform.isWindows ? 5 : 4),
+                      onTap: () => context.read<NavProvider>().go(NavDestination.settings),
                     ),
                   ],
                 ),
@@ -117,7 +117,7 @@ class HomeScreen extends StatelessWidget {
             const Spacer(),
             _ServerCard(
               server: server,
-              title: server == null ? s.t('selectServer') : server.name,
+              title: server == null ? s.t('selectServer') : server.displayName,
               subtitle: server == null
                   ? s.t('tapToChange')
                   : '${FormatUtils.protocolLabel(server.protocol)} · ${server.address}',
@@ -134,8 +134,18 @@ class HomeScreen extends StatelessWidget {
   String _friendlyError(S s, String raw) {
     if (raw == 'CORE_MISSING') return s.t('coreMissing');
     if (raw == 'LIBBOX_MISSING') return s.t('libboxMissing');
+    if (raw == 'information-entry') return s.t('informationEntry');
     if (raw == 'need-server') return s.t('needServer');
     if (raw == 'XHTTP_UNSUPPORTED') return s.t('xhttpUnsupported');
+    if (raw == 'CORE_PROTOCOL_UNSUPPORTED') return s.t('coreProtocolUnsupported');
+    if (raw == 'CORE_OUTBOUND_MISSING') return s.t('coreOutboundMissing');
+    if (raw == 'CORE_ENDPOINT_MISSING') return s.t('coreEndpointMissing');
+    if (raw == 'XRAY_TRANSPORT_REQUIRED') return s.t('xrayTransportRequired');
+    if (raw == 'XRAY_CORE_MISSING') return s.t('xrayNotInstalled');
+    if (raw == 'XRAY_PLATFORM_UNSUPPORTED') return s.t('xrayPlatformUnsupported');
+    if (raw == 'XRAY_UNSUPPORTED_PROTOCOL') return s.t('xrayUnsupportedProtocol');
+    if (raw == 'XRAY_FRONTEND_MISSING') return s.t('xrayFrontendMissing');
+    if (raw.startsWith('XRAY_')) return '${s.t('xrayCore')}: $raw';
     if (raw.startsWith('NO_TRAFFIC:')) return '${s.t('noTraffic')}\n${raw.substring(11)}';
     if (raw.contains('Permission denied') && raw.contains('sing-box')) return s.t('libboxMissing');
     if (raw.contains('legacy inbound fields')) return s.t('coreOutdatedConfig');
@@ -148,8 +158,8 @@ class HomeScreen extends StatelessWidget {
 /// Bottom sheet with every server; tapping one connects right away.
 Future<void> showServerPicker(BuildContext context) async {
   final servers = context.read<ServersProvider>();
-  if (servers.servers.isEmpty) {
-    context.read<NavProvider>().setIndex(1);
+  if (servers.servers.where((server) => !server.isInformational).isEmpty) {
+    context.read<NavProvider>().go(NavDestination.servers);
     return;
   }
   final picked = await showModalBottomSheet<ServerModel>(
@@ -173,7 +183,7 @@ class _ServerPickerSheet extends StatelessWidget {
     final vpn = context.watch<VpnProvider>();
     final s = context.watch<SettingsProvider>().strings;
     final p = context.palette;
-    final list = [...servers.servers]
+    final list = servers.servers.where((server) => !server.isInformational).toList()
       ..sort((a, b) {
         int rank(ServerModel m) => m.pingMs == null ? 1 : (m.pingMs! < 0 ? 2 : 0);
         final r = rank(a).compareTo(rank(b));
@@ -203,7 +213,7 @@ class _ServerPickerSheet extends StatelessWidget {
                   tooltip: s.t('servers'),
                   onPressed: () {
                     Navigator.pop(context);
-                    context.read<NavProvider>().setIndex(1);
+                    context.read<NavProvider>().go(NavDestination.servers);
                   },
                   icon: const Icon(Icons.tune_rounded),
                 ),
@@ -237,7 +247,7 @@ class _ServerPickerSheet extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    server.name,
+                                    server.displayName,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: AppTextStyles.bodyRegular.copyWith(
@@ -298,24 +308,25 @@ class _ErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 520),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
         decoration: BoxDecoration(
-          color: AppColors.error.withValues(alpha: 0.10),
+          color: p.error.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+          border: Border.all(color: p.error.withValues(alpha: 0.35)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.error_outline_rounded, size: 18, color: AppColors.error),
+            Icon(Icons.error_outline_rounded, size: 18, color: p.error),
             const SizedBox(width: 10),
             Expanded(
               child: SelectableText(
                 message,
-                style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error, fontSize: 12.5),
+                style: AppTextStyles.bodySecondary.copyWith(color: p.error, fontSize: 12.5),
               ),
             ),
           ],

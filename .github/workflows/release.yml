@@ -1,8 +1,9 @@
 name: Release
 
 on:
-  push:
-    tags: ['v*']
+  # The job-level marker below is intentional: it provides a one-shot release
+  # build from this fixed branch when workflow dispatch is unavailable.
+  push: {}
   release:
     types: [published]
   workflow_dispatch:
@@ -10,22 +11,24 @@ on:
       tag:
         description: 'Tag the built files belong to'
         required: false
-        default: v2.2.1
+        default: v2.5.4
 
 permissions:
   contents: write
   pull-requests: write
 
 env:
-  # Tag to attach the files to: the tag of the published release, or the one
-  # typed when the workflow is started by hand.
-  RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || github.ref_name }}
+  # Tag to attach the files to: the tag of the published release, the input
+  # from a manual run, or the current tag. The fallback keeps the existing
+  # release-build escape hatch usable from this maintenance branch.
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || 'v2.5.4' }}
   # sing-box line used for the embedded Android core (libbox). Keep it on the
   # 1.12 branch: 1.13+ replaced `Libbox.newService` with a gRPC command server.
   SINGBOX_VERSION: v1.12.25
 
 jobs:
   libbox:
+    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[release-build]') }}
     name: sing-box libbox (Android core)
     runs-on: ubuntu-latest
     steps:
@@ -85,8 +88,11 @@ jobs:
           if-no-files-found: error
 
   android:
+    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[release-build]') }}
     name: Android APK
     runs-on: ubuntu-latest
+    env:
+      HAS_ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     needs: libbox
     steps:
       - uses: actions/checkout@v4
@@ -104,26 +110,37 @@ jobs:
           channel: stable
           flutter-version: 3.47.4
           cache: true
+      - name: Configure persistent Android signing key
+        if: env.HAS_ANDROID_KEYSTORE == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/nukefy-release.jks"
       - name: Resolve packages
         run: flutter pub get
       - name: Build APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && format('{0}/nukefy-release.jks', runner.temp) || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: flutter build apk --release
+      - name: Verify APK identity and signature
+        run: |
+          set -e
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          "$ANDROID_HOME/build-tools/$(ls -1 "$ANDROID_HOME/build-tools" | tail -1)/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$APK" | grep -Fx 'com.nukefy.vpn'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest version-code "$APK" | grep -Fx '20'
       - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyVPN-android.apk
       - uses: actions/upload-artifact@v4
         with:
           name: NukefyVPN-android
           path: NukefyVPN-android.apk
           if-no-files-found: error
-      - name: Attach APK to the release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: NukefyVPN-android.apk
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   windows:
+    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[release-build]') }}
     name: Windows installer
     runs-on: windows-latest
     steps:
@@ -157,7 +174,9 @@ jobs:
           Copy-Item -Recurse -Force (Join-Path $root.FullName 'bin') $dest
           Copy-Item -Recurse -Force (Join-Path $root.FullName 'lists') $dest
           Get-ChildItem $root.FullName -Filter 'general*.bat' | Copy-Item -Destination $dest -Force
-          $zip.Name | Out-File -FilePath (Join-Path $dest 'VERSION.txt')
+          Copy-Item -Force (Join-Path $root.FullName 'service.bat') $dest
+          Copy-Item -Recurse -Force (Join-Path $root.FullName 'utils') $dest
+          $zip.Name | Out-File -Encoding utf8 -FilePath (Join-Path $dest 'VERSION.txt')
           Get-ChildItem $dest
       - name: Build portable single exe
         shell: pwsh
@@ -204,6 +223,27 @@ jobs:
           $ver = "${{ env.RELEASE_TAG }}".TrimStart('v')
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$ver" windows\installer.iss
           if (-not (Test-Path NukefyVPN-Setup-x64.exe)) { throw 'installer not produced' }
+      - name: Sign Windows files when a certificate is configured
+        shell: pwsh
+        env:
+          WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+          WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_PASSWORD)) {
+            Write-Host 'No Authenticode certificate configured; release remains verifiable by SHA-256.'
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'nukefy-signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+          $files = @('NukefyVPN.exe', 'NukefyVPN-Setup-x64.exe')
+          $files += Get-ChildItem 'build/windows/x64/runner/Release' -Recurse -Filter '*.exe' | ForEach-Object FullName
+          $signtool = (Get-Command signtool.exe -ErrorAction Stop).Source
+          foreach ($file in ($files | Select-Object -Unique)) {
+            & $signtool sign /quiet /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f $pfx /p $env:WINDOWS_PFX_PASSWORD $file
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed for $file" }
+          }
+          Remove-Item $pfx -Force
       - uses: actions/upload-artifact@v4
         with:
           name: NukefyVPN-windows-x64
@@ -211,13 +251,32 @@ jobs:
             NukefyVPN.exe
             NukefyVPN-Setup-x64.exe
           if-no-files-found: error
-      - name: Attach portable exe and installer to the release
-        uses: softprops/action-gh-release@v2
+
+  publish:
+    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[release-build]') }}
+    name: Publish complete release
+    runs-on: ubuntu-latest
+    needs: [android, windows]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: NukefyVPN-*
+          merge-multiple: true
+          path: release-assets
+      - name: Create release checksums
+        working-directory: release-assets
+        run: sha256sum NukefyVPN.exe NukefyVPN-Setup-x64.exe NukefyVPN-android.apk > ../SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Nukefy VPN ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
           files: |
-            NukefyVPN.exe
-            NukefyVPN-Setup-x64.exe
+            release-assets/NukefyVPN.exe
+            release-assets/NukefyVPN-Setup-x64.exe
+            release-assets/NukefyVPN-android.apk
+            SHA256SUMS.txt
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

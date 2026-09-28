@@ -5,7 +5,9 @@ import 'package:uuid/uuid.dart';
 import '../../core/models/app_settings.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/settings_provider.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../widgets/responsive_sections.dart';
 
 class RoutingScreen extends StatelessWidget {
   const RoutingScreen({super.key});
@@ -17,17 +19,19 @@ class RoutingScreen extends StatelessWidget {
     final mode = settings.settings.routingMode;
     return Scaffold(
       appBar: AppBar(title: Text(s.t('routing'))),
-      body: ListView(
+      body: ResponsiveFrame(
+        maxWidth: 1180,
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(s.t('geosite'), style: AppTextStyles.bodySecondary),
+          Text(s.t('geosite'), style: context.palette.secondaryStyle),
           const SizedBox(height: 8),
           ...RoutingMode.values.map((item) {
             return RadioListTile<RoutingMode>(
               value: item,
               groupValue: mode,
               title: Text(_label(s, item), style: AppTextStyles.bodyRegular),
-              subtitle: Text(_desc(s, item), style: AppTextStyles.bodySecondary),
+              subtitle: Text(_desc(s, item), style: context.palette.secondaryStyle),
               onChanged: (next) {
                 if (next != null) settings.update((value) => value.routingMode = next);
               },
@@ -52,7 +56,7 @@ class RoutingScreen extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(rule.value, style: AppTextStyles.monoValue),
-              subtitle: Text('${rule.kind} · ${_action(s, rule.action)}', style: AppTextStyles.bodySecondary),
+              subtitle: Text('${rule.kind} · ${_action(s, rule.action)}', style: context.palette.secondaryStyle),
               trailing: IconButton(
                 icon: const Icon(Icons.close_rounded),
                 onPressed: () {
@@ -63,6 +67,7 @@ class RoutingScreen extends StatelessWidget {
               ),
             ),
         ],
+        ),
       ),
     );
   }
