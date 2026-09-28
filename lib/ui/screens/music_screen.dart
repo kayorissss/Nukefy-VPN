@@ -10,7 +10,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
 import '../../l10n/strings.dart';
-import '../widgets/music_visualizer.dart';
 import '../widgets/nukefy_background.dart';
 import '../widgets/responsive_sections.dart';
 
