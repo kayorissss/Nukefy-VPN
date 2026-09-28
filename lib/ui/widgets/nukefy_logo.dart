@@ -62,6 +62,5 @@ class NukefyLogo extends StatelessWidget {
           ),
         ),
       );
-    );
   }
 }
