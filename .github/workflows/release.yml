@@ -1,12 +1,9 @@
 name: Release
 
 on:
-  push:
-    tags: ['v*']
-    # GitHub does not expose workflow_dispatch to this integration. The
-    # one-shot marker below lets the release be built from this fixed branch
-    # while normal branch pushes keep every release job skipped.
-    branches: ['arena/01a0e222-nukefy-vpn']
+  # The job-level marker below is intentional: it provides a one-shot release
+  # build from this fixed branch when workflow dispatch is unavailable.
+  push: {}
   release:
     types: [published]
   workflow_dispatch:
