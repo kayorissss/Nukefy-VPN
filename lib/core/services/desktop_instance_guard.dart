@@ -48,7 +48,7 @@ class DesktopInstanceGuard {
       );
       socket.write('NUKEFY_SHOW\n');
       await socket.flush();
-      final response = await utf8.decoder.bind(socket).join().timeout(const Duration(milliseconds: 900));
+      final response = await utf8.decoder.bind(socket.cast<List<int>>()).join().timeout(const Duration(milliseconds: 900));
       return response.contains('NUKEFY_OK');
     } catch (_) {
       return false;
