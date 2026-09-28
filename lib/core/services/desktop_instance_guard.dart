@@ -62,7 +62,7 @@ class DesktopInstanceGuard {
   void _handleClient(Socket socket) {
     var buffer = '';
     var handled = false;
-    socket.transform(utf8.decoder).listen(
+    socket.cast<List<int>>().transform(utf8.decoder).listen(
       (chunk) {
         if (handled) return;
         buffer += chunk;
