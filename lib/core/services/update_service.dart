@@ -196,13 +196,13 @@ class UpdateService {
           throw const UpdateDownloadException('updateDownloadFailed');
         }
         if (file.existsSync()) await file.delete();
-        return part.rename(file.path);
+        return await part.rename(file.path);
       } catch (error) {
         lastError = error;
         received = part.existsSync() ? await part.length() : 0;
         if (expected != null && received == expected) {
           if (file.existsSync()) await file.delete();
-          return part.rename(file.path);
+          return await part.rename(file.path);
         }
         if (attempt < 4) {
           await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
@@ -212,8 +212,8 @@ class UpdateService {
 
     // Do not expose Dio's redirect/stream internals in the UI. The partial
     // file remains in place and the next attempt can continue with Range.
-    if (lastError is UpdateDownloadException && (lastError as UpdateDownloadException).code == 'no-asset') {
-      throw lastError!;
+    if (lastError is UpdateDownloadException && lastError.code == 'no-asset') {
+      throw lastError;
     }
     throw const UpdateDownloadException('updateDownloadNetwork');
   }
