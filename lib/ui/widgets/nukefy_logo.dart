@@ -12,6 +12,7 @@ class NukefyLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final image = _image(p);
     return Container(
       width: size,
       height: size,
@@ -36,31 +37,37 @@ class NukefyLogo extends StatelessWidget {
                 .2126, .7152, .0722, 0, 0,
                 0, 0, 0, 1, 0,
               ]),
-              child: _image(p),
+              child: image,
             )
-          : _image(p),
+          : image,
     );
   }
 
-  bool _isMonochrome(NukefyPalette p) => p.accent.red == p.accent.green && p.accent.green == p.accent.blue;
+  bool _isMonochrome(NukefyPalette p) {
+    final color = p.accent;
+    // Use the non-deprecated channel accessors introduced with Flutter's
+    // colour API. Carbon's accent is deliberately equal on all channels.
+    return color.r == color.g && color.g == color.b;
+  }
 
-  Widget _image(NukefyPalette p) => Image.asset(
-        'assets/icons/app_icon.png',
-        fit: BoxFit.cover,
-        filterQuality: FilterQuality.medium,
-        errorBuilder: (_, _, _) => ColoredBox(
-          color: p.background,
-          child: Center(
-            child: Text(
-              'N',
-              style: TextStyle(
-                color: p.accent,
-                fontFamily: 'Unbounded',
-                fontWeight: FontWeight.w700,
-              ),
+  Widget _image(NukefyPalette p) {
+    return Image.asset(
+      'assets/icons/app_icon.png',
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.medium,
+      errorBuilder: (_, _, _) => ColoredBox(
+        color: p.background,
+        child: Center(
+          child: Text(
+            'N',
+            style: TextStyle(
+              color: p.accent,
+              fontFamily: 'Unbounded',
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 }
