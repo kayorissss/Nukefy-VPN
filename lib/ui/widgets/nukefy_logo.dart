@@ -28,7 +28,23 @@ class NukefyLogo extends StatelessWidget {
             : null,
       ),
       clipBehavior: Clip.antiAlias,
-      child: Image.asset(
+      child: _isMonochrome(p)
+          ? ColorFiltered(
+              colorFilter: const ColorFilter.matrix(<double>[
+                .2126, .7152, .0722, 0, 0,
+                .2126, .7152, .0722, 0, 0,
+                .2126, .7152, .0722, 0, 0,
+                0, 0, 0, 1, 0,
+              ]),
+              child: _image(p),
+            )
+          : _image(p),
+    );
+  }
+
+  bool _isMonochrome(NukefyPalette p) => p.accent.red == p.accent.green && p.accent.green == p.accent.blue;
+
+  Widget _image(NukefyPalette p) => Image.asset(
         'assets/icons/app_icon.png',
         fit: BoxFit.cover,
         filterQuality: FilterQuality.medium,
@@ -45,7 +61,7 @@ class NukefyLogo extends StatelessWidget {
             ),
           ),
         ),
-      ),
+      );
     );
   }
 }

@@ -67,8 +67,11 @@ Future<void> _main() async {
       exit(0);
     }
     const options = WindowOptions(
-      size: Size(1100, 760),
-      minimumSize: Size(860, 640),
+      // Give the desktop layout enough horizontal room for the rail and two
+      // balanced content columns; this no longer opens as a shrunken mobile
+      // canvas on a normal monitor.
+      size: Size(1280, 820),
+      minimumSize: Size(980, 680),
       center: true,
       title: 'Nukefy VPN',
       titleBarStyle: TitleBarStyle.hidden,

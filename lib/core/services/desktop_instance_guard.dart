@@ -12,6 +12,8 @@ import 'dart:io';
 class DesktopInstanceGuard {
   DesktopInstanceGuard({this.port = 45837});
 
+  static DesktopInstanceGuard? _owner;
+
   final int port;
   ServerSocket? _server;
   Future<void> Function()? _onShow;
@@ -28,6 +30,7 @@ class DesktopInstanceGuard {
         shared: false,
       );
       _server!.listen(_handleClient, onError: (_) {});
+      _owner = this;
       return true;
     } on SocketException {
       final delivered = await _notifyExisting();
@@ -95,9 +98,18 @@ class DesktopInstanceGuard {
     }
   }
 
+  /// Releases the listener before a replacement process is spawned. Without
+  /// this hand-off the new process sees the old guard, forwards a focus request
+  /// to it and then exits — which looks like a frozen duplicate window.
+  static Future<void> releaseActive() async {
+    final owner = _owner;
+    if (owner != null) await owner.dispose();
+  }
+
   Future<void> dispose() async {
     final server = _server;
     _server = null;
+    if (identical(_owner, this)) _owner = null;
     _onShow = null;
     await server?.close();
   }

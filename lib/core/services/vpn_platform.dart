@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../constants/app_constants.dart';
+import 'desktop_instance_guard.dart';
 
 enum ApkInstallResult { launched, permissionRequired, missing, invalid, wrongPackage, notNewer, signatureMismatch, failed }
 
@@ -523,6 +524,11 @@ class VpnPlatform {
       return;
     }
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      // Free the loopback guard before launching the replacement. Otherwise
+      // the replacement forwards to this still-running process and exits as a
+      // "second instance", leaving the user with an inert duplicate window.
+      await DesktopInstanceGuard.releaseActive();
+      await Future<void>.delayed(const Duration(milliseconds: 120));
       await Process.start(
         Platform.resolvedExecutable,
         Platform.executableArguments,

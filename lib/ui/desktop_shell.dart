@@ -289,8 +289,19 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   }
 
   Future<void> _restart() async {
+    // The replacement must be spawned only after the old process has released
+    // its core, tray and single-instance resources. Starting it first makes it
+    // connect to this process as a duplicate and then exit immediately.
+    await windowManager.hide();
+    final vpn = context.read<VpnProvider>();
+    await Future.wait<void>([
+      _bounded(() => ZapretService.instance.shutdown()),
+      _bounded(vpn.disconnect),
+    ]);
     await VpnPlatform().restartApp();
-    await _quit();
+    await windowManager.setPreventClose(false);
+    await windowManager.destroy();
+    exit(0);
   }
 
   /// Hiding the window first makes the exit feel instant; the cleanup below

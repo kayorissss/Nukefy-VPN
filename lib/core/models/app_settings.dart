@@ -35,7 +35,7 @@ class AppSettings {
   AppSettings({
     this.theme = ThemePreference.dark,
     this.accent = 'cyan',
-    this.visualTheme = 'midnight',
+    this.visualTheme = 'carbon',
     this.appIcon = 'default',
     this.zapretStrategy = 'general',
     this.zapretAutoStart = false,
@@ -225,7 +225,7 @@ class AppSettings {
     return AppSettings(
       theme: _enum(ThemePreference.values, json['theme'], ThemePreference.dark),
       accent: (json['accent'] as String?) ?? 'cyan',
-      visualTheme: (json['visualTheme'] as String?) ?? 'midnight',
+      visualTheme: (json['visualTheme'] as String?) ?? 'carbon',
       appIcon: (json['appIcon'] as String?) ?? 'default',
       zapretStrategy: (json['zapretStrategy'] as String?) ?? 'general',
       zapretAutoStart: json['zapretAutoStart'] == true,

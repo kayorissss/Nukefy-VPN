@@ -31,14 +31,27 @@ import 'routing_screen.dart';
 import 'update_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.initialSection = 0, this.showSubtabs = true});
+
+  /// Desktop rail destinations open a section directly. Mobile keeps the
+  /// compact local tab strip because there is no permanent side rail.
+  final int initialSection;
+  final bool showSubtabs;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  int _section = 0;
+  late int _section = widget.initialSection.clamp(0, 2).toInt();
+
+  @override
+  void didUpdateWidget(covariant SettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialSection != widget.initialSection) {
+      _section = widget.initialSection.clamp(0, 2).toInt();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,10 +65,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       bottom: false,
       child: ResponsiveSections(
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
+        // The rail is the desktop section switcher. On mobile the local tabs
+        // and the update banner remain page-level, full-width elements.
+        minColumnWidth: 460,
+        maxColumns: 2,
+        fullWidthCount: (widget.showSubtabs ? 1 : 0) + (_section == 0 ? 1 : 0),
         children: [
           // Desktop downloads sing-box as a separate binary; Android ships
           // the core inside the APK (libbox), so there is nothing to install.
-          _SettingsSubtabs(selected: _section, onChanged: (value) => setState(() => _section = value)),
+          if (widget.showSubtabs)
+            _SettingsSubtabs(selected: _section, onChanged: (value) => setState(() => _section = value)),
           if (_section == 0) const _UpdateBanner(),
           if (_section == 0 && !Platform.isAndroid) ...[
             _CoreCard(vpn: vpn, strings: s),
@@ -66,97 +85,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.tune_rounded,
             child: Column(
               children: [
-                SettingsTile(
-                  icon: Icons.dark_mode_outlined,
-                  title: s.t('theme'),
-                  trailing: NukefyDropdown<ThemePreference>(
-                    value: value.theme,
-                    items: {
-                      ThemePreference.dark: s.t('dark'),
-                      ThemePreference.light: s.t('light'),
-                      ThemePreference.system: s.t('system'),
-                    },
-                    onChanged: (next) => settings.update((item) => item.theme = next),
-                  ),
-                ),
-                SettingsTile(
-                  icon: Icons.palette_outlined,
-                  title: s.t('themes'),
-                  subtitle: s.t('themesHint'),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        for (final entry in ThemePresets.all.entries)
-                          _ThemeChoice(
-                            width: constraints.maxWidth < 300 ? (constraints.maxWidth - 10) / 2 : 132,
-                            label: _themeLabel(s, entry.key),
-                            colors: Theme.of(context).brightness == Brightness.dark ? entry.value.dark : entry.value.light,
-                            selected: value.visualTheme == entry.key,
-                            onTap: () => settings.update((item) => item.visualTheme = entry.key),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (Platform.isAndroid || Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[
-                  SettingsTile(
-                    icon: Icons.apps_rounded,
-                    title: s.t('appIcon'),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
-                    child: Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        for (final name in const ['default', 'stealth', 'violet', 'pink', 'crimson', 'emerald'])
-                          _IconChoice(
-                            name: name,
-                            label: _iconLabel(s, name),
-                            selected: value.appIcon == name,
-                            onTap: () async {
-                              if (value.appIcon == name) return;
-                              final ok = await confirmDialog(
-                                context,
-                                title: s.t('appIconConfirmTitle'),
-                                body: s.t('appIconConfirmBody'),
-                                confirm: s.t('restart'),
-                                cancel: s.t('cancel'),
-                              );
-                              if (!ok || !context.mounted) return;
-                              await settings.update((item) => item.appIcon = name);
-                              final applied = await VpnPlatform().setAppIcon(name);
-                              if (!applied && Platform.isAndroid) {
-                                if (context.mounted) showNukefySnack(context, s.t('appIconFailed'), error: true);
-                                return;
-                              }
-                              await context.read<VpnProvider>().disconnect();
-                              if (Platform.isWindows) await ZapretService.instance.shutdown();
-                              await VpnPlatform().restartApp(exitCurrent: !Platform.isAndroid);
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-                SettingsTile(
-                  icon: Icons.language_rounded,
-                  title: s.t('language'),
-                  trailing: NukefyDropdown<LanguagePreference>(
-                    value: value.language,
-                    items: {
-                      LanguagePreference.ru: s.t('russian'),
-                      LanguagePreference.en: s.t('english'),
-                      LanguagePreference.system: s.t('system'),
-                    },
-                    onChanged: (next) => settings.update((item) => item.language = next),
-                  ),
-                ),
                 SwitchTile(
                   icon: Icons.bolt_rounded,
                   title: s.t('autoConnect'),
@@ -273,6 +201,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: '${_perAppLabel(s, value.perAppMode)} · ${s.t('perAppHint')}',
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PerAppScreen())),
                   ),
+                SettingsTile(
+                  icon: Icons.dns_rounded,
+                  title: s.t('dnsTitle'),
+                  subtitle: '${value.dnsPreset} · ${value.proxyDns}',
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DnsScreen())),
+                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(2, 8, 2, 12),
                   child: Column(
@@ -376,12 +310,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 const SizedBox(height: 8),
-                SettingsTile(
-                  icon: Icons.dns_rounded,
-                  title: s.t('dnsTitle'),
-                  subtitle: '${value.dnsPreset} · ${value.proxyDns}',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DnsScreen())),
-                ),
                 const SizedBox(height: 12),
                 const Divider(height: 1),
                 _SliderTile(
@@ -740,23 +668,29 @@ class _AppearanceCard extends StatelessWidget {
                 ),
               ),
               SettingsTile(icon: Icons.palette_outlined, title: s.t('themes'), subtitle: s.t('themesHint')),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
-                child: Row(
-                  children: [
-                    for (final entry in ThemePresets.all.entries) ...[
-                      _ThemeChoice(
-                        width: 150,
-                        label: _themeLabel(s, entry.key),
-                        colors: Theme.of(context).brightness == Brightness.dark ? entry.value.dark : entry.value.light,
-                        selected: value.visualTheme == entry.key,
-                        onTap: () => settings.update((item) => item.visualTheme = entry.key),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                  ],
-                ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 620 ? 4 : constraints.maxWidth >= 440 ? 3 : 2;
+                  final gap = 10.0;
+                  final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
+                    child: Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final entry in ThemePresets.all.entries)
+                          _ThemeChoice(
+                            width: width,
+                            label: _themeLabel(s, entry.key),
+                            colors: Theme.of(context).brightness == Brightness.dark ? entry.value.dark : entry.value.light,
+                            selected: value.visualTheme == entry.key,
+                            onTap: () => settings.update((item) => item.visualTheme = entry.key),
+                          ),
+                      ],
+                    ),
+                  );
+                },
               ),
               SettingsTile(icon: Icons.language_rounded, title: s.t('language'), trailing: NukefyDropdown<LanguagePreference>(value: value.language, items: {LanguagePreference.ru: s.t('russian'), LanguagePreference.en: s.t('english'), LanguagePreference.system: s.t('system')}, onChanged: (next) => settings.update((item) => item.language = next))),
               if (Platform.isAndroid || Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[
@@ -780,12 +714,6 @@ class _AppearanceCard extends StatelessWidget {
               ],
             ],
           ),
-        ),
-        const SizedBox(height: 14),
-        SectionCard(
-          title: s.t('behavior'),
-          icon: Icons.tune_rounded,
-          child: Text(s.t('behaviorMovedHint'), style: context.palette.secondaryStyle),
         ),
       ],
     );

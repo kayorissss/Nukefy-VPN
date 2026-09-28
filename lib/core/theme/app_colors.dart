@@ -220,6 +220,12 @@ class ThemePalette {
 /// accent swatch: all Material controls consume the palette returned above.
 class ThemePresets {
   static const Map<String, ThemePreset> all = {
+    // Near-black with restrained white and graphite controls for a genuinely
+    // monochrome option, not another blue accent on a dark background.
+    'carbon': ThemePreset(
+      dark: ThemePalette(background: Color(0xFF050505), card: Color(0xFF0D0D0D), surface: Color(0xFF171717), border: Color(0xFF303030), text: Color(0xFFF7F7F7), textSecondary: Color(0xFFAAAAAA), textDisabled: Color(0xFF626262), accent: Color(0xFFF1F1F1), accent2: Color(0xFF8C8C8C), success: Color(0xFFD6D6D6)),
+      light: ThemePalette(background: Color(0xFFF4F4F4), card: Color(0xFFFFFFFF), surface: Color(0xFFE6E6E6), border: Color(0xFFC8C8C8), text: Color(0xFF101010), textSecondary: Color(0xFF5A5A5A), textDisabled: Color(0xFFA2A2A2), accent: Color(0xFF202020), accent2: Color(0xFF707070), success: Color(0xFF303030)),
+    ),
     'midnight': ThemePreset(
       dark: ThemePalette(background: Color(0xFF0B0E13), card: Color(0xFF12161D), surface: Color(0xFF1A1F28), border: Color(0xFF242B36), text: Color(0xFFF3F6FA), textSecondary: Color(0xFF8B95A5), textDisabled: Color(0xFF4F5866), accent: Color(0xFF00E5FF), accent2: Color(0xFF7B61FF), success: Color(0xFF2EE59D)),
       light: ThemePalette(background: Color(0xFFF2F4F8), card: Color(0xFFFFFFFF), surface: Color(0xFFE9EDF3), border: Color(0xFFD9DFE8), text: Color(0xFF0F141B), textSecondary: Color(0xFF5B6675), textDisabled: Color(0xFFA3ACB9), accent: Color(0xFF0097A7), accent2: Color(0xFF5B45D6), success: Color(0xFF0E9F6E)),
@@ -235,12 +241,6 @@ class ThemePresets {
     'ocean': ThemePreset(
       dark: ThemePalette(background: Color(0xFF07111F), card: Color(0xFF0D1D31), surface: Color(0xFF122943), border: Color(0xFF204568), text: Color(0xFFEEF7FF), textSecondary: Color(0xFF91ACC7), textDisabled: Color(0xFF526F8E), accent: Color(0xFF55B7FF), accent2: Color(0xFF9D8CFF), success: Color(0xFF58D6BA)),
       light: ThemePalette(background: Color(0xFFEEF7FF), card: Color(0xFFFFFFFF), surface: Color(0xFFDDECF9), border: Color(0xFFC0D7EB), text: Color(0xFF102237), textSecondary: Color(0xFF5E7890), textDisabled: Color(0xFFA4B9CB), accent: Color(0xFF0969B5), accent2: Color(0xFF6749CC), success: Color(0xFF087F69)),
-    ),
-    // Near-black with restrained white and graphite controls for a genuinely
-    // monochrome option, not another blue accent on a dark background.
-    'carbon': ThemePreset(
-      dark: ThemePalette(background: Color(0xFF050505), card: Color(0xFF0D0D0D), surface: Color(0xFF171717), border: Color(0xFF303030), text: Color(0xFFF7F7F7), textSecondary: Color(0xFFAAAAAA), textDisabled: Color(0xFF626262), accent: Color(0xFFF1F1F1), accent2: Color(0xFF8C8C8C), success: Color(0xFFD6D6D6)),
-      light: ThemePalette(background: Color(0xFFF4F4F4), card: Color(0xFFFFFFFF), surface: Color(0xFFE6E6E6), border: Color(0xFFC8C8C8), text: Color(0xFF101010), textSecondary: Color(0xFF5A5A5A), textDisabled: Color(0xFFA2A2A2), accent: Color(0xFF202020), accent2: Color(0xFF707070), success: Color(0xFF303030)),
     ),
     // A black/red skin with red status and controls throughout the app.
     'crimson': ThemePreset(

@@ -23,6 +23,7 @@ import 'jammers_screen.dart';
 import 'music_screen.dart';
 import 'servers_screen.dart';
 import 'settings_screen.dart';
+import 'dns_screen.dart';
 import 'speed_test_screen.dart';
 import 'stats_screen.dart';
 import 'telegram_proxy_screen.dart';
@@ -58,20 +59,27 @@ class MainShell extends StatelessWidget {
     ];
 
     final pages = <Widget>[
-      for (final tab in tabs) _pageFor(tab.destination, destination),
+      for (final tab in tabs) _pageFor(tab.destination, destination, desktop: desktop),
       if (zapret) ZapretGamesScreen(active: destination == NavDestination.zapretApps, embedded: true),
       if (zapret) ZapretScreen(active: destination == NavDestination.zapretSettings, settingsOnly: true),
+      if (desktop) SettingsScreen(initialSection: 1, showSubtabs: false),
+      if (desktop) DnsScreen(),
+      if (desktop) SettingsScreen(initialSection: 2, showSubtabs: false),
     ];
     final pageIndex = switch (destination) {
       NavDestination.zapretApps => tabs.length,
       NavDestination.zapretSettings => tabs.length + 1,
+      NavDestination.settingsGeneral => tabs.indexWhere((tab) => tab.destination == NavDestination.settings),
+      NavDestination.settingsAppearance => tabs.length + (zapret ? 2 : 0),
+      NavDestination.settingsDns => tabs.length + (zapret ? 2 : 0) + 1,
+      NavDestination.settingsAbout => tabs.length + (zapret ? 2 : 0) + 2,
       _ => tabs.indexWhere((tab) => tab.destination == destination),
     };
     final activeTab = switch (destination) {
       // Child destinations own the highlight. Keeping the parent selected at
       // the same time made Zapret look like two active tabs, especially on
       // the mobile bottom bar.
-      NavDestination.zapretApps || NavDestination.zapretSettings => -1,
+      NavDestination.zapretApps || NavDestination.zapretSettings || NavDestination.settingsGeneral || NavDestination.settingsAppearance || NavDestination.settingsDns || NavDestination.settingsAbout => -1,
       _ => pageIndex,
     };
     final body = AnimatedSwitcher(
@@ -113,7 +121,15 @@ class MainShell extends StatelessWidget {
                             child: Row(
                               children: [
                                 _SideRail(tabs: tabs, index: activeTab, destination: destination),
-                                Expanded(child: body),
+                                Expanded(
+                                  child: Align(
+                                    alignment: Alignment.topCenter,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(maxWidth: 1680),
+                                      child: SizedBox(width: double.infinity, child: body),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -147,7 +163,7 @@ class MainShell extends StatelessWidget {
     );
   }
 
-  Widget _pageFor(NavDestination tab, NavDestination active) => switch (tab) {
+  Widget _pageFor(NavDestination tab, NavDestination active, {required bool desktop}) => switch (tab) {
         NavDestination.home => const HomeScreen(),
         NavDestination.servers => const ServersScreen(),
         NavDestination.zapret => ZapretScreen(active: active == NavDestination.zapret),
@@ -156,7 +172,7 @@ class MainShell extends StatelessWidget {
         NavDestination.telegramProxy => const TelegramProxyScreen(),
         NavDestination.jammers => const JammersScreen(),
         NavDestination.stats => const StatsScreen(),
-        NavDestination.settings => const SettingsScreen(),
+        NavDestination.settings => SettingsScreen(showSubtabs: !desktop),
         _ => const SizedBox.shrink(),
       };
 }
@@ -534,10 +550,14 @@ class _SideRail extends StatelessWidget {
                       // paint the parent as selected at the same time.
                       selected: i == index &&
                           !(tabs[i].destination == NavDestination.zapret &&
-                              (destination == NavDestination.zapretApps || destination == NavDestination.zapretSettings)),
+                              (destination == NavDestination.zapretApps || destination == NavDestination.zapretSettings)) &&
+                          !(tabs[i].destination == NavDestination.settings &&
+                              (destination == NavDestination.settingsGeneral || destination == NavDestination.settingsAppearance || destination == NavDestination.settingsDns || destination == NavDestination.settingsAbout)),
                       collapsed: collapsed,
                       onTap: () => nav.go(tabs[i].destination),
-                      onDoubleTap: Platform.isWindows && tabs[i].destination == NavDestination.zapret ? nav.toggleZapret : null,
+                      onDoubleTap: Platform.isWindows && tabs[i].destination == NavDestination.zapret
+                          ? nav.toggleZapret
+                          : (tabs[i].destination == NavDestination.settings ? nav.toggleSettings : null),
                       trailing: Platform.isWindows && tabs[i].destination == NavDestination.zapret && !collapsed
                           ? IconButton(
                               tooltip: s.t('zApps'),
@@ -547,7 +567,16 @@ class _SideRail extends StatelessWidget {
                                 size: 20,
                               ),
                             )
-                          : null,
+                          : tabs[i].destination == NavDestination.settings && !collapsed
+                              ? IconButton(
+                                  tooltip: s.t('settingsTab'),
+                                  onPressed: nav.toggleSettings,
+                                  icon: Icon(
+                                    nav.settingsExpanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded,
+                                    size: 20,
+                                  ),
+                                )
+                              : null,
                     ),
                     if (Platform.isWindows && tabs[i].destination == NavDestination.zapret && !collapsed)
                       ClipRect(
@@ -578,6 +607,52 @@ class _SideRail extends StatelessWidget {
                                   collapsed: false,
                                   nested: true,
                                   onTap: () => nav.go(NavDestination.zapretSettings),
+                                ),
+                              ],
+                            ),
+                          ),
+                          secondChild: const SizedBox.shrink(),
+                        ),
+                      ),
+                    if (tabs[i].destination == NavDestination.settings && !collapsed)
+                      ClipRect(
+                        child: AnimatedCrossFade(
+                          duration: const Duration(milliseconds: 180),
+                          firstCurve: Curves.easeOutCubic,
+                          secondCurve: Curves.easeInCubic,
+                          sizeCurve: Curves.easeOutCubic,
+                          crossFadeState: nav.settingsExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+                          firstChild: Padding(
+                            padding: const EdgeInsetsDirectional.only(start: 22),
+                            child: Column(
+                              children: [
+                                _RailItem(
+                                  spec: _TabSpec(Icons.tune_rounded, Icons.tune_outlined, s.t('general'), NavDestination.settingsGeneral),
+                                  selected: destination == NavDestination.settingsGeneral,
+                                  collapsed: false,
+                                  nested: true,
+                                  onTap: () => nav.go(NavDestination.settingsGeneral),
+                                ),
+                                _RailItem(
+                                  spec: _TabSpec(Icons.palette_outlined, Icons.palette_rounded, s.t('appearanceTab'), NavDestination.settingsAppearance),
+                                  selected: destination == NavDestination.settingsAppearance,
+                                  collapsed: false,
+                                  nested: true,
+                                  onTap: () => nav.go(NavDestination.settingsAppearance),
+                                ),
+                                _RailItem(
+                                  spec: _TabSpec(Icons.dns_outlined, Icons.dns_rounded, s.t('dnsTitle'), NavDestination.settingsDns),
+                                  selected: destination == NavDestination.settingsDns,
+                                  collapsed: false,
+                                  nested: true,
+                                  onTap: () => nav.go(NavDestination.settingsDns),
+                                ),
+                                _RailItem(
+                                  spec: _TabSpec(Icons.info_outline_rounded, Icons.info_rounded, s.t('aboutTab'), NavDestination.settingsAbout),
+                                  selected: destination == NavDestination.settingsAbout,
+                                  collapsed: false,
+                                  nested: true,
+                                  onTap: () => nav.go(NavDestination.settingsAbout),
                                 ),
                               ],
                             ),
