@@ -24,6 +24,7 @@ class MainActivity : FlutterActivity() {
     private var launchAction: String? = null
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         launchAction = intent?.getStringExtra(EXTRA_ACTION)
         super.onCreate(savedInstanceState)
         // Draw behind the status bar and the gesture/3-button bar: the

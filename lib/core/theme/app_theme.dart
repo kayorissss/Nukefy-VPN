@@ -305,6 +305,9 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       tooltipTheme: TooltipThemeData(
+        waitDuration: const Duration(milliseconds: 750),
+        showDuration: const Duration(milliseconds: 3200),
+        exitDuration: const Duration(milliseconds: 120),
         decoration: BoxDecoration(
           color: p.surface,
           borderRadius: BorderRadius.circular(10),

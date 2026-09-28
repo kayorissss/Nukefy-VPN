@@ -4,9 +4,16 @@
 >
 > VLESS Reality · VMess · Trojan · Shadowsocks · Hysteria2 · TUIC · WireGuard · AmneziaWG
 
-- **Текущий релиз:** `2.5.2`
+- **Текущий релиз:** `2.5.3`
 - **Автор:** [@kayorisan](https://t.me/kayorisan)
 - **Скачать:** [GitHub Releases](https://github.com/kayorissss/Nukefy-VPN/releases/latest)
+
+## Что нового в 2.5.3
+
+- **Музыкальная рабочая область.** View controls, playlist icons, карточки треков и глобальный mini-player используют общую тему, delayed tooltips и аккуратные hover/press states; artwork вписывается без прилипания к краю, а при наведении на трек появляется play affordance.
+- **Playback visualizer.** Ненавязчивые полоски показывают состояние воспроизведения рядом с интерфейсом и не перекрывают контент.
+- **Надёжное обновление.** Загрузка APK/установщика повторяет прерванный запрос и продолжает его через Range, сохраняя неполный файл вместо показа внутренней ошибки Dio.
+- **Portrait lock.** Android и мобильная оболочка остаются в portrait.
 
 ## Что нового в 2.5.2
 

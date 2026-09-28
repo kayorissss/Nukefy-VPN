@@ -70,6 +70,13 @@ class _UpdateScreenState extends State<UpdateScreen> {
         _file = file;
         _phase = _Phase.done;
       });
+    } on UpdateDownloadException catch (error) {
+      if (!mounted) return;
+      final s = context.read<SettingsProvider>().strings;
+      setState(() {
+        _phase = _Phase.failed;
+        _error = s.t(error.code == 'no-asset' ? 'updateFailed' : 'updateDownloadNetwork');
+      });
     } on Exception catch (error) {
       if (!mounted) return;
       setState(() {

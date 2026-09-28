@@ -43,6 +43,9 @@ Future<void> _main() async {
   await AppLog.init();
   AppLog.log('start ${AppConstants.version} ${Platform.operatingSystem} ${Platform.operatingSystemVersion} args=${Platform.executableArguments}');
   if (Platform.isAndroid || Platform.isIOS) {
+    // Music, file pickers and the VPN controls keep a single stable layout.
+    // Never let a sensor rotation move the app into landscape.
+    await SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
     // Draw behind the status and gesture bars; colours come from AppTheme.overlay.
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }

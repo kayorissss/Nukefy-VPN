@@ -10,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
 import '../../l10n/strings.dart';
+import '../widgets/music_visualizer.dart';
 import '../widgets/nukefy_background.dart';
 import '../widgets/responsive_sections.dart';
 
@@ -152,6 +153,7 @@ class _MusicScreenState extends State<MusicScreen> {
                     onCreate: () => _editPlaylist(context, music, null),
                     onEdit: (playlist) => _editPlaylist(context, music, playlist),
                   ),
+                  if (music.currentTrack != null) _MusicPlaybackStatus(track: music.currentTrack!, playing: music.isPlaying),
                   if (music.error != null)
                     _ErrorBanner(message: _musicErrorText(music.error!, s), onClose: () => music.error = null),
                   Expanded(
@@ -234,10 +236,10 @@ class _MusicScreenState extends State<MusicScreen> {
                   spacing: 8,
                   children: [
                     for (final value in const ['music_note', 'favorite', 'headphones', 'bolt', 'nightlife', 'star'])
-                      IconButton.filledTonal(
-                        isSelected: icon == value,
-                        onPressed: () => setDialogState(() => icon = value),
-                        icon: Icon(_playlistIcon(value)),
+                      _PlaylistIconChoice(
+                        icon: _playlistIcon(value),
+                        selected: icon == value,
+                        onTap: () => setDialogState(() => icon = value),
                       ),
                   ],
                 ),
@@ -321,6 +323,104 @@ class _MusicScreenState extends State<MusicScreen> {
           ],
         ),
       );
+}
+
+class _PlaylistIconChoice extends StatefulWidget {
+  const _PlaylistIconChoice({required this.icon, required this.selected, required this.onTap});
+
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_PlaylistIconChoice> createState() => _PlaylistIconChoiceState();
+}
+
+class _PlaylistIconChoiceState extends State<_PlaylistIconChoice> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _pressed ? .92 : 1,
+          duration: const Duration(milliseconds: 110),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? p.accent.withValues(alpha: .18)
+                  : (_hovered ? p.accent.withValues(alpha: .08) : p.surface),
+              borderRadius: BorderRadius.circular(13),
+              border: Border.all(
+                color: widget.selected
+                    ? p.accent.withValues(alpha: .68)
+                    : (_hovered ? p.accent.withValues(alpha: .34) : p.border),
+                width: widget.selected ? 1.4 : 1,
+              ),
+            ),
+            child: Icon(widget.icon, color: widget.selected ? p.accent : p.textSecondary, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MusicPlaybackStatus extends StatelessWidget {
+  const _MusicPlaybackStatus({required this.track, required this.playing});
+
+  final MusicTrack track;
+  final bool playing;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Align(
+        alignment: AlignmentDirectional.centerEnd,
+        child: Container(
+          padding: const EdgeInsetsDirectional.fromSTEB(10, 5, 8, 5),
+          decoration: BoxDecoration(
+            color: p.accent.withValues(alpha: .07),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: p.accent.withValues(alpha: .22)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(playing ? Icons.graphic_eq_rounded : Icons.pause_rounded, size: 16, color: p.accent),
+              const SizedBox(width: 7),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 190),
+                child: Text(
+                  track.title.trim().isEmpty ? s.t('musicUntitled') : track.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 8),
+              MusicVisualizer(active: playing, color: p.accent, height: 19, barCount: 10),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Header extends StatelessWidget {
@@ -416,7 +516,6 @@ class _ToolbarState extends State<_Toolbar> {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 560;
@@ -436,22 +535,7 @@ class _ToolbarState extends State<_Toolbar> {
               onPressed: widget.onSort,
             ),
             const SizedBox(width: 8),
-            SegmentedButton<_MusicView>(
-              segments: const [
-                ButtonSegment(value: _MusicView.list, icon: Icon(Icons.view_list_rounded)),
-                ButtonSegment(value: _MusicView.table, icon: Icon(Icons.table_rows_rounded)),
-                ButtonSegment(value: _MusicView.grid, icon: Icon(Icons.grid_view_rounded)),
-              ],
-              selected: {widget.view},
-              onSelectionChanged: (value) => widget.onView(value.first),
-              showSelectedIcon: false,
-              style: ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 5)),
-                foregroundColor: WidgetStatePropertyAll(p.text),
-                side: WidgetStatePropertyAll(BorderSide(color: p.border)),
-              ),
-            ),
+            _ViewModeControl(value: widget.view, onChanged: widget.onView),
           ],
         );
         final searchField = TextField(
@@ -488,7 +572,103 @@ class _ToolbarState extends State<_Toolbar> {
   }
 }
 
-class _ToolbarIcon extends StatelessWidget {
+class _ViewModeControl extends StatelessWidget {
+  const _ViewModeControl({required this.value, required this.onChanged});
+
+  final _MusicView value;
+  final ValueChanged<_MusicView> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
+    final options = <(_MusicView, IconData, String)>[
+      (_MusicView.list, Icons.view_list_rounded, s.t('musicViewList')),
+      (_MusicView.table, Icons.table_rows_rounded, s.t('musicViewCompact')),
+      (_MusicView.grid, Icons.grid_view_rounded, s.t('musicViewGrid')),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: p.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final option in options)
+            Tooltip(
+              message: option.$3,
+              waitDuration: const Duration(milliseconds: 750),
+              child: _ViewModeOption(
+                icon: option.$2,
+                selected: value == option.$1,
+                onTap: () => onChanged(option.$1),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ViewModeOption extends StatefulWidget {
+  const _ViewModeOption({required this.icon, required this.selected, required this.onTap});
+
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_ViewModeOption> createState() => _ViewModeOptionState();
+}
+
+class _ViewModeOptionState extends State<_ViewModeOption> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final active = widget.selected || _hovered;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _pressed ? .92 : 1,
+          duration: const Duration(milliseconds: 110),
+          curve: Curves.easeOut,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            width: 34,
+            height: 32,
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? p.accent.withValues(alpha: .18)
+                  : (_hovered ? p.accent.withValues(alpha: .08) : Colors.transparent),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: widget.selected
+                    ? p.accent.withValues(alpha: .65)
+                    : (_hovered ? p.accent.withValues(alpha: .32) : Colors.transparent),
+              ),
+            ),
+            child: Icon(widget.icon, size: 18, color: active ? p.accent : p.textSecondary),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolbarIcon extends StatefulWidget {
   const _ToolbarIcon({required this.tooltip, required this.icon, required this.onPressed, this.selected = false});
   final String tooltip;
   final IconData icon;
@@ -496,17 +676,46 @@ class _ToolbarIcon extends StatelessWidget {
   final bool selected;
 
   @override
+  State<_ToolbarIcon> createState() => _ToolbarIconState();
+}
+
+class _ToolbarIconState extends State<_ToolbarIcon> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     final p = context.palette;
     return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: selected ? p.accent.withValues(alpha: .14) : p.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: selected ? p.accent.withValues(alpha: .55) : p.border)),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onPressed,
-          child: Padding(padding: const EdgeInsets.all(8), child: Icon(icon, size: 19, color: selected ? p.accent : p.textSecondary)),
+      message: widget.tooltip,
+      waitDuration: const Duration(milliseconds: 750),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTap: widget.onPressed,
+          child: AnimatedScale(
+            scale: _pressed ? .91 : 1,
+            duration: const Duration(milliseconds: 110),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: widget.selected
+                    ? p.accent.withValues(alpha: .14)
+                    : (_hovered ? p.accent.withValues(alpha: .07) : p.card),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: widget.selected ? p.accent.withValues(alpha: .55) : (_hovered ? p.accent.withValues(alpha: .35) : p.border),
+                ),
+              ),
+              child: Icon(widget.icon, size: 19, color: widget.selected || _hovered ? p.accent : p.textSecondary),
+            ),
+          ),
         ),
       ),
     );
@@ -546,7 +755,7 @@ class _PlaylistBar extends StatelessWidget {
   }
 }
 
-class _PlaylistChip extends StatelessWidget {
+class _PlaylistChip extends StatefulWidget {
   const _PlaylistChip({required this.label, required this.icon, required this.selected, required this.onTap, this.onLongPress});
   final String label;
   final IconData icon;
@@ -555,20 +764,52 @@ class _PlaylistChip extends StatelessWidget {
   final VoidCallback? onLongPress;
 
   @override
+  State<_PlaylistChip> createState() => _PlaylistChipState();
+}
+
+class _PlaylistChipState extends State<_PlaylistChip> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? p.accent.withValues(alpha: .14) : p.card,
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: selected ? p.accent.withValues(alpha: .55) : p.border),
+    final selected = widget.selected;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        child: AnimatedScale(
+          scale: _pressed ? .97 : 1,
+          duration: const Duration(milliseconds: 110),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected
+                  ? p.accent.withValues(alpha: .14)
+                  : (_hovered ? p.accent.withValues(alpha: .07) : p.card),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(
+                color: selected ? p.accent.withValues(alpha: .55) : (_hovered ? p.accent.withValues(alpha: .34) : p.border),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(widget.icon, size: 17, color: selected ? p.accent : p.textSecondary),
+                const SizedBox(width: 7),
+                Text(widget.label, style: AppTextStyles.bodySecondary.copyWith(color: selected ? p.text : p.textSecondary, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 17, color: selected ? p.accent : p.textSecondary), const SizedBox(width: 7), Text(label, style: AppTextStyles.bodySecondary.copyWith(color: selected ? p.text : p.textSecondary, fontWeight: FontWeight.w700))]),
       ),
     );
   }
@@ -639,7 +880,7 @@ class _TableHeader extends StatelessWidget {
       );
 }
 
-class _TrackRow extends StatelessWidget {
+class _TrackRow extends StatefulWidget {
   const _TrackRow({super.key, required this.track, required this.index, required this.selected, required this.music, required this.onSelected, required this.onDelete, required this.onEdit, required this.onPlaylist, this.drag});
   final MusicTrack track;
   final int index;
@@ -651,6 +892,23 @@ class _TrackRow extends StatelessWidget {
   final ValueChanged<MusicTrack> onPlaylist;
   final Widget? drag;
 
+  @override
+  State<_TrackRow> createState() => _TrackRowState();
+}
+
+class _TrackRowState extends State<_TrackRow> {
+  bool _hovered = false;
+
+  MusicTrack get track => widget.track;
+  int get index => widget.index;
+  bool get selected => widget.selected;
+  MusicService get music => widget.music;
+  ValueChanged<String?> get onSelected => widget.onSelected;
+  Future<void> Function(MusicService music) get onDelete => widget.onDelete;
+  ValueChanged<MusicTrack> get onEdit => widget.onEdit;
+  ValueChanged<MusicTrack> get onPlaylist => widget.onPlaylist;
+  Widget? get drag => widget.drag;
+
   void _playOrPause() {
     onSelected(track.id);
     if (music.currentId == track.id) {
@@ -658,6 +916,33 @@ class _TrackRow extends StatelessWidget {
     } else {
       music.play(track);
     }
+  }
+
+  Widget _artwork(double size, bool current) {
+    final show = _hovered || current;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * .24),
+      child: Stack(
+        fit: StackFit.passthrough,
+        children: [
+          _MusicArtwork(track: track, size: size),
+          if (show)
+            Positioned.fill(
+              child: ColoredBox(color: Colors.black.withValues(alpha: _hovered ? .48 : .28)),
+            ),
+          if (show)
+            Positioned.fill(
+              child: Center(
+                child: Icon(
+                  current && music.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: size * .42,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _menu(BuildContext context) {
@@ -688,9 +973,12 @@ class _TrackRow extends StatelessWidget {
     final title = _trackTitle(track, s);
     final current = music.currentId == track.id;
     final compact = MediaQuery.sizeOf(context).width < 600;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Material(
         color: selected || current ? p.accent.withValues(alpha: .11) : p.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17), side: BorderSide(color: selected || current ? p.accent.withValues(alpha: .45) : p.border)),
         child: InkWell(
@@ -703,7 +991,7 @@ class _TrackRow extends StatelessWidget {
                     children: [
                       if (drag != null) ...[drag!, const SizedBox(width: 2)],
                       SizedBox(width: 22, child: Text('$index', style: context.palette.captionStyle)),
-                      _MusicArtwork(track: track, size: 46),
+                      _artwork(46, current),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -729,7 +1017,7 @@ class _TrackRow extends StatelessWidget {
                     children: [
                       if (drag != null) ...[drag!, const SizedBox(width: 4)],
                       SizedBox(width: 28, child: Text('$index', style: context.palette.captionStyle)),
-                      _MusicArtwork(track: track, size: 44),
+                      _artwork(48, current),
                       const SizedBox(width: 12),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)), Text(track.artist.isEmpty ? s.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)])),
                       if (MediaQuery.sizeOf(context).width > 900) ...[SizedBox(width: 170, child: Text(track.album, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)), SizedBox(width: 90, child: Text(FormatUtils.bytes(track.size), style: context.palette.captionStyle))],
@@ -741,6 +1029,7 @@ class _TrackRow extends StatelessWidget {
                   ),
           ),
         ),
+      ),
       ),
     );
   }

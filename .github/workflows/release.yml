@@ -11,7 +11,7 @@ on:
       tag:
         description: 'Tag the built files belong to'
         required: false
-        default: v2.5.2
+        default: v2.5.3
 
 permissions:
   contents: write
@@ -20,7 +20,7 @@ permissions:
 env:
   # Tag to attach the files to: the tag of the published release, or the one
   # typed when the workflow is started by hand.
-  RELEASE_TAG: v2.5.2
+  RELEASE_TAG: v2.5.3
   # sing-box line used for the embedded Android core (libbox). Keep it on the
   # 1.12 branch: 1.13+ replaced `Libbox.newService` with a gRPC command server.
   SINGBOX_VERSION: v1.12.25
@@ -130,7 +130,7 @@ jobs:
           APK=build/app/outputs/flutter-apk/app-release.apk
           "$ANDROID_HOME/build-tools/$(ls -1 "$ANDROID_HOME/build-tools" | tail -1)/apksigner" verify --verbose "$APK"
           "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$APK" | grep -Fx 'com.nukefy.vpn'
-          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest version-code "$APK" | grep -Fx '18'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest version-code "$APK" | grep -Fx '19'
       - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyVPN-android.apk
       - uses: actions/upload-artifact@v4
         with:

@@ -11,6 +11,7 @@ import '../../core/providers/settings_provider.dart';
 import '../../core/services/music_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../widgets/music_visualizer.dart';
 import '../widgets/nukefy_background.dart';
 import '../widgets/nukefy_logo.dart';
 import 'home_screen.dart';
@@ -143,79 +144,133 @@ class _GlobalMusicBar extends StatelessWidget {
     if (track == null) return const SizedBox.shrink();
     final p = context.palette;
     final s = context.read<SettingsProvider>().strings;
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    final artworkSize = compact ? 50.0 : 58.0;
     final total = music.duration.inMilliseconds <= 0 ? 1.0 : music.duration.inMilliseconds.toDouble();
     final position = music.position.inMilliseconds.clamp(0, total.toInt()).toDouble();
     final artwork = track.artworkPath;
+
+    Widget artworkView() {
+      final fallback = Container(
+        width: artworkSize,
+        height: artworkSize,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [p.accent.withValues(alpha: .3), p.accent2.withValues(alpha: .22)],
+          ),
+        ),
+        child: Icon(Icons.music_note_rounded, color: p.accent, size: artworkSize * .42),
+      );
+      return Container(
+        width: artworkSize,
+        height: artworkSize,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: p.surface,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: p.border),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: artwork == null
+              ? fallback
+              : Image.file(
+                  File(artwork),
+                  fit: BoxFit.contain,
+                  alignment: Alignment.center,
+                  color: p.surface,
+                  colorBlendMode: BlendMode.dstOver,
+                  errorBuilder: (_, _, _) => fallback,
+                ),
+        ),
+      );
+    }
+
+    Widget playButton() => IconButton(
+          tooltip: music.isPlaying ? s.t('musicPause') : s.t('musicPlay'),
+          onPressed: music.toggle,
+          icon: Icon(
+            music.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
+            color: p.accent,
+            size: compact ? 30 : 34,
+          ),
+        );
+
     return SafeArea(
       top: false,
       bottom: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-        child: Material(
-          color: p.card,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-            side: BorderSide(color: p.accent.withValues(alpha: .42)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: artwork == null
-                        ? Container(
-                            width: 46,
-                            height: 46,
-                            color: p.accent.withValues(alpha: .14),
-                            child: Icon(Icons.music_note_rounded, color: p.accent),
-                          )
-                        : Image.file(
-                            File(artwork),
-                            width: 46,
-                            height: 46,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Container(
-                              width: 46,
-                              height: 46,
-                              color: p.surface,
-                              child: Icon(Icons.music_note_rounded, color: p.textSecondary),
-                            ),
-                          ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+        padding: EdgeInsets.fromLTRB(compact ? 10 : 18, 5, compact ? 10 : 18, 10),
+        child: Align(
+          alignment: AlignmentDirectional.center,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1180),
+            child: Material(
+              color: p.card,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: p.accent.withValues(alpha: .38)),
+              ),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(compact ? 9 : 14, compact ? 8 : 10, compact ? 9 : 14, 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
                       children: [
-                        Text(track.title.trim().isEmpty ? s.t('musicUntitled') : track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)),
-                        Text(track.artist.trim().isEmpty ? s.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: p.secondaryStyle),
+                        artworkView(),
+                        SizedBox(width: compact ? 9 : 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(track.title.trim().isEmpty ? s.t('musicUntitled') : track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 2),
+                              Text(track.artist.trim().isEmpty ? s.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: p.secondaryStyle),
+                            ],
+                          ),
+                        ),
+                        if (!compact) ...[
+                          const SizedBox(width: 12),
+                          MusicVisualizer(active: music.isPlaying, color: p.accent, height: 22, barCount: 12),
+                          const SizedBox(width: 6),
+                        ],
+                        IconButton(tooltip: s.t('musicPrevious'), onPressed: music.previous, icon: const Icon(Icons.skip_previous_rounded)),
+                        playButton(),
+                        IconButton(tooltip: s.t('musicNext'), onPressed: music.next, icon: const Icon(Icons.skip_next_rounded)),
+                        if (!compact)
+                          IconButton(tooltip: s.t('musicStop'), onPressed: music.stop, icon: const Icon(Icons.stop_rounded))
+                        else
+                          PopupMenuButton<String>(
+                            tooltip: s.t('musicStop'),
+                            onSelected: (_) => music.stop(),
+                            itemBuilder: (_) => [PopupMenuItem(value: 'stop', child: Text(s.t('musicStop')))],
+                            icon: const Icon(Icons.more_horiz_rounded),
+                          ),
                       ],
                     ),
-                  ),
-                  IconButton(tooltip: s.t('musicPrevious'), onPressed: music.previous, icon: const Icon(Icons.skip_previous_rounded)),
-                  IconButton(tooltip: music.isPlaying ? s.t('musicPause') : s.t('musicPlay'), onPressed: music.toggle, icon: Icon(music.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded, color: p.accent, size: 31)),
-                  IconButton(tooltip: s.t('musicNext'), onPressed: music.next, icon: const Icon(Icons.skip_next_rounded)),
-                  IconButton(tooltip: s.t('musicStop'), onPressed: music.stop, icon: const Icon(Icons.close_rounded)),
-                ],
-              ),
-              Row(
-                children: [
-                  const SizedBox(width: 8),
-                  Text(_globalMusicDuration(music.position), style: p.captionStyle),
-                  Expanded(
-                    child: Slider(
-                      value: position,
-                      max: total,
-                      onChanged: (value) => music.seek(Duration(milliseconds: value.round())),
+                    Row(
+                      children: [
+                        const SizedBox(width: 3),
+                        Text(_globalMusicDuration(music.position), style: p.captionStyle),
+                        Expanded(
+                          child: Slider(
+                            value: position,
+                            max: total,
+                            onChanged: (value) => music.seek(Duration(milliseconds: value.round())),
+                          ),
+                        ),
+                        Text(_globalMusicDuration(music.duration), style: p.captionStyle),
+                        const SizedBox(width: 3),
+                      ],
                     ),
-                  ),
-                  Text(_globalMusicDuration(music.duration), style: p.captionStyle),
-                  const SizedBox(width: 8),
-                ],
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -294,7 +349,7 @@ class _Tab extends StatelessWidget {
     return Expanded(
       child: Tooltip(
         message: spec.label,
-        waitDuration: const Duration(milliseconds: 600),
+        waitDuration: const Duration(milliseconds: 800),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
@@ -466,6 +521,7 @@ class _RailItem extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       child: Tooltip(
         message: spec.label,
+        waitDuration: const Duration(milliseconds: 800),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
