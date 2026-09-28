@@ -116,7 +116,7 @@ class MusicService extends ChangeNotifier {
       });
       _player.onPlayerComplete.listen((_) => next());
     } else {
-      _background!.mediaItem.listen((item) {
+      _background.mediaItem.listen((item) {
         currentId = item?.id;
         duration = item?.duration ?? Duration.zero;
         if (item == null) {
@@ -125,7 +125,7 @@ class MusicService extends ChangeNotifier {
         }
         notifyListeners();
       });
-      _background!.playbackState.listen((state) {
+      _background.playbackState.listen((state) {
         position = state.updatePosition;
         isPlaying = state.playing;
         notifyListeners();
@@ -355,7 +355,7 @@ class MusicService extends ChangeNotifier {
       _queue
         ..clear()
         ..addAll(items.map((item) => item.id));
-      await _background!.customAction('loadQueue', {
+      await _background.customAction('loadQueue', {
         'index': _queue.indexOf(track.id),
         'items': [
           for (final item in items)
@@ -372,7 +372,7 @@ class MusicService extends ChangeNotifier {
       });
       currentId = track.id;
       position = Duration.zero;
-      duration = track.durationMs == null ? Duration.zero : Duration(milliseconds: track.durationMs!);
+      duration = track.durationMs == null ? Duration.zero : Duration(milliseconds: track.durationMs);
       notifyListeners();
       return;
     }
@@ -380,7 +380,7 @@ class MusicService extends ChangeNotifier {
     await _player.setSourceDeviceFile(track.path);
     currentId = track.id;
     position = Duration.zero;
-    duration = track.durationMs == null ? Duration.zero : Duration(milliseconds: track.durationMs!);
+    duration = track.durationMs == null ? Duration.zero : Duration(milliseconds: track.durationMs);
     await _player.resume();
     notifyListeners();
   }
@@ -389,9 +389,9 @@ class MusicService extends ChangeNotifier {
     if (currentTrack == null) return;
     if (_background != null) {
       if (isPlaying) {
-        await _background!.pause();
+        await _background.pause();
       } else {
-        await _background!.play();
+        await _background.play();
       }
     } else if (isPlaying) {
       await _player.pause();
@@ -401,7 +401,7 @@ class MusicService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> seek(Duration value) => _background != null ? _background!.seek(value) : _player.seek(value);
+  Future<void> seek(Duration value) => _background != null ? _background.seek(value) : _player.seek(value);
 
   Future<void> previous() async {
     if (position > const Duration(seconds: 4)) {
@@ -409,7 +409,7 @@ class MusicService extends ChangeNotifier {
       return;
     }
     if (_background != null) {
-      await _background!.skipToPrevious();
+      await _background.skipToPrevious();
       return;
     }
     final index = _queue.indexOf(currentId ?? '');
@@ -423,7 +423,7 @@ class MusicService extends ChangeNotifier {
 
   Future<void> next() async {
     if (_background != null) {
-      await _background!.skipToNext();
+      await _background.skipToNext();
       return;
     }
     final index = _queue.indexOf(currentId ?? '');
@@ -439,7 +439,7 @@ class MusicService extends ChangeNotifier {
 
   Future<void> stop() async {
     if (_background != null) {
-      await _background!.stop();
+      await _background.stop();
     } else {
       await _player.stop();
     }
@@ -455,7 +455,7 @@ class MusicService extends ChangeNotifier {
     final file = File(track.path);
     if (file.existsSync()) await file.delete();
     final artwork = track.artworkPath == null ? null : File(track.artworkPath!);
-    if (artwork?.existsSync() == true) await artwork!.delete();
+    if (artwork?.existsSync() == true) await artwork.delete();
     tracks.removeWhere((item) => item.id == track.id);
     for (final playlist in playlists) {
       playlist.trackIds.remove(track.id);

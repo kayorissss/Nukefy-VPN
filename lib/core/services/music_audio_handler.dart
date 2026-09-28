@@ -84,8 +84,8 @@ class MusicAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     if (sources.isEmpty) return null;
     final safeIndex = index < sources.length ? index : sources.length - 1;
     queue.add(items.take(sources.length).toList(growable: false));
-    await _player.setAudioSource(
-      just_audio.ConcatenatingAudioSource(children: sources),
+    await _player.setAudioSources(
+      sources,
       initialIndex: safeIndex,
       preload: true,
     );
