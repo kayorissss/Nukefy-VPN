@@ -372,7 +372,7 @@ class MusicService extends ChangeNotifier {
       });
       currentId = track.id;
       position = Duration.zero;
-      duration = track.durationMs == null ? Duration.zero : Duration(milliseconds: track.durationMs);
+      duration = track.durationMs == null ? Duration.zero : Duration(milliseconds: track.durationMs ?? 0);
       notifyListeners();
       return;
     }
@@ -380,7 +380,7 @@ class MusicService extends ChangeNotifier {
     await _player.setSourceDeviceFile(track.path);
     currentId = track.id;
     position = Duration.zero;
-    duration = track.durationMs == null ? Duration.zero : Duration(milliseconds: track.durationMs);
+    duration = track.durationMs == null ? Duration.zero : Duration(milliseconds: track.durationMs ?? 0);
     await _player.resume();
     notifyListeners();
   }
@@ -455,7 +455,7 @@ class MusicService extends ChangeNotifier {
     final file = File(track.path);
     if (file.existsSync()) await file.delete();
     final artwork = track.artworkPath == null ? null : File(track.artworkPath!);
-    if (artwork?.existsSync() == true) await artwork.delete();
+    if (artwork != null && artwork.existsSync()) await artwork.delete();
     tracks.removeWhere((item) => item.id == track.id);
     for (final playlist in playlists) {
       playlist.trackIds.remove(track.id);
