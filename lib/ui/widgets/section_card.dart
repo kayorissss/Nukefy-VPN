@@ -83,24 +83,67 @@ class SettingsTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 2),
-      leading: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: p.accent.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(11),
-        ),
-        child: Icon(icon, color: p.accent, size: 19),
-      ),
-      title: Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
-      subtitle: subtitle == null
-          ? null
-          : Text(subtitle!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
-      trailing: trailing ??
-          (onTap == null ? null : Icon(Icons.chevron_right_rounded, color: p.textSecondary)),
-      onTap: onTap,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // A dropdown or a long action label must not steal the title's width
+        // on a phone. The old ListTile left a 40–60 px text column, which is
+        // why Russian words were rendered one character per line.
+        final stacked = constraints.maxWidth < 360 && trailing != null;
+        final lead = Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: p.accent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(icon, color: p.accent, size: 19),
+        );
+        final copy = Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(subtitle!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+              ],
+            ],
+          ),
+        );
+        final row = Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            lead,
+            const SizedBox(width: 12),
+            copy,
+            if (!stacked) ...[
+              const SizedBox(width: 8),
+              trailing ?? (onTap == null ? const SizedBox.shrink() : Icon(Icons.chevron_right_rounded, color: p.textSecondary)),
+            ],
+          ],
+        );
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 7),
+              child: stacked
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        row,
+                        const SizedBox(height: 8),
+                        Align(alignment: AlignmentDirectional.centerEnd, child: trailing),
+                      ],
+                    )
+                  : row,
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -125,25 +168,45 @@ class SwitchTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return SwitchListTile(
-      contentPadding: EdgeInsets.symmetric(horizontal: icon == null ? 2 : 2),
-      secondary: icon == null
-          ? null
-          : Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: p.accent.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Icon(icon, color: p.accent, size: 19),
-            ),
-      title: Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
-      subtitle: subtitle == null
-          ? null
-          : Text(subtitle!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
-      value: value,
-      onChanged: onChanged,
+    return LayoutBuilder(
+      builder: (context, _) {
+        final lead = icon == null
+            ? null
+            : Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: p.accent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, color: p.accent, size: 19),
+              );
+        final text = Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(subtitle!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+              ],
+            ],
+          ),
+        );
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (lead != null) ...[lead, const SizedBox(width: 12)],
+              text,
+              const SizedBox(width: 8),
+              Switch(value: value, onChanged: onChanged),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -164,37 +227,40 @@ class NukefyDropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return PopupMenuButton<T>(
-      initialValue: value,
-      tooltip: '',
-      position: PopupMenuPosition.under,
-      onSelected: onChanged,
-      itemBuilder: (context) => [
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, 6),
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(p.card),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(10),
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 5)),
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: BorderSide(color: p.border))),
+      ),
+      menuChildren: [
         for (final entry in items.entries)
-          PopupMenuItem<T>(
-            value: entry.key,
-            child: Row(
-              children: [
-                Expanded(child: Text(entry.value)),
-                if (entry.key == value) Icon(Icons.check_rounded, size: 18, color: p.accent),
-              ],
+          MenuItemButton(
+            onPressed: () => onChanged(entry.key),
+            child: SizedBox(
+              width: 190,
+              child: Row(children: [Expanded(child: Text(entry.value)), if (entry.key == value) Icon(Icons.check_rounded, size: 18, color: p.accent)]),
             ),
           ),
       ],
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-        decoration: BoxDecoration(
-          color: p.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: p.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      builder: (context, controller, child) => GestureDetector(
+        onTap: () => controller.isOpen ? controller.close() : controller.open(),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+          decoration: BoxDecoration(
+            color: p.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: controller.isOpen ? p.accent : p.border, width: controller.isOpen ? 1.3 : 1),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
             Text(items[value] ?? '', style: AppTextStyles.bodyRegular.copyWith(fontSize: 13.5, fontWeight: FontWeight.w600)),
             const SizedBox(width: 4),
-            Icon(Icons.expand_more_rounded, size: 18, color: p.textSecondary),
-          ],
+            AnimatedRotation(turns: controller.isOpen ? .5 : 0, duration: const Duration(milliseconds: 180), child: Icon(Icons.expand_more_rounded, size: 18, color: p.textSecondary)),
+          ]),
         ),
       ),
     );

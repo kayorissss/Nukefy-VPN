@@ -13,6 +13,7 @@ import '../../core/providers/vpn_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
+import '../../core/utils/network_diagnostics.dart';
 import '../../core/utils/share_link_builder.dart';
 import '../dialogs/speed_test_dialog.dart';
 import '../import_actions.dart';
@@ -20,7 +21,7 @@ import '../widgets/country_badge.dart';
 import '../widgets/nukefy_feedback.dart';
 import '../widgets/ping_badge.dart';
 import '../widgets/section_card.dart';
-import 'qr_scanner_screen.dart';
+import '../widgets/responsive_sections.dart';
 import 'server_edit_screen.dart';
 
 class ServersScreen extends StatelessWidget {
@@ -115,17 +116,9 @@ class ServersScreen extends StatelessWidget {
                         const SizedBox(width: 10),
                         Expanded(
                           child: _BigAction(
-                            icon: Icons.qr_code_scanner_rounded,
-                            label: s.t('qr'),
-                            onTap: () async {
-                              final text = await Navigator.push<String>(
-                                context,
-                                MaterialPageRoute(builder: (_) => const QrScannerScreen()),
-                              );
-                              if (text != null && context.mounted) {
-                                await ImportActions.handleText(context, text);
-                              }
-                            },
+                            icon: Icons.edit_note_rounded,
+                            label: s.t('enterManually'),
+                            onTap: () => ImportActions.manual(context),
                           ),
                         ),
                       ],
@@ -156,7 +149,7 @@ class ServersScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                         Text(s.t('emptyServers'), style: AppTextStyles.headline),
                         const SizedBox(height: 6),
-                        Text(s.t('emptyHint'), textAlign: TextAlign.center, style: AppTextStyles.bodySecondary),
+                        Text(s.t('emptyHint'), textAlign: TextAlign.center, style: context.palette.secondaryStyle),
                       ],
                     ),
                   ),
@@ -166,6 +159,7 @@ class ServersScreen extends StatelessWidget {
               for (var i = 0; i < subs.length; i++)
                 SliverToBoxAdapter(
                   child: _SubscriptionBlock(
+                    key: ValueKey(subs[i].id),
                     subscription: subs[i],
                     number: i + 1,
                     servers: visible.where((e) => e.subscriptionId == subs[i].id).toList(),
@@ -258,6 +252,7 @@ class _BigAction extends StatelessWidget {
 /// deliberately not shown — it used to eat the whole row.
 class _SubscriptionBlock extends StatefulWidget {
   const _SubscriptionBlock({
+    super.key,
     required this.subscription,
     required this.number,
     required this.servers,
@@ -293,6 +288,7 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
     final provider = context.watch<ServersProvider>();
     final p = context.palette;
     final sub = widget.subscription;
+    final shownServers = widget.servers.where((s) => !sub.hideNotices || !s.isInformational).toList();
     final updated = sub.lastUpdated == null
         ? '—'
         : FormatUtils.timeAgo(sub.lastUpdated!, ru: s.code == 'ru');
@@ -311,6 +307,7 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
             InkWell(
               onTap: () => setState(() => _open = !_open),
               onLongPress: () => _subscriptionMenu(context, sub),
+              onSecondaryTap: () => _subscriptionMenu(context, sub),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
                 child: Row(
@@ -341,16 +338,20 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '${s.t('serversCount')}: ${widget.servers.length} · ${s.t('updated')}: $updated',
+                              '${s.t('serversCount')}: ${shownServers.length} · ${s.t('updated')}: $updated',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.bodySecondary,
+                              style: context.palette.secondaryStyle,
                             ),
                           ],
                         ),
                       ),
                     ),
                     const SizedBox(width: 6),
+                    IconButton(
+                      tooltip: s.t('subscriptionSettings'), onPressed: () => _subscriptionMenu(context, sub),
+                      icon: const Icon(Icons.settings_outlined, size: 20),
+                    ),
                     IconButton(
                       tooltip: s.t('updateSub'),
                       onPressed: provider.refreshing ? null : () => provider.refreshSubscription(sub.id),
@@ -386,21 +387,26 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
                   child: Text(
-                    sub.lastError!,
+                    NetworkDiagnostics.textOrRaw(sub.lastError!, s.t),
                     style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error),
                   ),
                 ),
               // Big subscriptions (100+ servers) are rendered in pages so
               // opening a card never builds hundreds of tiles at once.
-              for (final server in widget.servers.take(_shown))
-                RepaintBoundary(child: ServerTile(server: server, antiblock: widget.antiblock)),
-              if (widget.servers.length > _shown)
+              Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Wrap(spacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Text('${s.t('shownCount')}: ${shownServers.length.clamp(0, _shown)} / ${shownServers.length}', style: p.captionStyle),
+                if (sub.receivedCount > 0) Text('${s.t('receivedCount')}: ${sub.receivedCount} · ${s.t('unparsedCount')}: ${sub.rejectedCount}', style: p.captionStyle),
+                FilterChip(label: Text(s.t('hideInformation')), selected: sub.hideNotices, onSelected: (_) => provider.toggleNotices(sub)),
+              ])),
+              ResponsiveTiles(children: [for (final server in shownServers.take(_shown))
+                RepaintBoundary(child: ServerTile(server: server, antiblock: widget.antiblock))]),
+              if (shownServers.length > _shown)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
                   child: TextButton.icon(
                     onPressed: () => setState(() => _shown += _page),
                     icon: const Icon(Icons.expand_more_rounded, size: 18),
-                    label: Text('${s.t('showMore')} (${widget.servers.length - _shown})'),
+                    label: Text('${s.t('showMore')} (${shownServers.length - _shown})'),
                   ),
                 ),
               const SizedBox(height: 8),
@@ -462,7 +468,8 @@ class ServerTile extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           // Tap connects straight away; long press opens the actions.
-          onTap: () => _tapServer(context, server),
+          onTap: server.isInformational ? null : () => _tapServer(context, server),
+          onSecondaryTap: () => _openServerSettings(context, server),
           onLongPress: () => _actions(context, server),
           child: Opacity(
             opacity: dim ? 0.6 : 1,
@@ -480,7 +487,7 @@ class ServerTile extends StatelessWidget {
                           children: [
                             Flexible(
                               child: Text(
-                                server.name,
+                                server.displayName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: AppTextStyles.bodyRegular.copyWith(
@@ -507,7 +514,7 @@ class ServerTile extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          [FormatUtils.protocolLabel(server.protocol), ?label].join(' · '),
+                          server.isInformational ? s.t('informationEntry') : [FormatUtils.protocolLabel(server.protocol), ?label].join(' · '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12),
@@ -520,7 +527,8 @@ class ServerTile extends StatelessWidget {
                       padding: const EdgeInsets.only(right: 6),
                       child: Icon(Icons.bolt_rounded, size: 18, color: p.success),
                     ),
-                  PingBadge(pingMs: server.pingMs, compact: true),
+                  if (!server.isInformational) PingBadge(pingMs: server.pingMs, compact: true),
+                  IconButton(tooltip: s.t('actions'), onPressed: () => _actions(context, server), icon: const Icon(Icons.more_horiz, size: 20)),
                 ],
               ),
             ),
@@ -531,7 +539,15 @@ class ServerTile extends StatelessWidget {
   }
 }
 
+Future<void> _openServerSettings(BuildContext context, ServerModel server) async {
+  await Navigator.push<void>(
+    context,
+    MaterialPageRoute(builder: (_) => ServerEditScreen(serverId: server.id)),
+  );
+}
+
 Future<void> _tapServer(BuildContext context, ServerModel server) async {
+  if (server.isInformational) return;
   final vpn = context.read<VpnProvider>();
   if (vpn.activeServerId == server.id && vpn.status == VpnStatus.connected) {
     // Already on this server — nothing to do; show the actions instead.
@@ -540,7 +556,7 @@ Future<void> _tapServer(BuildContext context, ServerModel server) async {
   }
   HapticFeedback.selectionClick();
   await vpn.connect(server);
-  if (context.mounted) context.read<NavProvider>().setIndex(0);
+  if (context.mounted) context.read<NavProvider>().go(NavDestination.home);
 }
 
 Future<void> _actions(BuildContext context, ServerModel server) async {
@@ -566,7 +582,7 @@ Future<void> _actions(BuildContext context, ServerModel server) async {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(server.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.headline.copyWith(fontSize: 15)),
+                    Text(server.displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.headline.copyWith(fontSize: 15)),
                     Text('${FormatUtils.protocolLabel(server.protocol)} · ${server.address}:${server.port}',
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
@@ -576,18 +592,20 @@ Future<void> _actions(BuildContext context, ServerModel server) async {
             ],
           ),
         ),
-        ListTile(
+        if (!server.isInformational) ListTile(
           leading: Icon(connected ? Icons.power_settings_new_rounded : Icons.play_arrow_rounded, color: connected ? AppColors.error : p.accent),
           title: Text(connected ? s.t('disconnect') : s.t('connect')),
           onTap: () => Navigator.pop(context, connected ? 'disconnect' : 'connect'),
         ),
-        ListTile(leading: const Icon(Icons.speed_rounded), title: Text(s.t('speedTest')), onTap: () => Navigator.pop(context, 'speed')),
+        if (!server.isInformational) ListTile(leading: const Icon(Icons.speed_rounded), title: Text(s.t('speedTest')), onTap: () => Navigator.pop(context, 'speed')),
         ListTile(leading: const Icon(Icons.push_pin_outlined), title: Text(server.isPinned ? s.t('unpin') : s.t('pin')), onTap: () => Navigator.pop(context, 'pin')),
         ListTile(leading: const Icon(Icons.copy_rounded), title: Text(s.t('copyLink')), onTap: () => Navigator.pop(context, 'copy')),
-        // Editing raw JSON only makes sense for servers added by hand;
-        // subscription entries are overwritten on the next refresh anyway.
+        ListTile(leading: const Icon(Icons.info_outline), title: Text(s.t(server.isInformational ? 'allowConnection' : 'markInformation')), onTap: () => Navigator.pop(context, 'information')),
+        // Raw editing only makes sense for a manual entry.  Deletion is
+        // available for both kinds: subscription entries are persisted as
+        // suppressed fingerprints and therefore do not come back on refresh.
         if (manual) ListTile(leading: const Icon(Icons.edit_outlined), title: Text(s.t('edit')), onTap: () => Navigator.pop(context, 'edit')),
-        if (manual) ListTile(leading: const Icon(Icons.delete_outline_rounded, color: AppColors.error), title: Text(s.t('delete')), onTap: () => Navigator.pop(context, 'delete')),
+        ListTile(leading: const Icon(Icons.delete_outline_rounded, color: AppColors.error), title: Text(s.t('delete')), onTap: () => Navigator.pop(context, 'delete')),
         const SizedBox(height: 8),
       ],
     ),
@@ -595,9 +613,11 @@ Future<void> _actions(BuildContext context, ServerModel server) async {
   if (!context.mounted || action == null) return;
   final servers = context.read<ServersProvider>();
   switch (action) {
+    case 'information':
+      await servers.setInformational(server, !server.isInformational);
     case 'connect':
       await vpn.connect(server);
-      if (context.mounted) context.read<NavProvider>().setIndex(0);
+      if (context.mounted) context.read<NavProvider>().go(NavDestination.home);
     case 'disconnect':
       await vpn.disconnect();
     case 'pin':
@@ -661,6 +681,7 @@ Future<void> _subscriptionMenu(BuildContext context, SubscriptionModel sub) asyn
             onTap: () => Navigator.pop(context, 'down'),
           ),
           ListTile(leading: const Icon(Icons.refresh_rounded), title: Text(s.t('refresh')), onTap: () => Navigator.pop(context, 'refresh')),
+          ListTile(leading: Icon(sub.hideNotices ? Icons.visibility_rounded : Icons.visibility_off_rounded), title: Text(s.t('hideInformation')), onTap: () => Navigator.pop(context, 'hide')),
           ListTile(leading: const Icon(Icons.push_pin_outlined), title: Text(sub.isPinned ? s.t('unpin') : s.t('pin')), onTap: () => Navigator.pop(context, 'pin')),
           ListTile(leading: const Icon(Icons.edit_outlined), title: Text(s.t('edit')), onTap: () => Navigator.pop(context, 'edit')),
           ListTile(leading: const Icon(Icons.copy_rounded), title: Text(s.t('copyLink')), onTap: () => Navigator.pop(context, 'copy')),
@@ -677,6 +698,8 @@ Future<void> _subscriptionMenu(BuildContext context, SubscriptionModel sub) asyn
       await servers.moveSubscription(sub.id, up: false);
     case 'refresh':
       await servers.refreshSubscription(sub.id);
+    case 'hide':
+      await servers.toggleNotices(sub);
     case 'pin':
       await servers.updateSubscription(sub.id, pinned: !sub.isPinned);
     case 'edit':
@@ -726,7 +749,7 @@ Future<void> _editSubscription(BuildContext context, SubscriptionModel sub) asyn
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Expanded(child: Text(s.t('interval'), style: AppTextStyles.bodySecondary)),
+                  Expanded(child: Text(s.t('interval'), style: context.palette.secondaryStyle)),
                   NukefyDropdown<UpdateInterval>(
                     value: interval,
                     items: {for (final e in UpdateInterval.values) e: _intervalLabel(s, e)},

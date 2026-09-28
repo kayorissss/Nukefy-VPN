@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers/settings_provider.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../widgets/responsive_sections.dart';
 
 class LogScreen extends StatefulWidget {
   const LogScreen({super.key});
@@ -68,9 +69,12 @@ class _LogScreenState extends State<LogScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: SelectableText(_text, style: AppTextStyles.monoValue),
+          : ResponsiveFrame(
+              maxWidth: 1400,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: SelectableText(_text, style: AppTextStyles.monoValue),
+              ),
             ),
     );
   }

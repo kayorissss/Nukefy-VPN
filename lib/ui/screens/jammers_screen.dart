@@ -72,7 +72,6 @@ class _JammersScreenState extends State<JammersScreen> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsProvider>().strings;
-    final p = context.palette;
     final bottom = MediaQuery.paddingOf(context).bottom;
 
     if (!_checked) {
@@ -92,32 +91,52 @@ class _JammersScreenState extends State<JammersScreen> {
 
     return SafeArea(
       bottom: false,
-      child: ListView(
+      child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
-        children: [
-          _VerdictCard(verdict: _verdict, strings: s)
-              .animate()
-              .fadeIn(duration: 350.ms)
-              .slideY(begin: 0.08, curve: Curves.easeOutCubic),
-          const SizedBox(height: 14),
-          _HostGroup(title: s.t('jammersRu'), hosts: AppConstants.jammerTargetsRu, results: _results, delay: 120.ms),
-          const SizedBox(height: 14),
-          _HostGroup(title: s.t('jammersOther'), hosts: AppConstants.jammerTargetsOther, results: _results, delay: 260.ms),
-          const SizedBox(height: 18),
-          Center(
-            child: FilledButton.tonalIcon(
-              style: FilledButton.styleFrom(
-                backgroundColor: p.accent.withValues(alpha: 0.12),
-                foregroundColor: p.accent,
-              ),
-              onPressed: _busy ? null : _check,
-              icon: _busy
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.refresh_rounded),
-              label: Text(s.t('checkAgain')),
-            ),
-          ).animate().fadeIn(delay: 420.ms),
-        ],
+        child: LayoutBuilder(builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 900;
+          final ru = _HostGroup(
+            title: s.t('jammersRu'),
+            hosts: AppConstants.jammerTargetsRu,
+            results: _results,
+            delay: 120.ms,
+          );
+          final other = _HostGroup(
+            title: s.t('jammersOther'),
+            hosts: AppConstants.jammerTargetsOther,
+            results: _results,
+            delay: 260.ms,
+          );
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _VerdictCard(
+                verdict: _verdict,
+                strings: s,
+                trailing: _verdict == JammerVerdict.none ? _CheckAgainButton(busy: _busy, onTap: _check, label: s.t('checkAgain')) : null,
+              )
+                  .animate()
+                  .fadeIn(duration: 350.ms)
+                  .slideY(begin: 0.08, curve: Curves.easeOutCubic),
+              const SizedBox(height: 16),
+              if (wide)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: ru),
+                    const SizedBox(width: 16),
+                    Expanded(child: other),
+                  ],
+                )
+              else ...[
+                ru,
+                const SizedBox(height: 14),
+                other,
+              ],
+              const SizedBox(height: 18),
+            ],
+          );
+        }),
       ),
     );
   }
@@ -176,11 +195,30 @@ class _BigCheckButton extends StatelessWidget {
   }
 }
 
+class _CheckAgainButton extends StatelessWidget {
+  const _CheckAgainButton({required this.busy, required this.onTap, required this.label});
+  final bool busy;
+  final VoidCallback onTap;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return FilledButton.tonalIcon(
+      style: FilledButton.styleFrom(backgroundColor: p.accent.withValues(alpha: .12), foregroundColor: p.accent, minimumSize: const Size(0, 42), padding: const EdgeInsets.symmetric(horizontal: 12)),
+      onPressed: busy ? null : onTap,
+      icon: busy ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh_rounded, size: 17),
+      label: Text(label),
+    );
+  }
+}
+
 class _VerdictCard extends StatelessWidget {
-  const _VerdictCard({required this.verdict, required this.strings});
+  const _VerdictCard({required this.verdict, required this.strings, this.trailing});
 
   final JammerVerdict verdict;
   final S strings;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -192,35 +230,71 @@ class _VerdictCard extends StatelessWidget {
       JammerVerdict.dead => (Icons.signal_wifi_bad_rounded, AppColors.error, strings.t('jammersDead'), strings.t('jammersDeadDesc')),
       JammerVerdict.idle => (Icons.radar_rounded, p.textSecondary, '', ''),
     };
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: p.card,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.12), blurRadius: 30)],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(18)),
-            child: Icon(icon, color: color, size: 30),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 560;
+        final message = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: AppTextStyles.headline.copyWith(color: color)),
+            const SizedBox(height: 4),
+            Text(body, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+          ],
+        );
+        final iconBox = Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(18)),
+          child: Icon(icon, color: color, size: 30),
+        );
+        final lead = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            iconBox,
+            const SizedBox(width: 16),
+            Expanded(child: message),
+          ],
+        );
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: color.withValues(alpha: 0.4)),
+            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.12), blurRadius: 30)],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: AppTextStyles.headline.copyWith(color: color)),
-                const SizedBox(height: 4),
-                Text(body, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
-              ],
-            ),
-          ),
-        ],
-      ),
+          child: narrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    lead,
+                    if (trailing != null) ...[
+                      const SizedBox(height: 16),
+                      Align(alignment: AlignmentDirectional.centerEnd, child: trailing),
+                    ],
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    iconBox,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          message,
+                          if (trailing != null) ...[
+                            const SizedBox(height: 14),
+                            Align(alignment: AlignmentDirectional.centerEnd, child: trailing),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+        );
+      },
     );
   }
 }

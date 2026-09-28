@@ -6,10 +6,12 @@ import 'package:flutter/widgets.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../constants/app_constants.dart';
+import '../models/app_settings.dart';
 import '../models/server_model.dart';
 import '../models/vpn_status.dart';
 import '../services/singbox_config_builder.dart';
 import '../services/vpn_platform.dart';
+import '../services/xray_config_builder.dart';
 import 'servers_provider.dart';
 import 'settings_provider.dart';
 import 'stats_provider.dart';
@@ -23,7 +25,9 @@ class VpnProvider extends ChangeNotifier {
   String? activeServerId;
   String mode = 'missing';
   CoreInfo? core;
+  XrayCoreInfo? xrayCore;
   bool coreBusy = false;
+  bool xrayCoreBusy = false;
 
   StatsProvider? _stats;
   ServersProvider? _servers;
@@ -50,7 +54,31 @@ class VpnProvider extends ChangeNotifier {
 
   Future<void> refreshCore() async {
     core = await _platform.coreInfo();
+    xrayCore = await _platform.xrayCoreInfo();
     notifyListeners();
+  }
+
+  Future<void> deleteCore() async {
+    await _platform.deleteCore();
+    await refreshCore();
+  }
+
+  Future<void> deleteXrayCore() async {
+    await _platform.deleteXrayCore();
+    await refreshCore();
+  }
+
+  Future<bool> downloadXrayCore(void Function(DownloadProgress progress) onProgress) async {
+    xrayCoreBusy = true;
+    notifyListeners();
+    try {
+      await _platform.downloadXrayCore(onProgress: onProgress);
+      xrayCore = await _platform.xrayCoreInfo();
+      return xrayCore?.available ?? false;
+    } finally {
+      xrayCoreBusy = false;
+      notifyListeners();
+    }
   }
 
   Future<void> toggle() async {
@@ -70,12 +98,30 @@ class VpnProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (server.isInformational) {
+      errorMessage = 'information-entry';
+      notifyListeners();
+      return;
+    }
     activeServerId = server.id;
     await settings.update((s) => s.selectedServerId = server.id);
     status = VpnStatus.connecting;
     errorMessage = null;
     notifyListeners();
     await refreshCore();
+    if (server.usesXhttp) {
+      await _connectViaXray(server, settings.settings);
+      return;
+    }
+    final validation = SingboxConfigBuilder.validationError(server);
+    if (validation != null) {
+      status = VpnStatus.error;
+      mode = 'unsupported';
+      errorMessage = validation;
+      await _stats?.addLog(server.name, 'error', message: validation);
+      notifyListeners();
+      return;
+    }
     final info = core;
     if (info == null || !info.available) {
       status = VpnStatus.error;
@@ -87,9 +133,9 @@ class VpnProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    // Android always runs through libbox + VpnService; desktop uses the
-    // system TUN whenever the user has it enabled.
-    final useTun = Platform.isAndroid ? info.libbox : settings.settings.tunEnabled;
+    // Both platforms expose the same choice. Android uses VpnService for TUN;
+    // proxy mode keeps the local SOCKS/HTTP inbound instead.
+    final useTun = settings.settings.tunEnabled && (Platform.isAndroid ? info.libbox : true);
     if (Platform.isAndroid && useTun) {
       final ready = await _platform.prepareVpn();
       if (!ready) {
@@ -117,6 +163,7 @@ class VpnProvider extends ChangeNotifier {
       desktopTun: !Platform.isAndroid && useTun,
       forceProxyOnly: !useTun,
     );
+    await _platform.stopXray();
     final result = await _platform.start(
       configJson: json,
       preferTun: useTun,
@@ -142,6 +189,106 @@ class VpnProvider extends ChangeNotifier {
     await _stats?.addLog(server.name, 'connected', message: mode);
     _startTicker();
     notifyListeners();
+  }
+
+  static int _xrayInboundPort(int socksPort, int httpPort) {
+    var candidate = socksPort + 10000;
+    if (candidate > 65535 || candidate == httpPort) candidate = 18080;
+    if (candidate == httpPort) candidate = 18081;
+    return candidate;
+  }
+
+  Future<void> _connectViaXray(ServerModel server, AppSettings settings) async {
+    if (!XrayConfigBuilder.supports(server)) {
+      status = VpnStatus.error;
+      mode = 'xray-unsupported';
+      errorMessage = 'XRAY_UNSUPPORTED_PROTOCOL';
+      notifyListeners();
+      return;
+    }
+    if (Platform.isAndroid || Platform.isIOS || !(xrayCore?.available ?? false)) {
+      status = VpnStatus.error;
+      mode = 'xray-missing';
+      errorMessage = Platform.isAndroid || Platform.isIOS ? 'XRAY_PLATFORM_UNSUPPORTED' : 'XRAY_CORE_MISSING';
+      notifyListeners();
+      return;
+    }
+    final useTunFrontend = settings.tunEnabled && (core?.available ?? false);
+    if (settings.tunEnabled && !useTunFrontend) {
+      status = VpnStatus.error;
+      mode = 'xray-frontend-missing';
+      errorMessage = 'XRAY_FRONTEND_MISSING';
+      notifyListeners();
+      return;
+    }
+    final dir = await _platform.configDirectory();
+    final xrayPort = useTunFrontend ? _xrayInboundPort(settings.socksPort, settings.httpPort) : settings.socksPort;
+    try {
+      final config = XrayConfigBuilder.buildJson(
+        server: server,
+        settings: settings,
+        logPath: '${dir.path}/xray.log',
+        inboundPort: xrayPort,
+      );
+      await _platform.stop();
+      final xrayResult = await _platform.startXray(configJson: config, workDir: dir.path);
+      if (!xrayResult.ok) {
+        status = VpnStatus.error;
+        mode = 'xray-proxy';
+        errorMessage = xrayResult.error ?? 'XRAY_START_FAILED';
+        await _stats?.addLog(server.name, 'error', message: errorMessage);
+        notifyListeners();
+        return;
+      }
+      if (useTunFrontend) {
+        final frontend = XrayConfigBuilder.buildSingboxFrontendJson(
+          settings: settings,
+          xrayPort: xrayPort,
+          logPath: '${dir.path}/xray-frontend.log',
+          cachePath: '${dir.path}/xray-cache.db',
+          useTun: true,
+        );
+        final frontendResult = await _platform.start(
+          configJson: frontend,
+          preferTun: true,
+          serverName: server.name,
+          serverHost: server.address,
+          serverPort: server.port,
+        );
+        if (!frontendResult.ok) {
+          await _platform.stopXray();
+          status = VpnStatus.error;
+          mode = 'xray-frontend';
+          errorMessage = frontendResult.error ?? 'XRAY_FRONTEND_FAILED';
+          await _stats?.addLog(server.name, 'error', message: errorMessage);
+          notifyListeners();
+          return;
+        }
+      }
+      // Xray owns the XHTTP protocol. When TUN is enabled, sing-box is only
+      // the transparent front-end and forwards all traffic to Xray; when it is
+      // disabled, the user gets an explicitly labelled local proxy instead.
+      status = VpnStatus.connected;
+      mode = useTunFrontend ? 'xray-tun' : 'xray-proxy';
+      errorMessage = null;
+      _sessionUp = 0;
+      _sessionDown = 0;
+      _stats?.startSession();
+      if (useTunFrontend) _listenTraffic();
+      await _stats?.addLog(server.name, 'connected', message: mode);
+      _startTicker();
+      notifyListeners();
+    } on XrayConfigException catch (error) {
+      status = VpnStatus.error;
+      mode = 'xray-proxy';
+      errorMessage = error.code;
+      notifyListeners();
+    } catch (error) {
+      status = VpnStatus.error;
+      mode = 'xray-proxy';
+      errorMessage = '$error';
+      notifyListeners();
+    }
   }
 
   void _startTicker() {
@@ -235,6 +382,7 @@ class VpnProvider extends ChangeNotifier {
   Future<void> disconnect() async {
     final name = activeServer?.name ?? '';
     await _platform.stop();
+    await _platform.stopXray();
     await _traffic?.sink.close();
     _traffic = null;
     _ticker?.cancel();

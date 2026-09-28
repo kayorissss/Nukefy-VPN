@@ -1,0 +1,32 @@
+Game and platform marks: Simple Icons
+https://github.com/simple-icons/simple-icons
+
+Downloaded 2026-09-27 from the Simple Icons catalog and converted to 96x96
+PNG without changing geometry. Runtime tint follows the app palette.
+
+Simple Icons artwork is released under CC0-1.0:
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Brand names and logos may be trademarks of their respective owners. They
+identify services in third-party community domain lists, not affiliation or
+endorsement.
+
+Additional game marks (adapted to 96x96 transparent PNG markers):
+- Apex Legends — Wikimedia Commons, CC0 1.0:
+  https://commons.wikimedia.org/wiki/File:Apex_Legends_logo.png
+- Arma Reforger — Bohemia Interactive, Wikimedia Commons, public-domain text
+  logo: https://commons.wikimedia.org/wiki/File:Arma_Reforger_Logo_(Black_Transparent).svg
+- Battlefield — EA, Wikimedia Commons, public-domain text logo:
+  https://commons.wikimedia.org/wiki/File:Battlefield_computer_games_(logo).png
+- Blue Archive — Wikimedia Commons, public-domain text logo:
+  https://commons.wikimedia.org/wiki/File:Blue_Archive_logo_JP.png
+- Dead by Daylight — Wikimedia Commons, public-domain text logo:
+  https://commons.wikimedia.org/wiki/File:Dead_by_Daylight_Logo.png
+- Minecraft — Xbox México, Wikimedia Commons, CC BY 4.0:
+  https://commons.wikimedia.org/wiki/File:Minecraft_Logo.png
+- Mortal Kombat 11 — Wikimedia Commons, CC BY 3.0 / public-domain text-logo
+  notice: https://commons.wikimedia.org/wiki/File:Mortal-kombat-11-logo.png
+- Warframe — Digital Extremes, Wikimedia Commons, CC BY-SA 4.0:
+  https://commons.wikimedia.org/wiki/File:WarframeLogo.png
+- Wuthering Waves — Wikimedia Commons, public-domain text logo:
+  https://commons.wikimedia.org/wiki/File:Wuthering_Waves_logo.svg
