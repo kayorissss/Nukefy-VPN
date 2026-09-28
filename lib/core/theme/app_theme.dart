@@ -36,9 +36,9 @@ class AppTheme {
     final scheme = ColorScheme(
       brightness: brightness,
       primary: p.accent,
-      onPrimary: const Color(0xFF041316),
+      onPrimary: p.isDark ? Colors.black : Colors.white,
       secondary: p.accent2,
-      onSecondary: Colors.white,
+      onSecondary: p.isDark ? Colors.black : Colors.white,
       error: p.error,
       onError: Colors.white,
       surface: p.card,
@@ -265,7 +265,7 @@ class AppTheme {
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return const Color(0xFF041316);
+          if (states.contains(WidgetState.selected)) return p.isDark ? Colors.black : Colors.white;
           return p.textSecondary;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
@@ -288,7 +288,7 @@ class AppTheme {
         fillColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected) ? p.accent : Colors.transparent,
         ),
-        checkColor: const WidgetStatePropertyAll(Color(0xFF041316)),
+        checkColor: WidgetStatePropertyAll(p.isDark ? Colors.black : Colors.white),
         side: BorderSide(color: p.textSecondary, width: 1.5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),

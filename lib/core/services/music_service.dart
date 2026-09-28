@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
+import 'package:audio_service/audio_service.dart' as audio_service;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -20,6 +21,7 @@ class MusicTrack {
     required this.size,
     required this.addedAt,
     this.durationMs,
+    this.artworkPath,
   });
 
   final String id;
@@ -29,6 +31,7 @@ class MusicTrack {
   String album;
   int size;
   int? durationMs;
+  String? artworkPath;
   DateTime addedAt;
 
   Map<String, dynamic> toJson() => {
@@ -39,6 +42,7 @@ class MusicTrack {
         'album': album,
         'size': size,
         'durationMs': durationMs,
+        'artworkPath': artworkPath,
         'addedAt': addedAt.toIso8601String(),
       };
 
@@ -50,6 +54,7 @@ class MusicTrack {
         album: '${json['album'] ?? ''}',
         size: (json['size'] as num?)?.toInt() ?? 0,
         durationMs: (json['durationMs'] as num?)?.toInt(),
+        artworkPath: (json['artworkPath'] as String?)?.trim().isEmpty == true ? null : json['artworkPath'] as String?,
         addedAt: DateTime.tryParse('${json['addedAt']}') ?? DateTime.now(),
       );
 }
@@ -89,25 +94,43 @@ class MusicPlaylist {
 /// Local music library and one-player queue. Files are copied into the app's
 /// support directory so a user can safely remove the original download.
 class MusicService extends ChangeNotifier {
-  MusicService(this._storage) {
-    _player.onPositionChanged.listen((value) {
-      position = value;
-      notifyListeners();
-    });
-    _player.onDurationChanged.listen((value) {
-      duration = value;
-      final track = currentTrack;
-      if (track != null && (track.durationMs == null || track.durationMs == 0)) {
-        track.durationMs = value.inMilliseconds;
-        _save();
-      }
-      notifyListeners();
-    });
-    _player.onPlayerStateChanged.listen((value) {
-      isPlaying = value == PlayerState.playing;
-      notifyListeners();
-    });
-    _player.onPlayerComplete.listen((_) => next());
+  MusicService(this._storage, {audio_service.AudioHandler? backgroundHandler})
+      : _background = backgroundHandler {
+    if (_background == null) {
+      _player.onPositionChanged.listen((value) {
+        position = value;
+        notifyListeners();
+      });
+      _player.onDurationChanged.listen((value) {
+        duration = value;
+        final track = currentTrack;
+        if (track != null && (track.durationMs == null || track.durationMs == 0)) {
+          track.durationMs = value.inMilliseconds;
+          _save();
+        }
+        notifyListeners();
+      });
+      _player.onPlayerStateChanged.listen((value) {
+        isPlaying = value == PlayerState.playing;
+        notifyListeners();
+      });
+      _player.onPlayerComplete.listen((_) => next());
+    } else {
+      _background!.mediaItem.listen((item) {
+        currentId = item?.id;
+        duration = item?.duration ?? Duration.zero;
+        if (item == null) {
+          position = Duration.zero;
+          isPlaying = false;
+        }
+        notifyListeners();
+      });
+      _background!.playbackState.listen((state) {
+        position = state.updatePosition;
+        isPlaying = state.playing;
+        notifyListeners();
+      });
+    }
   }
 
   static const _key = 'music_library';
@@ -126,6 +149,7 @@ class MusicService extends ChangeNotifier {
   ];
 
   final StorageService _storage;
+  final audio_service.AudioHandler? _background;
   final AudioPlayer _player = AudioPlayer();
   final Uuid _uuid = const Uuid();
   final List<MusicTrack> tracks = [];
@@ -166,13 +190,33 @@ class MusicService extends ChangeNotifier {
           .map((item) => MusicPlaylist.fromJson(Map<String, dynamic>.from(item)))
           .where((playlist) => playlist.id.isNotEmpty));
     final missing = tracks.where((track) => !File(track.path).existsSync()).map((track) => track.id).toSet();
+    var changed = missing.isNotEmpty;
     if (missing.isNotEmpty) {
       tracks.removeWhere((track) => missing.contains(track.id));
       for (final playlist in playlists) {
         playlist.trackIds.removeWhere(missing.contains);
       }
-      await _save();
     }
+    // Older library entries did not persist embedded artwork. Enrich them
+    // once on load so covers survive both app restarts and the original file
+    // being moved or deleted.
+    final needsArtwork = tracks.where((track) =>
+        track.artworkPath == null || !File(track.artworkPath!).existsSync());
+    if (needsArtwork.isNotEmpty) {
+      final directory = await _directory;
+      for (final track in needsArtwork) {
+        final metadata = _readMetadata(File(track.path), getImage: true);
+        final artwork = await _saveArtwork(metadata, directory, track.id);
+        if (artwork != null) {
+          track.artworkPath = artwork;
+          changed = true;
+        }
+      }
+    }
+    if (changed) await _save();
+    _queue
+      ..clear()
+      ..addAll(tracks.map((track) => track.id));
     notifyListeners();
   }
 
@@ -201,7 +245,8 @@ class MusicService extends ChangeNotifier {
         var destination = File(p.join(directory.path, '$base$extension'));
         if (destination.existsSync()) destination = File(p.join(directory.path, '$id$extension'));
         if (source.path != destination.path) await source.copy(destination.path);
-        final metadata = _readMetadata(destination);
+        final metadata = _readMetadata(destination, getImage: true);
+        final artworkPath = await _saveArtwork(metadata, directory, id);
         final fallback = _fallbackNames(p.basenameWithoutExtension(source.path));
         final track = MusicTrack(
           id: id,
@@ -211,6 +256,7 @@ class MusicService extends ChangeNotifier {
           album: _clean(metadata?.album) ?? '',
           size: await destination.length(),
           durationMs: metadata?.duration?.inMilliseconds,
+          artworkPath: artworkPath,
           addedAt: DateTime.now(),
         );
         tracks.add(track);
@@ -229,9 +275,34 @@ class MusicService extends ChangeNotifier {
     }
   }
 
-  AudioMetadata? _readMetadata(File file) {
+  AudioMetadata? _readMetadata(File file, {required bool getImage}) {
     try {
-      return readMetadata(file, getImage: false);
+      return readMetadata(file, getImage: getImage);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _saveArtwork(AudioMetadata? metadata, Directory musicDirectory, String id) async {
+    final pictures = metadata?.pictures ?? const [];
+    if (pictures.isEmpty) return null;
+    final picture = pictures.firstWhere(
+      (item) => item.bytes.isNotEmpty,
+      orElse: () => pictures.first,
+    );
+    if (picture.bytes.isEmpty || picture.bytes.length > 12 * 1024 * 1024) return null;
+    final extension = switch (picture.mimetype.toLowerCase()) {
+      'image/png' => '.png',
+      'image/webp' => '.webp',
+      'image/gif' => '.gif',
+      _ => '.jpg',
+    };
+    try {
+      final directory = Directory(p.join(musicDirectory.path, 'artwork'));
+      await directory.create(recursive: true);
+      final file = File(p.join(directory.path, '$id$extension'));
+      await file.writeAsBytes(picture.bytes, flush: true);
+      return file.path;
     } catch (_) {
       return null;
     }
@@ -274,6 +345,37 @@ class MusicService extends ChangeNotifier {
     } else if (_queue.isEmpty) {
       _queue.addAll(tracks.map((item) => item.id));
     }
+    final orderedIds = _queue.where((id) => tracks.any((item) => item.id == id)).toList();
+    if (!orderedIds.contains(track.id)) orderedIds.add(track.id);
+    if (_background != null) {
+      final items = orderedIds
+          .map((id) => tracks.where((item) => item.id == id).firstOrNull)
+          .whereType<MusicTrack>()
+          .toList();
+      _queue
+        ..clear()
+        ..addAll(items.map((item) => item.id));
+      await _background!.customAction('loadQueue', {
+        'index': _queue.indexOf(track.id),
+        'items': [
+          for (final item in items)
+            {
+              'id': item.id,
+              'path': item.path,
+              'title': item.title,
+              'artist': item.artist,
+              'album': item.album,
+              'durationMs': item.durationMs,
+              'artworkPath': item.artworkPath,
+            },
+        ],
+      });
+      currentId = track.id;
+      position = Duration.zero;
+      duration = track.durationMs == null ? Duration.zero : Duration(milliseconds: track.durationMs!);
+      notifyListeners();
+      return;
+    }
     await _player.stop();
     await _player.setSourceDeviceFile(track.path);
     currentId = track.id;
@@ -285,7 +387,13 @@ class MusicService extends ChangeNotifier {
 
   Future<void> toggle() async {
     if (currentTrack == null) return;
-    if (isPlaying) {
+    if (_background != null) {
+      if (isPlaying) {
+        await _background!.pause();
+      } else {
+        await _background!.play();
+      }
+    } else if (isPlaying) {
       await _player.pause();
     } else {
       await _player.resume();
@@ -293,11 +401,15 @@ class MusicService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> seek(Duration value) => _player.seek(value);
+  Future<void> seek(Duration value) => _background != null ? _background!.seek(value) : _player.seek(value);
 
   Future<void> previous() async {
     if (position > const Duration(seconds: 4)) {
       await seek(Duration.zero);
+      return;
+    }
+    if (_background != null) {
+      await _background!.skipToPrevious();
       return;
     }
     final index = _queue.indexOf(currentId ?? '');
@@ -310,6 +422,10 @@ class MusicService extends ChangeNotifier {
   }
 
   Future<void> next() async {
+    if (_background != null) {
+      await _background!.skipToNext();
+      return;
+    }
     final index = _queue.indexOf(currentId ?? '');
     if (index >= 0 && index + 1 < _queue.length) {
       final track = tracks.where((item) => item.id == _queue[index + 1]).firstOrNull;
@@ -322,7 +438,11 @@ class MusicService extends ChangeNotifier {
   }
 
   Future<void> stop() async {
-    await _player.stop();
+    if (_background != null) {
+      await _background!.stop();
+    } else {
+      await _player.stop();
+    }
     currentId = null;
     position = Duration.zero;
     duration = Duration.zero;
@@ -334,6 +454,8 @@ class MusicService extends ChangeNotifier {
     if (track.id == currentId) await stop();
     final file = File(track.path);
     if (file.existsSync()) await file.delete();
+    final artwork = track.artworkPath == null ? null : File(track.artworkPath!);
+    if (artwork?.existsSync() == true) await artwork!.delete();
     tracks.removeWhere((item) => item.id == track.id);
     for (final playlist in playlists) {
       playlist.trackIds.remove(track.id);

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -170,7 +172,6 @@ class _MusicScreenState extends State<MusicScreen> {
                             },
                           ),
                   ),
-                  if (music.currentTrack != null) _NowPlaying(music: music),
                 ],
               ),
             ),
@@ -345,7 +346,7 @@ class _Header extends StatelessWidget {
                 gradient: LinearGradient(colors: [p.accent, p.accent2]),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Icon(Icons.library_music_rounded, color: p.isDark ? const Color(0xFF07131A) : Colors.white, size: 25),
+              child: Icon(Icons.library_music_rounded, color: p.isDark ? Colors.black : Colors.white, size: 25),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -387,7 +388,7 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _Toolbar extends StatelessWidget {
+class _Toolbar extends StatefulWidget {
   const _Toolbar({required this.search, required this.hint, required this.view, required this.newestFirst, required this.onQuery, required this.onView, required this.onSort, required this.sortLabel});
   final TextEditingController search;
   final String hint;
@@ -399,52 +400,115 @@ class _Toolbar extends StatelessWidget {
   final String sortLabel;
 
   @override
+  State<_Toolbar> createState() => _ToolbarState();
+}
+
+class _ToolbarState extends State<_Toolbar> {
+  late bool _searchOpen = widget.search.text.isNotEmpty;
+
+  void _toggleSearch() {
+    setState(() => _searchOpen = !_searchOpen);
+    if (!_searchOpen && widget.search.text.isNotEmpty) {
+      widget.search.clear();
+      widget.onQuery('');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final p = context.palette;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final searchWidth = constraints.maxWidth < 560 ? (constraints.maxWidth - 40).clamp(240.0, 520.0).toDouble() : 360.0;
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: searchWidth,
-                child: TextField(
-                  controller: search,
-                  onChanged: onQuery,
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    hintText: hint,
-                    isDense: true,
-                  ),
-                ),
+        final compact = constraints.maxWidth < 560;
+        final controls = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ToolbarIcon(
+              tooltip: widget.hint,
+              icon: Icons.search_rounded,
+              selected: _searchOpen,
+              onPressed: _toggleSearch,
+            ),
+            const SizedBox(width: 6),
+            _ToolbarIcon(
+              tooltip: widget.sortLabel,
+              icon: widget.newestFirst ? Icons.south_rounded : Icons.north_rounded,
+              onPressed: widget.onSort,
+            ),
+            const SizedBox(width: 8),
+            SegmentedButton<_MusicView>(
+              segments: const [
+                ButtonSegment(value: _MusicView.list, icon: Icon(Icons.view_list_rounded)),
+                ButtonSegment(value: _MusicView.table, icon: Icon(Icons.table_rows_rounded)),
+                ButtonSegment(value: _MusicView.grid, icon: Icon(Icons.grid_view_rounded)),
+              ],
+              selected: {widget.view},
+              onSelectionChanged: (value) => widget.onView(value.first),
+              showSelectedIcon: false,
+              style: ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 5)),
+                foregroundColor: WidgetStatePropertyAll(p.text),
+                side: WidgetStatePropertyAll(BorderSide(color: p.border)),
               ),
-              OutlinedButton.icon(
-                onPressed: onSort,
-                icon: Icon(newestFirst ? Icons.south_rounded : Icons.north_rounded, size: 18),
-                label: Text(sortLabel),
-              ),
-              SegmentedButton<_MusicView>(
-                segments: const [
-                  ButtonSegment(value: _MusicView.list, icon: Icon(Icons.view_list_rounded)),
-                  ButtonSegment(value: _MusicView.table, icon: Icon(Icons.table_rows_rounded)),
-                  ButtonSegment(value: _MusicView.grid, icon: Icon(Icons.grid_view_rounded)),
-                ],
-                selected: {view},
-                onSelectionChanged: (value) => onView(value.first),
-                style: ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                  foregroundColor: WidgetStatePropertyAll(p.text),
-                ),
-              ),
-            ],
+            ),
+          ],
+        );
+        final searchField = TextField(
+          controller: widget.search,
+          autofocus: _searchOpen,
+          onChanged: widget.onQuery,
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: IconButton(onPressed: _toggleSearch, icon: const Icon(Icons.close_rounded)),
+            hintText: widget.hint,
+            isDense: true,
           ),
         );
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+          child: compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(alignment: AlignmentDirectional.centerEnd, child: controls),
+                    if (_searchOpen) ...[const SizedBox(height: 7), searchField],
+                  ],
+                )
+              : Row(
+                  children: [
+                    if (_searchOpen) Expanded(child: searchField) else const Spacer(),
+                    if (_searchOpen) const SizedBox(width: 8),
+                    controls,
+                  ],
+                ),
+        );
       },
+    );
+  }
+}
+
+class _ToolbarIcon extends StatelessWidget {
+  const _ToolbarIcon({required this.tooltip, required this.icon, required this.onPressed, this.selected = false});
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: selected ? p.accent.withValues(alpha: .14) : p.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: selected ? p.accent.withValues(alpha: .55) : p.border)),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onPressed,
+          child: Padding(padding: const EdgeInsets.all(8), child: Icon(icon, size: 19, color: selected ? p.accent : p.textSecondary)),
+        ),
+      ),
     );
   }
 }
@@ -742,38 +806,30 @@ class _MusicArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [p.accent.withValues(alpha: .9), p.accent2.withValues(alpha: .9)]),
-        borderRadius: BorderRadius.circular(size * .24),
-      ),
-      child: Icon(Icons.music_note_rounded, color: p.isDark ? const Color(0xFF07131A) : Colors.white, size: size * .47),
-    );
-  }
-}
-
-class _NowPlaying extends StatelessWidget {
-  const _NowPlaying({required this.music});
-  final MusicService music;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    final s = context.read<SettingsProvider>().strings;
-    final track = music.currentTrack!;
-    final title = _trackTitle(track, s);
-    final max = music.duration.inMilliseconds <= 0 ? 1.0 : music.duration.inMilliseconds.toDouble();
-    final value = music.position.inMilliseconds.clamp(0, max.toInt()).toDouble();
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 4, 20, 16),
-      padding: const EdgeInsets.fromLTRB(12, 10, 14, 8),
-      decoration: BoxDecoration(color: p.card, borderRadius: BorderRadius.circular(20), border: Border.all(color: p.accent.withValues(alpha: .45)), boxShadow: [BoxShadow(color: p.accent.withValues(alpha: .08), blurRadius: 20)]),
-      child: Column(children: [
-        Row(children: [_MusicArtwork(track: track, size: 42), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)), Text(track.artist.isEmpty ? s.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.palette.secondaryStyle)])), IconButton(onPressed: music.previous, icon: const Icon(Icons.skip_previous_rounded)), IconButton(onPressed: music.toggle, icon: Icon(music.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded, size: 32, color: p.accent)), IconButton(onPressed: music.next, icon: const Icon(Icons.skip_next_rounded))]),
-        Row(children: [Text(_formatDuration(music.position), style: context.palette.captionStyle), Expanded(child: Slider(value: value, max: max, onChanged: (value) => music.seek(Duration(milliseconds: value.round())))), Text(_formatDuration(music.duration), style: context.palette.captionStyle)]),
-      ]),
+    final artwork = track.artworkPath;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * .24),
+      child: artwork == null
+          ? Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [p.accent.withValues(alpha: .9), p.accent2.withValues(alpha: .9)]),
+              ),
+              child: Icon(Icons.music_note_rounded, color: p.isDark ? Colors.black : Colors.white, size: size * .47),
+            )
+          : Image.file(
+              File(artwork),
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Container(
+                width: size,
+                height: size,
+                color: p.surface,
+                child: Icon(Icons.broken_image_outlined, color: p.textSecondary, size: size * .42),
+              ),
+            ),
     );
   }
 }

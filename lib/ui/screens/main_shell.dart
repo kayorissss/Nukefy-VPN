@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers/nav_provider.dart';
 import '../../core/providers/settings_provider.dart';
+import '../../core/services/music_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../widgets/nukefy_background.dart';
@@ -89,21 +90,29 @@ class MainShell extends StatelessWidget {
           // and the last settings row must never be hidden behind navigation.
           extendBody: false,
           extendBodyBehindAppBar: false,
-          body: desktop
-              ? Column(
-                  children: [
-                    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) const DesktopTitleBar(),
-                    Expanded(
-                      child: Row(
+          body: Column(
+            children: [
+              Expanded(
+                child: desktop
+                    ? Column(
                         children: [
-                          _SideRail(tabs: tabs, index: activeTab, destination: destination),
-                          Expanded(child: body),
+                          if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) const DesktopTitleBar(),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                _SideRail(tabs: tabs, index: activeTab, destination: destination),
+                                Expanded(child: body),
+                              ],
+                            ),
+                          ),
                         ],
-                      ),
-                    ),
-                  ],
-                )
-              : body,
+                      )
+                    : body,
+              ),
+              if (context.watch<MusicService>().currentTrack != null)
+                const _GlobalMusicBar(),
+            ],
+          ),
           bottomNavigationBar: desktop ? null : _BottomBar(tabs: tabs, index: activeTab),
         ),
       ),
@@ -123,6 +132,98 @@ class MainShell extends StatelessWidget {
         _ => const SizedBox.shrink(),
       };
 }
+
+class _GlobalMusicBar extends StatelessWidget {
+  const _GlobalMusicBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final music = context.watch<MusicService>();
+    final track = music.currentTrack;
+    if (track == null) return const SizedBox.shrink();
+    final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
+    final total = music.duration.inMilliseconds <= 0 ? 1.0 : music.duration.inMilliseconds.toDouble();
+    final position = music.position.inMilliseconds.clamp(0, total.toInt()).toDouble();
+    final artwork = track.artworkPath;
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+        child: Material(
+          color: p.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: p.accent.withValues(alpha: .42)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: artwork == null
+                        ? Container(
+                            width: 46,
+                            height: 46,
+                            color: p.accent.withValues(alpha: .14),
+                            child: Icon(Icons.music_note_rounded, color: p.accent),
+                          )
+                        : Image.file(
+                            File(artwork),
+                            width: 46,
+                            height: 46,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => Container(
+                              width: 46,
+                              height: 46,
+                              color: p.surface,
+                              child: Icon(Icons.music_note_rounded, color: p.textSecondary),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(track.title.trim().isEmpty ? s.t('musicUntitled') : track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)),
+                        Text(track.artist.trim().isEmpty ? s.t('musicUnknownArtist') : track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: p.secondaryStyle),
+                      ],
+                    ),
+                  ),
+                  IconButton(tooltip: s.t('musicPrevious'), onPressed: music.previous, icon: const Icon(Icons.skip_previous_rounded)),
+                  IconButton(tooltip: music.isPlaying ? s.t('musicPause') : s.t('musicPlay'), onPressed: music.toggle, icon: Icon(music.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded, color: p.accent, size: 31)),
+                  IconButton(tooltip: s.t('musicNext'), onPressed: music.next, icon: const Icon(Icons.skip_next_rounded)),
+                  IconButton(tooltip: s.t('musicStop'), onPressed: music.stop, icon: const Icon(Icons.close_rounded)),
+                ],
+              ),
+              Row(
+                children: [
+                  const SizedBox(width: 8),
+                  Text(_globalMusicDuration(music.position), style: p.captionStyle),
+                  Expanded(
+                    child: Slider(
+                      value: position,
+                      max: total,
+                      onChanged: (value) => music.seek(Duration(milliseconds: value.round())),
+                    ),
+                  ),
+                  Text(_globalMusicDuration(music.duration), style: p.captionStyle),
+                  const SizedBox(width: 8),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _globalMusicDuration(Duration value) => '${value.inMinutes.remainder(60).toString().padLeft(2, '0')}:${value.inSeconds.remainder(60).toString().padLeft(2, '0')}';
 
 class _TabSpec {
   const _TabSpec(this.icon, this.outlined, this.label, this.destination);

@@ -10,7 +10,7 @@ on:
       tag:
         description: 'Tag the built files belong to'
         required: false
-        default: v2.5.1
+        default: v2.5.2
 
 permissions:
   contents: write
@@ -104,10 +104,28 @@ jobs:
           channel: stable
           flutter-version: 3.47.4
           cache: true
+      - name: Configure persistent Android signing key
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/nukefy-release.jks"
       - name: Resolve packages
         run: flutter pub get
       - name: Build APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && format('{0}/nukefy-release.jks', runner.temp) || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: flutter build apk --release
+      - name: Verify APK identity and signature
+        run: |
+          set -e
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          "$ANDROID_HOME/build-tools/$(ls -1 "$ANDROID_HOME/build-tools" | tail -1)/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$APK" | grep -Fx 'com.nukefy.vpn'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest version-code "$APK" | grep -Fx '18'
       - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyVPN-android.apk
       - uses: actions/upload-artifact@v4
         with:

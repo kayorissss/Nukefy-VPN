@@ -12,6 +12,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../constants/app_constants.dart';
 
+enum ApkInstallResult { launched, permissionRequired, missing, invalid, wrongPackage, notNewer, signatureMismatch, failed }
+
 class CoreInfo {
   CoreInfo({
     required this.libbox,
@@ -541,13 +543,22 @@ class VpnPlatform {
     } catch (_) {}
   }
 
-  Future<bool> installApk(String path) async {
-    if (!Platform.isAndroid) return false;
+  Future<ApkInstallResult> installApk(String path) async {
+    if (!Platform.isAndroid) return ApkInstallResult.failed;
     try {
-      final ok = await _channel.invokeMethod<bool>('installApk', {'path': path});
-      return ok ?? false;
+      final raw = await _channel.invokeMethod<String>('installApk', {'path': path});
+      return switch (raw) {
+        'launched' => ApkInstallResult.launched,
+        'permission' => ApkInstallResult.permissionRequired,
+        'missing' => ApkInstallResult.missing,
+        'invalid' => ApkInstallResult.invalid,
+        'package' => ApkInstallResult.wrongPackage,
+        'version' => ApkInstallResult.notNewer,
+        'signature' => ApkInstallResult.signatureMismatch,
+        _ => ApkInstallResult.failed,
+      };
     } catch (_) {
-      return false;
+      return ApkInstallResult.failed;
     }
   }
 

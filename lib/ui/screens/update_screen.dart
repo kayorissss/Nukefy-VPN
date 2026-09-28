@@ -83,9 +83,20 @@ class _UpdateScreenState extends State<UpdateScreen> {
     final s = context.read<SettingsProvider>().strings;
     final file = _file;
     if (file == null) return;
-    if (Platform.isAndroid && file.path.endsWith('.apk')) {
-      final launched = await VpnPlatform().installApk(file.path);
-      if (!launched && mounted) setState(() { _phase = _Phase.failed; _error = s.t('updateInstallFailed'); });
+    if (Platform.isAndroid && file.path.toLowerCase().endsWith('.apk')) {
+      final result = await VpnPlatform().installApk(file.path);
+      if (!mounted || result == ApkInstallResult.launched) return;
+      final message = switch (result) {
+        ApkInstallResult.permissionRequired => s.t('updateInstallPermission'),
+        ApkInstallResult.invalid || ApkInstallResult.missing || ApkInstallResult.wrongPackage => s.t('updateInstallInvalid'),
+        ApkInstallResult.notNewer => s.t('updateInstallNotNewer'),
+        ApkInstallResult.signatureMismatch => s.t('updateInstallSignature'),
+        _ => s.t('updateInstallFailed'),
+      };
+      setState(() {
+        _phase = _Phase.failed;
+        _error = message;
+      });
       return;
     }
     if (Platform.isWindows && file.path.toLowerCase().endsWith('.exe')) {

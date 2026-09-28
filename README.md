@@ -4,9 +4,16 @@
 >
 > VLESS Reality · VMess · Trojan · Shadowsocks · Hysteria2 · TUIC · WireGuard · AmneziaWG
 
-- **Текущий релиз:** `2.5.1`
+- **Текущий релиз:** `2.5.2`
 - **Автор:** [@kayorisan](https://t.me/kayorisan)
 - **Скачать:** [GitHub Releases](https://github.com/kayorissss/Nukefy-VPN/releases/latest)
+
+## Что нового в 2.5.2
+
+- **Android-обновления без удаления.** APK проверяет package name, versionCode и подпись, использует безопасный `content://` URI и просит системное разрешение на установку из источника без удаления приложения.
+- **Музыка в фоне.** Реальные embedded cover-art сохраняются в библиотеке; now-playing закреплён глобально, а Android media notification содержит обложку, прогресс, play/pause, предыдущий/следующий трек и остановку.
+- **Тема и диагностика.** «Чёрный и красный» теперь использует строгие чёрно-графитовые поверхности и красные акценты; Speed Test и Statistics больше не содержат фиолетовых/лишних элементов.
+- **Уведомления.** Android 13+ получает системный запрос разрешения с понятным переходом в настройки.
 
 ## Что нового в 2.5.1
 
@@ -166,7 +173,7 @@ flutter build windows --release
 
 Android: `minSdk 21`, `targetSdk 34`, `applicationId` `com.nukefy.vpn`. Если движок Flutter или плагин откажется от API 21, в `android/app/build.gradle.kts` замените `minSdk = 21` на `minSdk = maxOf(21, flutter.minSdkVersion)`.
 
-Релизный APK сейчас подписывается debug-ключом, чтобы `flutter build apk` проходил без keystore. Для публикации замените `signingConfig` в `android/app/build.gradle.kts`.
+CI поддерживает постоянный Android release-ключ через секреты `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` и `ANDROID_KEY_PASSWORD`. Без них локальная/проверочная сборка использует debug-ключ; публичные релизы должны собираться с постоянным ключом, иначе Android не сможет установить APK поверх предыдущего подписанного другим ключом.
 
 ## Ядро
 

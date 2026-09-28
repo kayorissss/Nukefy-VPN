@@ -161,7 +161,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
     final phaseColor = switch (_phase) {
       SpeedPhase.download => p.success,
       SpeedPhase.upload => p.accent,
-      _ => p.accent2,
+      _ => p.textSecondary,
     };
     final phaseLabel = switch (_phase) {
       SpeedPhase.ping => s.t('ping'),
@@ -243,8 +243,8 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
               // Four metrics.
               Row(
                 children: [
-                  _Metric(label: s.t('ping'), value: _ping == null ? '—' : '$_ping', unit: 'ms', color: p.accent2),
-                  _Metric(label: s.t('jitter'), value: _jitter == null ? '—' : '$_jitter', unit: 'ms', color: p.accent2),
+                  _Metric(label: s.t('ping'), value: _ping == null ? '—' : '$_ping', unit: 'ms', color: p.textSecondary),
+                  _Metric(label: s.t('jitter'), value: _jitter == null ? '—' : '$_jitter', unit: 'ms', color: p.textSecondary),
                   _Metric(
                     label: s.t('download'),
                     value: _down == null ? '—' : SpeedTestService.mbps(_down!).toStringAsFixed(1),
@@ -278,14 +278,14 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                         if (_running)
                           SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: p.accent))
                         else
-                          Icon(Icons.play_arrow_rounded, color: p.isDark ? const Color(0xFF07131A) : Colors.white),
+                          Icon(Icons.play_arrow_rounded, color: p.isDark ? Colors.black : Colors.white),
                         const SizedBox(width: 10),
                         Text(
                           (_running ? s.t('speedTesting') : s.t('speedTestStart')).toUpperCase(),
                           style: AppTextStyles.tab.copyWith(
                             fontSize: 12,
                             letterSpacing: 1.5,
-                            color: _running ? p.textSecondary : (p.isDark ? const Color(0xFF07131A) : Colors.white),
+                            color: _running ? p.textSecondary : (p.isDark ? Colors.black : Colors.white),
                           ),
                         ),
                       ],
@@ -410,7 +410,7 @@ class _HistoryRow extends StatelessWidget {
                     Icon(Icons.arrow_upward_rounded, size: 14, color: p.accent),
                     Text(' $upload', style: AppTextStyles.metric.copyWith(fontSize: 14, color: p.text)),
                     const SizedBox(width: 12),
-                    Text('${item.pingMs} ms', style: AppTextStyles.metric.copyWith(fontSize: 13, color: p.accent2)),
+                    Text('${item.pingMs} ms', style: AppTextStyles.metric.copyWith(fontSize: 13, color: p.textSecondary)),
                   ],
                 ),
                 const SizedBox(height: 2),

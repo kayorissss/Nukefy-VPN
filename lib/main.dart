@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -15,6 +17,7 @@ import 'core/constants/app_constants.dart';
 import 'core/models/vpn_status.dart';
 import 'core/providers/vpn_provider.dart';
 import 'core/services/app_log.dart';
+import 'core/services/music_audio_handler.dart';
 import 'core/services/music_service.dart';
 import 'core/services/storage_service.dart';
 import 'core/services/subscription_service.dart';
@@ -79,7 +82,26 @@ Future<void> _main() async {
   final settings = SettingsProvider(StorageService.instance);
   final servers = ServersProvider(StorageService.instance, SubscriptionService());
   final stats = StatsProvider(StorageService.instance);
-  final music = MusicService(StorageService.instance);
+  AudioHandler? musicHandler;
+  if (Platform.isAndroid) {
+    try {
+      musicHandler = await AudioService.init(
+        builder: MusicAudioHandler.new,
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'com.nukefy.vpn.music',
+          androidNotificationChannelName: 'Nukefy music',
+          androidNotificationOngoing: false,
+          androidStopForegroundOnPause: false,
+          androidNotificationIcon: 'mipmap/ic_launcher',
+          androidResumeOnClick: true,
+          androidNotificationClickStartsActivity: true,
+        ),
+      );
+    } catch (error) {
+      AppLog.log('music background init failed: $error');
+    }
+  }
+  final music = MusicService(StorageService.instance, backgroundHandler: musicHandler);
   final vpn = VpnProvider(VpnPlatform());
   await guard('load', () => Future.wait([settings.load(), servers.load(), stats.load(), music.load()]));
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -159,11 +181,43 @@ Future<void> _main() async {
       await vpn.connect(selected);
     }
     final context = navigatorKey.currentContext;
-    if (context != null && settings.settings.checkUpdatesOnStart) {
-      await checkUpdatesFlow(context, silentIfCurrent: true);
+    if (context != null) {
+      await _ensureNotificationPermission(context, settings);
+      if (settings.settings.checkUpdatesOnStart) {
+        await checkUpdatesFlow(context, silentIfCurrent: true);
+      }
     }
   });
 }
+
+Future<void> _ensureNotificationPermission(BuildContext context, SettingsProvider settings) async {
+  if (!Platform.isAndroid || !settings.settings.notifications) return;
+  final current = await Permission.notification.status;
+  if (current.isGranted || current.isLimited) return;
+  final marker = StorageService.instance.readJson('notification_permission_prompt');
+  final alreadyPrompted = marker?['version'] == AppConstants.version;
+  var status = current;
+  if (!alreadyPrompted) {
+    if (status.isDenied) status = await Permission.notification.request();
+    await StorageService.instance.writeJson('notification_permission_prompt', {
+      'version': AppConstants.version,
+    });
+  }
+  if (status.isGranted || status.isLimited || alreadyPrompted || !context.mounted) return;
+  final openSettings = await showDialog<bool>(
+    context: context,
+    builder: (dialog) => AlertDialog(
+      title: Text(settings.strings.t('notificationPermissionTitle')),
+      content: Text(settings.strings.t('notificationPermissionBody')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(settings.strings.t('notificationPermissionLater'))),
+        FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(settings.strings.t('notificationPermissionSettings'))),
+      ],
+    ),
+  );
+  if (openSettings == true) await openAppSettings();
+}
+
 
 class _ResumeActions extends WidgetsBindingObserver {
   _ResumeActions(this.onResume);

@@ -108,7 +108,7 @@ class MainActivity : FlutterActivity() {
                     }
                     "installApk" -> {
                         val path = call.argument<String>("path")
-                        result.success(if (path == null) false else installApk(path))
+                        result.success(if (path == null) "missing" else installApk(path))
                     }
                     "registerBinary" -> {
                         val path = call.argument<String>("path")
@@ -205,18 +205,75 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun installApk(path: String): Boolean {
+    /**
+     * Starts Android's package installer with a content URI.  Returning a
+     * reason instead of a bare boolean lets Flutter explain permission and
+     * package/signature errors without suggesting that the user delete the
+     * installed app (which would destroy its private data).
+     */
+    private fun installApk(path: String): String {
+        val file = File(path)
+        if (!file.isFile || !file.canRead()) return "missing"
         return try {
-            val file = File(path)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !packageManager.canRequestPackageInstalls()
+            ) {
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                        .setData(Uri.parse("package:$packageName"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                return "permission"
+            }
+
+            val archive = packageManager.getPackageArchiveInfo(
+                file.path,
+                android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES,
+            ) ?: return "invalid"
+            if (archive.packageName != packageName) return "package"
+            val installed = packageManager.getPackageInfo(
+                packageName,
+                android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES,
+            )
+            val archiveVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                archive.longVersionCode
+            } else {
+                @Suppress("DEPRECATION") archive.versionCode.toLong()
+            }
+            val installedVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                installed.longVersionCode
+            } else {
+                @Suppress("DEPRECATION") installed.versionCode.toLong()
+            }
+            if (archiveVersion <= installedVersion) return "version"
+            if (!sameSigner(archive, installed)) return "signature"
+
             val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-            val intent = Intent(Intent.ACTION_VIEW)
+            val intent = Intent(Intent.ACTION_INSTALL_PACKAGE)
                 .setDataAndType(uri, "application/vnd.android.package-archive")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                // Some OEM installers inspect ClipData rather than the URI
+                // grant flag when the source is an app-private provider.
+                .setClipData(android.content.ClipData.newRawUri("Nukefy VPN update", uri))
+                .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
             startActivity(intent)
-            true
+            "launched"
+        } catch (_: SecurityException) {
+            "permission"
         } catch (_: Exception) {
-            false
+            "failed"
         }
+    }
+
+    private fun sameSigner(
+        archive: android.content.pm.PackageInfo,
+        installed: android.content.pm.PackageInfo,
+    ): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return true
+        val archiveSigners = archive.signingInfo?.apkContentsSigners ?: return false
+        val installedSigners = installed.signingInfo?.apkContentsSigners ?: return false
+        if (archiveSigners.size != installedSigners.size) return false
+        return archiveSigners.all { candidate -> installedSigners.any { it == candidate } }
     }
 
     /** Asks Android 13+ to add the VPN tile to Quick Settings. Older systems return "unsupported". */

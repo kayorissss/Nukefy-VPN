@@ -186,7 +186,7 @@ class AccentThemes {
   static const Map<String, AccentPair> all = {
     'cyan': AccentPair(AppColors.cyan, AppColors.lightCyan, AppColors.violet),
     'violet': AccentPair(Color(0xFFA78BFA), Color(0xFF6D4AFF), Color(0xFF22D3EE)),
-    'crimson': AccentPair(Color(0xFFFF5C7A), Color(0xFFD9224A), Color(0xFFFF9F43)),
+    'crimson': AccentPair(Color(0xFFE53950), Color(0xFFC51F42), Color(0xFF8F1D2C)),
     'pink': AccentPair(Color(0xFFFF7AC6), Color(0xFFDB2777), Color(0xFF8B5CF6)),
     'blue': AccentPair(Color(0xFF60A5FA), Color(0xFF2563EB), Color(0xFF22D3EE)),
     'emerald': AccentPair(Color(0xFF34D399), Color(0xFF059669), Color(0xFF38BDF8)),
@@ -244,8 +244,8 @@ class ThemePresets {
     ),
     // A black/red skin with red status and controls throughout the app.
     'crimson': ThemePreset(
-      dark: ThemePalette(background: Color(0xFF120608), card: Color(0xFF1D0B10), surface: Color(0xFF2C1118), border: Color(0xFF5B202C), text: Color(0xFFFFF1F3), textSecondary: Color(0xFFD09DA8), textDisabled: Color(0xFF7B4A56), accent: Color(0xFFFF3F61), accent2: Color(0xFFFF8A5B), success: Color(0xFF7AE5AE)),
-      light: ThemePalette(background: Color(0xFFFFF1F3), card: Color(0xFFFFFBFC), surface: Color(0xFFFFE1E7), border: Color(0xFFE9B9C4), text: Color(0xFF2A0D13), textSecondary: Color(0xFF7D4C58), textDisabled: Color(0xFFB9909A), accent: Color(0xFFC51F42), accent2: Color(0xFFE85D35), success: Color(0xFF147A4A)),
+      dark: ThemePalette(background: Color(0xFF070707), card: Color(0xFF111111), surface: Color(0xFF1B1B1B), border: Color(0xFF3A171D), text: Color(0xFFFFF1F3), textSecondary: Color(0xFFC49AA2), textDisabled: Color(0xFF70434B), accent: Color(0xFFE53950), accent2: Color(0xFF8F1D2C), success: Color(0xFF72D6A0)),
+      light: ThemePalette(background: Color(0xFFFFF5F6), card: Color(0xFFFFFFFF), surface: Color(0xFFFFE5E8), border: Color(0xFFE6B5BD), text: Color(0xFF2A0D13), textSecondary: Color(0xFF754A53), textDisabled: Color(0xFFB88B94), accent: Color(0xFFC51F42), accent2: Color(0xFF8F1D2C), success: Color(0xFF147A4A)),
     ),
   };
 
