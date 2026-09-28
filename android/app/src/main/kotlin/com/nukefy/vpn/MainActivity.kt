@@ -252,10 +252,10 @@ class MainActivity : FlutterActivity() {
             val intent = Intent(Intent.ACTION_INSTALL_PACKAGE)
                 .setDataAndType(uri, "application/vnd.android.package-archive")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                // Some OEM installers inspect ClipData rather than the URI
-                // grant flag when the source is an app-private provider.
-                .setClipData(android.content.ClipData.newRawUri("Nukefy VPN update", uri))
-                .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+            // Some OEM installers inspect ClipData rather than the URI grant
+            // flag when the source is an app-private provider.
+            intent.clipData = android.content.ClipData.newRawUri("Nukefy VPN update", uri)
+            intent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
             startActivity(intent)
             "launched"
         } catch (_: SecurityException) {
