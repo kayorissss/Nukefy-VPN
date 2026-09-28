@@ -15,6 +15,7 @@ import '../../core/services/app_log.dart';
 import '../../core/services/subscription_service.dart';
 import '../../core/services/update_service.dart';
 import '../../core/services/vpn_platform.dart';
+import '../../core/services/zapret_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/network_diagnostics.dart';
@@ -134,7 +135,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 if (context.mounted) showNukefySnack(context, s.t('appIconFailed'), error: true);
                                 return;
                               }
-                              await VpnPlatform().restartApp();
+                              await context.read<VpnProvider>().disconnect();
+                              if (Platform.isWindows) await ZapretService.instance.shutdown();
+                              await VpnPlatform().restartApp(exitCurrent: !Platform.isAndroid);
                             },
                           ),
                       ],
@@ -806,7 +809,9 @@ Future<void> _changeAppIcon(BuildContext context, SettingsProvider settings, Str
     if (context.mounted) showNukefySnack(context, s.t('appIconFailed'), error: true);
     return;
   }
-  await VpnPlatform().restartApp();
+  await context.read<VpnProvider>().disconnect();
+  if (Platform.isWindows) await ZapretService.instance.shutdown();
+  await VpnPlatform().restartApp(exitCurrent: !Platform.isAndroid);
 }
 
 class _ConnectionModeChoice extends StatelessWidget {

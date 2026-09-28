@@ -511,10 +511,11 @@ class VpnPlatform {
     }
   }
 
-  /// Restarts the UI after a launcher icon change.  The new process is
-  /// started before the current one exits so the user never lands on a dead
-  /// tray icon; Android delegates to the activity launcher.
-  Future<void> restartApp() async {
+  /// Starts a replacement process. Desktop callers that are replacing the
+  /// current process must pass [exitCurrent] after their own service cleanup;
+  /// otherwise the tray's restart action can finish its bounded shutdown first.
+  /// Android delegates the hand-off to the launcher activity.
+  Future<void> restartApp({bool exitCurrent = false}) async {
     if (Platform.isAndroid) {
       try {
         await _channel.invokeMethod('restartApp');
@@ -527,6 +528,7 @@ class VpnPlatform {
         Platform.executableArguments,
         mode: ProcessStartMode.detached,
       );
+      if (exitCurrent) exit(0);
     }
   }
 
