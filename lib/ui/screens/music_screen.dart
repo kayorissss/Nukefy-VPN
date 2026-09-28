@@ -437,51 +437,6 @@ class _PlaylistIconChoiceState extends State<_PlaylistIconChoice> {
   }
 }
 
-class _MusicPlaybackStatus extends StatelessWidget {
-  const _MusicPlaybackStatus({required this.track, required this.playing});
-
-  final MusicTrack track;
-  final bool playing;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    final s = context.read<SettingsProvider>().strings;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      child: Align(
-        alignment: AlignmentDirectional.centerEnd,
-        child: Container(
-          padding: const EdgeInsetsDirectional.fromSTEB(10, 5, 8, 5),
-          decoration: BoxDecoration(
-            color: p.accent.withValues(alpha: .07),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: p.accent.withValues(alpha: .22)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(playing ? Icons.graphic_eq_rounded : Icons.pause_rounded, size: 16, color: p.accent),
-              const SizedBox(width: 7),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 190),
-                child: Text(
-                  track.title.trim().isEmpty ? s.t('musicUntitled') : track.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontWeight: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(width: 8),
-              MusicVisualizer(active: playing, color: p.accent, height: 19, barCount: 10),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _Header extends StatelessWidget {
   const _Header({required this.title, required this.count, required this.importLabel, required this.onImport, required this.onCreatePlaylist});
   final String title;
@@ -915,14 +870,6 @@ class _MusicCollection extends StatelessWidget {
       },
     );
   }
-}
-
-class _TableHeader extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-        child: Text(context.read<SettingsProvider>().strings.t('musicTableHint'), style: context.palette.captionStyle),
-      );
 }
 
 class _TrackRow extends StatefulWidget {

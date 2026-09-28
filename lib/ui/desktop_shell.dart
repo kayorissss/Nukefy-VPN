@@ -9,7 +9,6 @@ import 'package:tray_manager/legacy.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../core/models/vpn_status.dart';
-import '../core/providers/nav_provider.dart';
 import '../core/providers/servers_provider.dart';
 import '../core/providers/settings_provider.dart';
 import '../core/providers/vpn_provider.dart';

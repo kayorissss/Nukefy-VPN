@@ -228,49 +228,6 @@ class _SpeedNow extends StatelessWidget {
   }
 }
 
-class _TrafficCard extends StatelessWidget {
-  const _TrafficCard({
-    required this.title,
-    required this.up,
-    required this.down,
-  });
-
-  final String title;
-  final int up;
-  final int down;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<SettingsProvider>().strings;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Theme.of(context).dividerColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title.toUpperCase(), style: context.palette.captionStyle),
-          const SizedBox(height: 10),
-          Text(
-            '↓ ${FormatUtils.bytes(down)}',
-            style: AppTextStyles.monoValue.copyWith(color: context.palette.success, fontSize: 15),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '↑ ${FormatUtils.bytes(up)}',
-            style: AppTextStyles.monoValue.copyWith(color: context.palette.accent, fontSize: 15),
-          ),
-          const SizedBox(height: 6),
-          Text('${s.t('received')} / ${s.t('sent')}', style: context.palette.secondaryStyle),
-        ],
-      ),
-    );
-  }
-}
-
 class _SpeedChartPainter extends CustomPainter {
   _SpeedChartPainter({required this.samples, required this.palette});
   final List samples;
