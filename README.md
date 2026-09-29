@@ -4,11 +4,11 @@
 >
 > VLESS Reality · VMess · Trojan · Shadowsocks · Hysteria2 · TUIC · WireGuard · AmneziaWG
 
-- **Текущий релиз:** `2.5.5`
+- **Текущий релиз:** `2.5.6`
 - **Автор:** [@kayorisan](https://t.me/kayorisan)
 - **Скачать:** [GitHub Releases](https://github.com/kayorissss/Nukefy-VPN/releases/latest)
 
-## Что нового в 2.5.5
+## Что нового в 2.5.6
 
 - **Desktop и mobile layout.** Settings на desktop получил настоящее подменю в боковом rail, а на телефоне все sections, включая DNS, остаются доступными без обрезания. Баннеры и заголовки не раскладываются в случайные колонки.
 - **Чёрный и белый.** Нейтральная тема Carbon стала новым default, старые сохранённые настройки `midnight` мигрируют один раз, а выбор тем на Android использует responsive-плитку без горизонтального скролла.
