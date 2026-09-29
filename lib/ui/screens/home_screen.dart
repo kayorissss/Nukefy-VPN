@@ -162,6 +162,7 @@ class HomeScreen extends StatelessWidget {
               ),
       ),
     );
+  }
 
   String _friendlyError(S s, String raw) {
     if (raw == 'CORE_MISSING') return s.t('coreMissing');
