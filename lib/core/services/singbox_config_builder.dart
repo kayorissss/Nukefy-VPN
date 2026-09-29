@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 
 import '../constants/app_constants.dart';
@@ -6,6 +7,35 @@ import '../models/server_model.dart';
 import '../models/vpn_status.dart';
 
 class SingboxConfigBuilder {
+  /// Outbound types that are intentionally routed through sing-box.  Keeping
+  /// this list next to the config builder prevents a parser-only "support"
+  /// from reaching the UI as a green connection.
+  static const supportedTypes = <String>{
+    'vless',
+    'vmess',
+    'trojan',
+    'shadowsocks',
+    'ss',
+    'hysteria2',
+    'tuic',
+    'anytls',
+  };
+
+  static String? validationError(ServerModel server) {
+    if (server.isWireGuard) {
+      return server.endpoint == null ? 'CORE_ENDPOINT_MISSING' : null;
+    }
+    final type = '${server.outbound?['type'] ?? server.protocol}'.toLowerCase();
+    // The release core is official SagerNet sing-box; MIERU is not an
+    // outbound in that core. Keep parsing/import support, but stop before a
+    // misleading "connected" state and explain the limitation in the UI.
+    if (type == 'mieru') return 'CORE_MIERU_UNSUPPORTED';
+    if (type == 'xhttp' || type == 'splithttp') return 'XRAY_TRANSPORT_REQUIRED';
+    if (!supportedTypes.contains(type)) return 'CORE_PROTOCOL_UNSUPPORTED';
+    if (server.outbound == null) return 'CORE_OUTBOUND_MISSING';
+    return null;
+  }
+
   static String buildJson({
     required ServerModel server,
     ServerModel? detour,
@@ -36,7 +66,10 @@ class SingboxConfigBuilder {
     required bool desktopTun,
     required bool forceProxyOnly,
   }) {
-    final useTun = settings.tunEnabled && !forceProxyOnly;
+    // The caller decides whether TUN is possible; `forceProxyOnly` is the
+    // single switch (Android always has TUN via VpnService, desktop follows
+    // the user setting).
+    final useTun = !forceProxyOnly;
     final proxy = _tagged(_cloneOutbound(server), 'proxy');
     _applyMuxAndFragment(proxy, settings);
     if (detour != null) {
@@ -48,7 +81,8 @@ class SingboxConfigBuilder {
       if (detour != null && !detour.isWireGuard)
         _tagged(_cloneOutbound(detour), 'bridge'),
       {'type': 'direct', 'tag': 'direct'},
-      {'type': 'block', 'tag': 'block'},
+      // The legacy `block` outbound was removed in sing-box 1.13; blocking
+      // is done with `"action": "reject"` rules instead.
     ];
 
     final endpoints = <Map<String, dynamic>>[];
@@ -75,8 +109,6 @@ class SingboxConfigBuilder {
         'auto_route': true,
         'strict_route': true,
         'stack': _stack(settings.tunStack),
-        'sniff': true,
-        'sniff_override_destination': true,
         if (settings.perAppMode == PerAppMode.include &&
             settings.perAppPackages.isNotEmpty)
           'include_package': settings.perAppPackages,
@@ -103,8 +135,21 @@ class SingboxConfigBuilder {
 
     final ruleSets = <Map<String, dynamic>>[];
     final rules = <Map<String, dynamic>>[
+      // sing-box ≥ 1.11: sniffing / DNS hijack are rule actions, the legacy
+      // inbound fields (`sniff`, `sniff_override_destination`) were removed
+      // in 1.13 and make the core exit with "legacy inbound fields".
+      {'action': 'sniff'},
       {'protocol': 'dns', 'action': 'hijack-dns'},
       {'ip_is_private': true, 'action': 'route', 'outbound': 'direct'},
+      // The app's own traffic (ping checks, subscription refresh, update
+      // check) must not loop through the tunnel — on desktop sing-box knows
+      // the process path, so route it direct.
+      if (!Platform.isAndroid)
+        {
+          'process_path': [Platform.resolvedExecutable],
+          'action': 'route',
+          'outbound': 'direct',
+        },
     ];
 
     if (settings.blockAds) {
@@ -227,7 +272,11 @@ class SingboxConfigBuilder {
         'rules': rules,
         if (ruleSets.isNotEmpty) 'rule_set': ruleSets,
         'final': finalOutbound,
-        'auto_detect_interface': desktopTun && useTun,
+        // Must be on whenever TUN is on. On Android this is what makes
+        // libbox call VpnService.protect() for every outbound socket — without
+        // it the proxy connection itself is routed back into the tunnel and
+        // nothing loads while the VPN icon is happily lit.
+        'auto_detect_interface': useTun,
         'default_domain_resolver': 'direct-dns',
       },
       'experimental': {
@@ -278,11 +327,10 @@ class SingboxConfigBuilder {
     String? detour,
   }) {
     final value = raw.trim();
-    if (value.isEmpty || value == 'local' || value == 'system') {
+    if (value.isEmpty || value == 'local' || value == 'system' || value == 'dhcp') {
       return {
-        'type': 'udp',
+        'type': 'local',
         'tag': tag,
-        'server': '77.88.8.8',
         if (detour != null) 'detour': detour,
       };
     }
@@ -320,13 +368,27 @@ class SingboxConfigBuilder {
     }
   }
 
+  /// Rule sets ship inside the app (assets/rules) and are copied next to the
+  /// config: downloading them from GitHub at start-up fails on networks where
+  /// raw.githubusercontent.com is blocked, and the core refused to start.
+  static String rulesDir = '';
+
   static Map<String, dynamic> _remoteSet(String tag, String url) {
+    final file = url.split('/').last;
+    if (rulesDir.isNotEmpty) {
+      return {
+        'type': 'local',
+        'tag': tag,
+        'format': 'binary',
+        'path': '$rulesDir/$file',
+      };
+    }
     return {
       'type': 'remote',
       'tag': tag,
       'format': 'binary',
       'url': url,
-      'download_detour': 'proxy',
+      'download_detour': 'direct',
     };
   }
 
@@ -363,7 +425,7 @@ class SingboxConfigBuilder {
     final flow = (outbound['flow'] ?? '').toString();
     final vision = flow.contains('vision');
     final type = (outbound['type'] ?? '').toString();
-    final muxSafe = type != 'hysteria2' && type != 'tuic' && type != 'wireguard';
+    final muxSafe = type != 'hysteria2' && type != 'tuic' && type != 'wireguard' && type != 'anytls' && type != 'mieru';
     if (settings.muxEnabled && !vision && muxSafe) {
       outbound['multiplex'] = {
         'enabled': true,

@@ -36,7 +36,7 @@ class NukefyProgressDialog extends StatelessWidget {
           children: [
             Text(title, style: AppTextStyles.headline),
             const SizedBox(height: 6),
-            Text(subtitle, textAlign: TextAlign.center, style: AppTextStyles.bodySecondary),
+            Text(subtitle, textAlign: TextAlign.center, style: context.palette.secondaryStyle),
             const SizedBox(height: 18),
             SizedBox(
               width: 132,
@@ -50,13 +50,13 @@ class NukefyProgressDialog extends StatelessWidget {
                     child: CircularProgressIndicator(
                       value: progress == null || (progress!.total <= 0 && !done) ? null : fraction,
                       strokeWidth: 7,
-                      backgroundColor: AppColors.border,
-                      color: done ? AppColors.success : AppColors.cyan,
+                      backgroundColor: context.palette.border,
+                      color: done ? context.palette.success : context.palette.accent,
                     ),
                   ),
                   Text(
                     done ? '100%' : '$percent%',
-                    style: AppTextStyles.monoValue.copyWith(fontSize: 22, color: AppColors.cyan),
+                    style: AppTextStyles.number.copyWith(fontSize: 22, color: context.palette.accent),
                   ),
                 ],
               ),
@@ -72,7 +72,7 @@ class NukefyProgressDialog extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '${strings.t('speed')} ${FormatUtils.speed(progress!.bps)} · ${strings.t('remaining')} ${FormatUtils.eta(progress!.eta)}',
-                style: AppTextStyles.bodySecondary,
+                style: context.palette.secondaryStyle,
               ),
             ],
           ],

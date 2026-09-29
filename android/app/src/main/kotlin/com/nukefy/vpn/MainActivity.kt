@@ -1,7 +1,13 @@
 package com.nukefy.vpn
 
 import android.app.Activity
+import android.app.StatusBarManager
+import android.content.ComponentName
+import android.graphics.drawable.Icon
 import android.content.Intent
+import android.graphics.Color
+import android.view.WindowManager
+import androidx.core.view.WindowCompat
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
@@ -18,14 +24,28 @@ class MainActivity : FlutterActivity() {
     private var launchAction: String? = null
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         launchAction = intent?.getStringExtra(EXTRA_ACTION)
         super.onCreate(savedInstanceState)
+        // Draw behind the status bar and the gesture/3-button bar: the
+        // Flutter backdrop continues under them instead of black/white strips.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+            window.isStatusBarContrastEnforced = false
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        launchAction = intent.getStringExtra(EXTRA_ACTION) ?: launchAction
+        launchAction = intent.getStringExtra(EXTRA_ACTION)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -38,7 +58,12 @@ class MainActivity : FlutterActivity() {
                         val configPath = call.argument<String>("configPath") ?: ""
                         val configJson = call.argument<String>("configJson") ?: ""
                         val preferTun = call.argument<Boolean>("preferTun") ?: false
-                        NukefyVpnService.requestStart(this, configPath, configJson, preferTun) { payload ->
+                        val serverName = call.argument<String>("serverName") ?: ""
+                        val serverHost = call.argument<String>("serverHost") ?: ""
+                        val serverPort = call.argument<Int>("serverPort") ?: 0
+                        NukefyVpnService.requestStart(
+                            this, configPath, configJson, preferTun, serverName, serverHost, serverPort,
+                        ) { payload ->
                             runOnUiThread { result.success(payload) }
                         }
                     }
@@ -48,7 +73,17 @@ class MainActivity : FlutterActivity() {
                     }
                     "status" -> result.success(mapOf("running" to NukefyVpnService.running))
                     "prepareVpn" -> prepareVpn(result)
-                    "listApps" -> result.success(listApps())
+                    "listApps" -> Thread {
+                        val apps = listApps()
+                        runOnUiThread { result.success(apps) }
+                    }.start()
+                    "appIcon" -> {
+                        val pkg = call.argument<String>("package") ?: ""
+                        Thread {
+                            val bytes = appIcon(pkg)
+                            runOnUiThread { result.success(bytes) }
+                        }.start()
+                    }
                     "setAutoStart" -> {
                         val enabled = call.argument<Boolean>("enabled") ?: false
                         getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -56,6 +91,28 @@ class MainActivity : FlutterActivity() {
                             .putBoolean(KEY_AUTOSTART, enabled)
                             .apply()
                         result.success(null)
+                    }
+                    "requestAddTile" -> requestAddTile(result)
+                    "setAppIcon" -> {
+                        val name = call.argument<String>("icon") ?: "default"
+                        result.success(setAppIcon(name))
+                    }
+                    "restartApp" -> {
+                        // Resolve the currently enabled launcher alias. The
+                        // previous getLaunchIntentForPackage-only path could
+                        // resolve the disabled default alias on some launchers,
+                        // leaving the old Activity above a second dead task.
+                        val launch = packageManager.getLaunchIntentForPackage(packageName)
+                            ?: Intent(this, MainActivity::class.java)
+                        launch.addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                Intent.FLAG_ACTIVITY_NO_ANIMATION,
+                        )
+                        startActivity(launch)
+                        overridePendingTransition(0, 0)
+                        result.success(true)
                     }
                     "openVpnSettings" -> {
                         startActivity(Intent(Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -69,7 +126,7 @@ class MainActivity : FlutterActivity() {
                     }
                     "installApk" -> {
                         val path = call.argument<String>("path")
-                        result.success(if (path == null) false else installApk(path))
+                        result.success(if (path == null) "missing" else installApk(path))
                     }
                     "registerBinary" -> {
                         val path = call.argument<String>("path")
@@ -109,26 +166,150 @@ class MainActivity : FlutterActivity() {
 
     private fun listApps(): List<Map<String, Any>> {
         val pm = packageManager
-        return pm.getInstalledApplications(0).map { info ->
-            mapOf(
-                "package" to info.packageName,
-                "label" to pm.getApplicationLabel(info).toString(),
-                "system" to ((info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0),
-            )
-        }.sortedBy { it["label"] as String }
+        // Only apps that can use the network: everything else is noise.
+        val hasInternet = try {
+            pm.getPackagesHoldingPermissions(arrayOf(android.Manifest.permission.INTERNET), 0)
+                .map { it.packageName }.toHashSet()
+        } catch (_: Exception) {
+            null
+        }
+        return pm.getInstalledApplications(0)
+            .filter { info -> info.packageName != packageName && (hasInternet == null || hasInternet.contains(info.packageName)) }
+            .map { info ->
+                mapOf(
+                    "package" to info.packageName,
+                    "label" to pm.getApplicationLabel(info).toString(),
+                    "system" to ((info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0),
+                )
+            }.sortedBy { (it["label"] as String).lowercase() }
     }
 
-    private fun installApk(path: String): Boolean {
+    /** App icon as a small PNG (48px) for the per-app list; null when unavailable. */
+    private fun appIcon(pkg: String): ByteArray? {
         return try {
-            val file = File(path)
-            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-            val intent = Intent(Intent.ACTION_VIEW)
-                .setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
+            val drawable = packageManager.getApplicationIcon(pkg)
+            val size = (48 * resources.displayMetrics.density).toInt().coerceAtLeast(48)
+            val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            drawable.setBounds(0, 0, size, size)
+            drawable.draw(canvas)
+            val out = java.io.ByteArrayOutputStream()
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, out)
+            bitmap.recycle()
+            out.toByteArray()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Switches the launcher icon by enabling one activity-alias and disabling the rest. */
+    private fun setAppIcon(name: String): Boolean {
+        val aliases = listOf("Default", "Stealth", "Violet", "Pink", "Crimson", "Emerald")
+        val wanted = aliases.firstOrNull { it.equals(name, ignoreCase = true) } ?: "Default"
+        val pm = packageManager
+        return try {
+            for (alias in aliases) {
+                val component = android.content.ComponentName(this, "$packageName.Icon$alias")
+                val state = if (alias == wanted) {
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                } else {
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                }
+                pm.setComponentEnabledSetting(component, state, android.content.pm.PackageManager.DONT_KILL_APP)
+            }
             true
         } catch (_: Exception) {
             false
+        }
+    }
+
+    /**
+     * Starts Android's package installer with a content URI.  Returning a
+     * reason instead of a bare boolean lets Flutter explain permission and
+     * package/signature errors without suggesting that the user delete the
+     * installed app (which would destroy its private data).
+     */
+    private fun installApk(path: String): String {
+        val file = File(path)
+        if (!file.isFile || !file.canRead()) return "missing"
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !packageManager.canRequestPackageInstalls()
+            ) {
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                        .setData(Uri.parse("package:$packageName"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                return "permission"
+            }
+
+            val archive = packageManager.getPackageArchiveInfo(
+                file.path,
+                android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES,
+            ) ?: return "invalid"
+            if (archive.packageName != packageName) return "package"
+            val installed = packageManager.getPackageInfo(
+                packageName,
+                android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES,
+            )
+            val archiveVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                archive.longVersionCode
+            } else {
+                @Suppress("DEPRECATION") archive.versionCode.toLong()
+            }
+            val installedVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                installed.longVersionCode
+            } else {
+                @Suppress("DEPRECATION") installed.versionCode.toLong()
+            }
+            if (archiveVersion <= installedVersion) return "version"
+            if (!sameSigner(archive, installed)) return "signature"
+
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val intent = Intent(Intent.ACTION_INSTALL_PACKAGE)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            // Some OEM installers inspect ClipData rather than the URI grant
+            // flag when the source is an app-private provider.
+            intent.clipData = android.content.ClipData.newRawUri("Nukefy VPN update", uri)
+            intent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+            startActivity(intent)
+            "launched"
+        } catch (_: SecurityException) {
+            "permission"
+        } catch (_: Exception) {
+            "failed"
+        }
+    }
+
+    private fun sameSigner(
+        archive: android.content.pm.PackageInfo,
+        installed: android.content.pm.PackageInfo,
+    ): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return true
+        val archiveSigners = archive.signingInfo?.apkContentsSigners ?: return false
+        val installedSigners = installed.signingInfo?.apkContentsSigners ?: return false
+        if (archiveSigners.size != installedSigners.size) return false
+        return archiveSigners.all { candidate -> installedSigners.any { it == candidate } }
+    }
+
+    /** Asks Android 13+ to add the VPN tile to Quick Settings. Older systems return "unsupported". */
+    private fun requestAddTile(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            result.success("unsupported")
+            return
+        }
+        try {
+            val manager = getSystemService(StatusBarManager::class.java)
+            manager.requestAddTileService(
+                ComponentName(this, NukefyTileService::class.java),
+                "Nukefy VPN",
+                Icon.createWithResource(this, R.drawable.ic_stat_vpn),
+                mainExecutor,
+            ) { code -> runOnUiThread { result.success(code.toString()) } }
+        } catch (error: Exception) {
+            result.success("error:${error.message}")
         }
     }
 

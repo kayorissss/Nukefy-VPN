@@ -46,6 +46,10 @@ class ClashParser {
           'trojan',
           _trojan(proxy, server, port),
         );
+      case 'anytls':
+        return _draft(name, server, port, 'anytls', _anytls(proxy, server, port));
+      case 'mieru':
+        return _draft(name, server, port, 'mieru', _mieru(proxy, server, port));
       case 'ss':
       case 'shadowsocks':
         return _draft(
@@ -135,6 +139,37 @@ class ClashParser {
       'password': (proxy['password'] ?? '').toString(),
       'tls': _tls(proxy, server, defaultOn: true),
       if (_transport(proxy) != null) 'transport': _transport(proxy),
+    };
+  }
+
+  static Map<String, dynamic> _anytls(
+    Map<String, dynamic> proxy,
+    String server,
+    int port,
+  ) {
+    return {
+      'type': 'anytls',
+      'server': server,
+      'server_port': port,
+      'password': (proxy['password'] ?? '').toString(),
+      'tls': _tls(proxy, server, defaultOn: true),
+    };
+  }
+
+  static Map<String, dynamic> _mieru(
+    Map<String, dynamic> proxy,
+    String server,
+    int port,
+  ) {
+    return {
+      'type': 'mieru',
+      'server': server,
+      'server_port': port,
+      'username': (proxy['username'] ?? proxy['user'] ?? '').toString(),
+      'password': (proxy['password'] ?? '').toString(),
+      'transport': (proxy['transport'] ?? proxy['protocol'] ?? 'TCP').toString().toUpperCase(),
+      if ((proxy['traffic-pattern'] ?? proxy['traffic_pattern'] ?? '').toString().isNotEmpty)
+        'traffic_pattern': (proxy['traffic-pattern'] ?? proxy['traffic_pattern']).toString(),
     };
   }
 

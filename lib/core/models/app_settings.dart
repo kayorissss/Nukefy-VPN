@@ -34,20 +34,36 @@ class RoutingRule {
 class AppSettings {
   AppSettings({
     this.theme = ThemePreference.dark,
+    this.accent = 'cyan',
+    this.visualTheme = 'carbon',
+    this.appIcon = 'default',
+    this.zapretStrategy = 'general',
+    this.zapretAutoStart = false,
+    this.zapretGameFilter = false,
+    this.zapretGameMode = 'off',
+    this.zapretGameTcp = '1024-65535',
+    this.zapretGameUdp = '1024-65535',
+    this.zapretAutoUpdateCheck = true,
+    this.zapretSkippedVersion,
+    List<String> zapretCheckTargets = const ['youtube', 'discord'],
+    this.closeAction = 'ask',
     this.language = LanguagePreference.ru,
     this.seenWelcome = false,
     this.autoConnect = false,
     this.launchOnBoot = false,
+    this.startInTray = false,
     this.notifications = true,
     this.minimizeToTray = true,
     this.checkUpdatesOnStart = true,
+    this.sendHwid = true,
+    this.clientIdentity = 'nukefy',
     this.lastUpdateCheck,
     this.skippedVersion,
     this.routingMode = RoutingMode.bypassRu,
-    this.rules = const [],
     this.blockAds = true,
     this.proxyDns = AppConstants.defaultProxyDns,
     this.directDns = AppConstants.defaultDirectDns,
+    this.dnsPreset = 'cloudflare',
     this.tunEnabled = true,
     this.tunStack = 'mixed',
     this.mtu = AppConstants.defaultMtu,
@@ -68,21 +84,47 @@ class AppSettings {
     this.muxMaxConnections = 4,
     this.muxPadding = false,
     this.perAppMode = PerAppMode.off,
-    this.perAppPackages = const [],
+    List<String> perAppPackages = const [],
     this.subscriptionUserAgent = AppConstants.userAgent,
     this.selectedServerId,
     this.allTimeUp = 0,
     this.allTimeDown = 0,
-  });
+    List<RoutingRule> rules = const [],
+  })  : zapretCheckTargets = List<String>.from(zapretCheckTargets),
+        rules = List<RoutingRule>.from(rules),
+        perAppPackages = List<String>.from(perAppPackages);
 
   ThemePreference theme;
+  /// Complete visual skin; accent remains as a backwards-compatible fine tune.
+  String accent;
+  String visualTheme;
+  String appIcon;
+  String zapretStrategy;
+  bool zapretAutoStart;
+  bool zapretGameFilter;
+  /// Game filter mode: off | all | tcp | udp (Flowseal's Game Filter).
+  String zapretGameMode;
+  String zapretGameTcp;
+  String zapretGameUdp;
+  /// Mirrors utils/check_updates.enabled.
+  bool zapretAutoUpdateCheck;
+  String? zapretSkippedVersion;
+  /// What the strategy analysis checks: youtube | discord | games.
+  List<String> zapretCheckTargets;
+  /// Desktop close button: ask | tray | exit.
+  String closeAction;
   LanguagePreference language;
   bool seenWelcome;
   bool autoConnect;
   bool launchOnBoot;
+  bool startInTray;
   bool notifications;
   bool minimizeToTray;
   bool checkUpdatesOnStart;
+  /// Send an anonymous device id to subscription panels with device limits.
+  bool sendHwid;
+  /// Which client to present to subscription panels: nukefy | happ | v2rayng | hiddify | streisand.
+  String clientIdentity;
   DateTime? lastUpdateCheck;
   String? skippedVersion;
   RoutingMode routingMode;
@@ -90,6 +132,9 @@ class AppSettings {
   bool blockAds;
   String proxyDns;
   String directDns;
+  /// Named DNS preset shown in the dedicated DNS page; custom keeps the raw
+  /// proxy/direct values without losing them during a preset switch.
+  String dnsPreset;
   bool tunEnabled;
   String tunStack;
   int mtu;
@@ -118,13 +163,29 @@ class AppSettings {
 
   Map<String, dynamic> toJson() => {
         'theme': theme.name,
+        'accent': accent,
+        'visualTheme': visualTheme,
+        'appIcon': appIcon,
+        'zapretStrategy': zapretStrategy,
+        'zapretAutoStart': zapretAutoStart,
+        'zapretGameFilter': zapretGameFilter,
+        'zapretGameMode': zapretGameMode,
+        'zapretGameTcp': zapretGameTcp,
+        'zapretGameUdp': zapretGameUdp,
+        'zapretAutoUpdateCheck': zapretAutoUpdateCheck,
+        'zapretSkippedVersion': zapretSkippedVersion,
+        'zapretCheckTargets': zapretCheckTargets,
+        'closeAction': closeAction,
         'language': language.name,
         'seenWelcome': seenWelcome,
         'autoConnect': autoConnect,
         'launchOnBoot': launchOnBoot,
+        'startInTray': startInTray,
         'notifications': notifications,
         'minimizeToTray': minimizeToTray,
         'checkUpdatesOnStart': checkUpdatesOnStart,
+        'sendHwid': sendHwid,
+        'clientIdentity': clientIdentity,
         'lastUpdateCheck': lastUpdateCheck?.toIso8601String(),
         'skippedVersion': skippedVersion,
         'routingMode': routingMode.name,
@@ -132,6 +193,7 @@ class AppSettings {
         'blockAds': blockAds,
         'proxyDns': proxyDns,
         'directDns': directDns,
+        'dnsPreset': dnsPreset,
         'tunEnabled': tunEnabled,
         'tunStack': tunStack,
         'mtu': mtu,
@@ -162,6 +224,24 @@ class AppSettings {
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     return AppSettings(
       theme: _enum(ThemePreference.values, json['theme'], ThemePreference.dark),
+      accent: (json['accent'] as String?) ?? 'cyan',
+      visualTheme: (json['visualTheme'] as String?) ?? 'carbon',
+      appIcon: (json['appIcon'] as String?) ?? 'default',
+      zapretStrategy: (json['zapretStrategy'] as String?) ?? 'general',
+      zapretAutoStart: json['zapretAutoStart'] == true,
+      zapretGameFilter: json['zapretGameFilter'] == true,
+      zapretGameMode: (json['zapretGameMode'] as String?) ??
+          (json['zapretGameFilter'] == true ? 'all' : 'off'),
+      zapretGameTcp: (json['zapretGameTcp'] as String?) ?? '1024-65535',
+      zapretGameUdp: (json['zapretGameUdp'] as String?) ?? '1024-65535',
+      zapretAutoUpdateCheck: json['zapretAutoUpdateCheck'] != false,
+      zapretSkippedVersion: json['zapretSkippedVersion'] as String?,
+      zapretCheckTargets: (json['zapretCheckTargets'] as List?)
+              ?.map((e) => e.toString())
+              .where((e) => const ['youtube', 'discord'].contains(e) || RegExp(r'^game:[A-Za-z0-9][A-Za-z0-9_-]{0,100}$').hasMatch(e))
+              .toList() ??
+          const ['youtube', 'discord'],
+      closeAction: (json['closeAction'] as String?) ?? 'ask',
       language: _enum(
         LanguagePreference.values,
         json['language'],
@@ -170,9 +250,12 @@ class AppSettings {
       seenWelcome: json['seenWelcome'] == true,
       autoConnect: json['autoConnect'] == true,
       launchOnBoot: json['launchOnBoot'] == true,
+      startInTray: json['startInTray'] == true,
       notifications: json['notifications'] != false,
       minimizeToTray: json['minimizeToTray'] != false,
       checkUpdatesOnStart: json['checkUpdatesOnStart'] != false,
+      sendHwid: json['sendHwid'] != false,
+      clientIdentity: (json['clientIdentity'] as String?) ?? 'nukefy',
       lastUpdateCheck: _date(json['lastUpdateCheck']),
       skippedVersion: json['skippedVersion'] as String?,
       routingMode: _enum(
@@ -191,6 +274,7 @@ class AppSettings {
       proxyDns: (json['proxyDns'] as String?) ?? AppConstants.defaultProxyDns,
       directDns:
           (json['directDns'] as String?) ?? AppConstants.defaultDirectDns,
+      dnsPreset: (json['dnsPreset'] as String?) ?? 'cloudflare',
       tunEnabled: json['tunEnabled'] != false,
       tunStack: (json['tunStack'] as String?) ?? 'mixed',
       mtu: (json['mtu'] as num?)?.toInt() ?? AppConstants.defaultMtu,

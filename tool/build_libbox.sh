@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${SINGBOX_VERSION:-v1.12.0}"
+VERSION="${SINGBOX_VERSION:-v1.12.25}"
 WORK="${TMPDIR:-/tmp}/nukefy-libbox"
 
 echo "Nukefy VPN expects sing-box ${VERSION} experimental/libbox."
