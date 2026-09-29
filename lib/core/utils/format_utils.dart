@@ -74,6 +74,10 @@ class FormatUtils {
         return 'VMess';
       case 'trojan':
         return 'Trojan';
+      case 'anytls':
+        return 'AnyTLS';
+      case 'mieru':
+        return 'Mieru';
       case 'shadowsocks':
         return 'SS';
       case 'hysteria2':

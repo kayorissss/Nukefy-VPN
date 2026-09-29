@@ -9,6 +9,7 @@ import '../../core/services/vpn_platform.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../widgets/nukefy_background.dart';
+import '../widgets/responsive_sections.dart';
 
 /// Per-app routing: pick which apps bypass the VPN (or are the only ones
 /// tunnelled). Search on top, app icons, one-tap toggles.
@@ -79,7 +80,9 @@ class _PerAppScreenState extends State<PerAppScreen> {
       ),
       body: NukefyBackground(
         child: SafeArea(
-          child: Column(
+          child: ResponsiveFrame(
+            maxWidth: 1400,
+            child: Column(
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -148,6 +151,7 @@ class _PerAppScreenState extends State<PerAppScreen> {
                       ),
               ),
             ],
+            ),
           ),
         ),
       ),

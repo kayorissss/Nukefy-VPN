@@ -82,7 +82,7 @@ class _ConnectButtonState extends State<ConnectButton>
     return switch (widget.status) {
       VpnStatus.connected => p.success,
       VpnStatus.connecting => p.accent,
-      VpnStatus.error => AppColors.error,
+      VpnStatus.error => p.error,
       VpnStatus.disconnected => p.isDark ? const Color(0xFF3A4352) : const Color(0xFFB8C0CC),
     };
   }
@@ -101,8 +101,8 @@ class _ConnectButtonState extends State<ConnectButton>
         // Disc gradient: brand gradient when on, quiet graphite when off.
         final discColors = switch (widget.status) {
           VpnStatus.connected => [p.success, const Color(0xFF0FA3B1)],
-          VpnStatus.connecting => [p.accent, AppColors.violet],
-          VpnStatus.error => [AppColors.error, const Color(0xFFB0244A)],
+          VpnStatus.connecting => [p.accent, p.accent2],
+          VpnStatus.error => [p.error, Color.lerp(p.error, Colors.black, p.isDark ? .35 : .12)!],
           VpnStatus.disconnected => p.isDark
               ? const [Color(0xFF232A36), Color(0xFF12161E)]
               : const [Color(0xFFFFFFFF), Color(0xFFE3E8F0)],

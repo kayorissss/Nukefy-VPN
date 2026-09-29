@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 
 void showNukefySnack(BuildContext context, String message, {bool error = false}) {
@@ -9,7 +8,7 @@ void showNukefySnack(BuildContext context, String message, {bool error = false})
     ..showSnackBar(
       SnackBar(
         content: Text(message, style: AppTextStyles.bodyRegular),
-        backgroundColor: error ? AppColors.error.withValues(alpha: 0.9) : context.palette.surface,
+        backgroundColor: error ? context.palette.error.withValues(alpha: 0.9) : context.palette.surface,
       ),
     );
 }
@@ -25,11 +24,11 @@ Future<bool> confirmDialog(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title, style: AppTextStyles.headline),
-      content: Text(body, style: AppTextStyles.bodySecondary),
+      content: Text(body, style: context.palette.secondaryStyle),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: Text(cancel)),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          style: FilledButton.styleFrom(backgroundColor: context.palette.error),
           onPressed: () => Navigator.pop(context, true),
           child: Text(confirm),
         ),

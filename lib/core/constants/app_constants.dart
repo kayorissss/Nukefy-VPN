@@ -1,7 +1,7 @@
 class AppConstants {
   static const String appName = 'Nukefy VPN';
-  static const String version = '2.2.1';
-  static const int buildNumber = 2;
+  static const String version = '2.5.5';
+  static const int buildNumber = 21;
   static const String packageName = 'com.nukefy.vpn';
 
   static const String author = '@kayorisan';
@@ -77,12 +77,26 @@ class AppConstants {
 
   static const String defaultProxyDns = 'https://1.1.1.1/dns-query';
   static const String defaultDirectDns = '77.88.8.8';
-  static const String userAgent = 'NukefyVPN/2.2.1';
+  static const String userAgent = 'NukefyVPN/2.5.5';
+
+  static const List<String> zapretGovernmentMediaHosts = [
+    'rkn.gov.ru',
+    'publication.pravo.gov.ru',
+    'rg.ru',
+    'tass.ru',
+  ];
+  static const List<String> zapretMaxHosts = [
+    'max.ru',
+    'web.max.ru',
+    'm.max.ru',
+  ];
 
   static const List<String> shareSchemes = [
     'vless',
     'vmess',
     'trojan',
+    'anytls',
+    'mieru',
     'ss',
     'shadowsocks',
     'hysteria',

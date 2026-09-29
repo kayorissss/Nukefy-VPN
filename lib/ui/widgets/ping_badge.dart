@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 
 /// Latency indicator. Shows the number of milliseconds; when the server was
@@ -22,7 +21,7 @@ class PingBadge extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: pingMs == null ? p.border : AppColors.error.withValues(alpha: 0.7),
+          color: pingMs == null ? p.border : p.error.withValues(alpha: 0.7),
         ),
       );
     }

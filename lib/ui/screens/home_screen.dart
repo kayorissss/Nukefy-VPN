@@ -42,100 +42,143 @@ class HomeScreen extends StatelessWidget {
     final statusColor = switch (vpn.status) {
       VpnStatus.connected => p.success,
       VpnStatus.connecting => p.accent,
-      VpnStatus.error => AppColors.error,
+      VpnStatus.error => p.error,
       VpnStatus.disconnected => p.textSecondary,
     };
+
+    final metrics = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _Metric(icon: Icons.arrow_upward_rounded, label: FormatUtils.speed(stats.upBps), color: p.accent),
+        const SizedBox(width: 28),
+        _Metric(icon: Icons.arrow_downward_rounded, label: FormatUtils.speed(stats.downBps), color: p.success),
+      ],
+    );
+    final hero = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        metrics,
+        const SizedBox(height: 24),
+        ConnectButton(
+          status: vpn.status,
+          onPressed: () {
+            if (server == null) {
+              showServerPicker(context);
+              return;
+            }
+            vpn.toggle();
+          },
+        ).animate().fadeIn(duration: 500.ms).scale(begin: const Offset(0.94, 0.94), curve: Curves.easeOutBack),
+        const SizedBox(height: 20),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 260),
+          child: Text(
+            statusText,
+            key: ValueKey(statusText),
+            style: AppTextStyles.status.copyWith(color: statusColor),
+          ),
+        ).animate(
+          onPlay: vpn.status == VpnStatus.connecting
+              ? (controller) => controller.repeat(reverse: true)
+              : null,
+        ).fade(begin: vpn.status == VpnStatus.connecting ? 0.4 : 1, end: 1),
+        const SizedBox(height: 8),
+        Text(
+          stats.sessionStarted == null ? '00:00:00' : FormatUtils.duration(stats.sessionDuration),
+          style: AppTextStyles.metric.copyWith(
+            fontSize: 22,
+            color: vpn.status == VpnStatus.connected ? p.text : p.textDisabled,
+          ),
+        ),
+        if (vpn.errorMessage != null) ...[
+          const SizedBox(height: 14),
+          _ErrorCard(message: _friendlyError(s, vpn.errorMessage!)),
+        ],
+      ],
+    );
+    final serverCard = _ServerCard(
+      server: server,
+      title: server == null ? s.t('selectServer') : server.displayName,
+      subtitle: server == null
+          ? s.t('tapToChange')
+          : '${FormatUtils.protocolLabel(server.protocol)} · ${server.address}',
+      mode: vpn.status == VpnStatus.connected ? vpn.mode : null,
+      onTap: () => showServerPicker(context),
+    ).animate().fadeIn(delay: 120.ms, duration: 400.ms).slideY(begin: 0.04, curve: Curves.easeOutCubic);
+    final mobileHeader = Padding(
+      padding: const EdgeInsets.only(left: 2),
+      child: Row(
+        children: [
+          const NukefyLogo(size: 32),
+          const SizedBox(width: 12),
+          Text(s.t('appTitle'), style: AppTextStyles.headline),
+          const Spacer(),
+          _RoundIcon(
+            icon: Icons.tune_rounded,
+            onTap: () => context.read<NavProvider>().go(NavDestination.settings),
+          ),
+        ],
+      ),
+    );
 
     return SafeArea(
       bottom: false,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(20, desktop ? 20 : 8, 20, 0),
-        child: Column(
-          children: [
-            if (!desktop)
-              Padding(
-                padding: const EdgeInsets.only(left: 2),
-                child: Row(
-                  children: [
-                    const NukefyLogo(size: 32),
-                    const SizedBox(width: 12),
-                    Text(s.t('appTitle'), style: AppTextStyles.headline),
-                    const Spacer(),
-                    _RoundIcon(
-                      icon: Icons.tune_rounded,
-                      onTap: () => context.read<NavProvider>().setIndex(Platform.isWindows ? 5 : 4),
+        padding: EdgeInsets.fromLTRB(desktop ? 32 : 18, desktop ? 28 : 8, desktop ? 32 : 18, 0),
+        child: desktop
+            ? Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 720),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        hero,
+                        const SizedBox(height: 28),
+                        serverCard,
+                      ],
                     ),
-                  ],
+                  ),
                 ),
+              )
+            : Column(
+                children: [
+                  mobileHeader,
+                  const SizedBox(height: 18),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: Column(
+                        children: [
+                          hero,
+                          const SizedBox(height: 26),
+                          serverCard,
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            const Spacer(),
-            // Speeds above the button, timer below — the button stays the hero.
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _Metric(icon: Icons.arrow_upward_rounded, label: FormatUtils.speed(stats.upBps), color: p.accent),
-                const SizedBox(width: 28),
-                _Metric(icon: Icons.arrow_downward_rounded, label: FormatUtils.speed(stats.downBps), color: p.success),
-              ],
-            ),
-            const SizedBox(height: 30),
-            ConnectButton(
-              status: vpn.status,
-              onPressed: () {
-                if (server == null) {
-                  showServerPicker(context);
-                  return;
-                }
-                vpn.toggle();
-              },
-            ).animate().fadeIn(duration: 500.ms).scale(begin: const Offset(0.94, 0.94), curve: Curves.easeOutBack),
-            const SizedBox(height: 26),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
-              child: Text(
-                statusText,
-                key: ValueKey(statusText),
-                style: AppTextStyles.status.copyWith(color: statusColor),
-              ),
-            ).animate(
-              onPlay: vpn.status == VpnStatus.connecting
-                  ? (controller) => controller.repeat(reverse: true)
-                  : null,
-            ).fade(begin: vpn.status == VpnStatus.connecting ? 0.4 : 1, end: 1),
-            const SizedBox(height: 10),
-            Text(
-              stats.sessionStarted == null ? '00:00:00' : FormatUtils.duration(stats.sessionDuration),
-              style: AppTextStyles.metric.copyWith(
-                fontSize: 22,
-                color: vpn.status == VpnStatus.connected ? p.text : p.textDisabled,
-              ),
-            ),
-            if (vpn.errorMessage != null) ...[
-              const SizedBox(height: 14),
-              _ErrorCard(message: _friendlyError(s, vpn.errorMessage!)),
-            ],
-            const Spacer(),
-            _ServerCard(
-              server: server,
-              title: server == null ? s.t('selectServer') : server.name,
-              subtitle: server == null
-                  ? s.t('tapToChange')
-                  : '${FormatUtils.protocolLabel(server.protocol)} · ${server.address}',
-              mode: vpn.status == VpnStatus.connected ? vpn.mode : null,
-              onTap: () => showServerPicker(context),
-            ).animate().fadeIn(delay: 120.ms, duration: 400.ms).slideY(begin: 0.08, curve: Curves.easeOutCubic),
-            SizedBox(height: desktop ? 24 : 96),
-          ],
-        ),
       ),
     );
-  }
 
   String _friendlyError(S s, String raw) {
     if (raw == 'CORE_MISSING') return s.t('coreMissing');
     if (raw == 'LIBBOX_MISSING') return s.t('libboxMissing');
+    if (raw == 'information-entry') return s.t('informationEntry');
     if (raw == 'need-server') return s.t('needServer');
     if (raw == 'XHTTP_UNSUPPORTED') return s.t('xhttpUnsupported');
+    if (raw == 'CORE_PROTOCOL_UNSUPPORTED') return s.t('coreProtocolUnsupported');
+    if (raw == 'CORE_MIERU_UNSUPPORTED') return s.t('coreMieruUnsupported');
+    if (raw == 'CORE_OUTBOUND_MISSING') return s.t('coreOutboundMissing');
+    if (raw == 'CORE_ENDPOINT_MISSING') return s.t('coreEndpointMissing');
+    if (raw == 'XRAY_TRANSPORT_REQUIRED') return s.t('xrayTransportRequired');
+    if (raw == 'XRAY_CORE_MISSING') return s.t('xrayNotInstalled');
+    if (raw == 'XRAY_PLATFORM_UNSUPPORTED') return s.t('xrayPlatformUnsupported');
+    if (raw == 'XRAY_UNSUPPORTED_PROTOCOL') return s.t('xrayUnsupportedProtocol');
+    if (raw == 'XRAY_FRONTEND_MISSING') return s.t('xrayFrontendMissing');
+    if (raw.startsWith('XRAY_')) return '${s.t('xrayCore')}: $raw';
     if (raw.startsWith('NO_TRAFFIC:')) return '${s.t('noTraffic')}\n${raw.substring(11)}';
     if (raw.contains('Permission denied') && raw.contains('sing-box')) return s.t('libboxMissing');
     if (raw.contains('legacy inbound fields')) return s.t('coreOutdatedConfig');
@@ -148,8 +191,8 @@ class HomeScreen extends StatelessWidget {
 /// Bottom sheet with every server; tapping one connects right away.
 Future<void> showServerPicker(BuildContext context) async {
   final servers = context.read<ServersProvider>();
-  if (servers.servers.isEmpty) {
-    context.read<NavProvider>().setIndex(1);
+  if (servers.servers.where((server) => !server.isInformational).isEmpty) {
+    context.read<NavProvider>().go(NavDestination.servers);
     return;
   }
   final picked = await showModalBottomSheet<ServerModel>(
@@ -173,7 +216,7 @@ class _ServerPickerSheet extends StatelessWidget {
     final vpn = context.watch<VpnProvider>();
     final s = context.watch<SettingsProvider>().strings;
     final p = context.palette;
-    final list = [...servers.servers]
+    final list = servers.servers.where((server) => !server.isInformational).toList()
       ..sort((a, b) {
         int rank(ServerModel m) => m.pingMs == null ? 1 : (m.pingMs! < 0 ? 2 : 0);
         final r = rank(a).compareTo(rank(b));
@@ -203,7 +246,7 @@ class _ServerPickerSheet extends StatelessWidget {
                   tooltip: s.t('servers'),
                   onPressed: () {
                     Navigator.pop(context);
-                    context.read<NavProvider>().setIndex(1);
+                    context.read<NavProvider>().go(NavDestination.servers);
                   },
                   icon: const Icon(Icons.tune_rounded),
                 ),
@@ -237,7 +280,7 @@ class _ServerPickerSheet extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    server.name,
+                                    server.displayName,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: AppTextStyles.bodyRegular.copyWith(
@@ -298,24 +341,25 @@ class _ErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 520),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
         decoration: BoxDecoration(
-          color: AppColors.error.withValues(alpha: 0.10),
+          color: p.error.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+          border: Border.all(color: p.error.withValues(alpha: 0.35)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.error_outline_rounded, size: 18, color: AppColors.error),
+            Icon(Icons.error_outline_rounded, size: 18, color: p.error),
             const SizedBox(width: 10),
             Expanded(
               child: SelectableText(
                 message,
-                style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error, fontSize: 12.5),
+                style: AppTextStyles.bodySecondary.copyWith(color: p.error, fontSize: 12.5),
               ),
             ),
           ],

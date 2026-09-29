@@ -7,6 +7,35 @@ import '../models/server_model.dart';
 import '../models/vpn_status.dart';
 
 class SingboxConfigBuilder {
+  /// Outbound types that are intentionally routed through sing-box.  Keeping
+  /// this list next to the config builder prevents a parser-only "support"
+  /// from reaching the UI as a green connection.
+  static const supportedTypes = <String>{
+    'vless',
+    'vmess',
+    'trojan',
+    'shadowsocks',
+    'ss',
+    'hysteria2',
+    'tuic',
+    'anytls',
+  };
+
+  static String? validationError(ServerModel server) {
+    if (server.isWireGuard) {
+      return server.endpoint == null ? 'CORE_ENDPOINT_MISSING' : null;
+    }
+    final type = '${server.outbound?['type'] ?? server.protocol}'.toLowerCase();
+    // The release core is official SagerNet sing-box; MIERU is not an
+    // outbound in that core. Keep parsing/import support, but stop before a
+    // misleading "connected" state and explain the limitation in the UI.
+    if (type == 'mieru') return 'CORE_MIERU_UNSUPPORTED';
+    if (type == 'xhttp' || type == 'splithttp') return 'XRAY_TRANSPORT_REQUIRED';
+    if (!supportedTypes.contains(type)) return 'CORE_PROTOCOL_UNSUPPORTED';
+    if (server.outbound == null) return 'CORE_OUTBOUND_MISSING';
+    return null;
+  }
+
   static String buildJson({
     required ServerModel server,
     ServerModel? detour,
@@ -298,11 +327,10 @@ class SingboxConfigBuilder {
     String? detour,
   }) {
     final value = raw.trim();
-    if (value.isEmpty || value == 'local' || value == 'system') {
+    if (value.isEmpty || value == 'local' || value == 'system' || value == 'dhcp') {
       return {
-        'type': 'udp',
+        'type': 'local',
         'tag': tag,
-        'server': '77.88.8.8',
         if (detour != null) 'detour': detour,
       };
     }
@@ -397,7 +425,7 @@ class SingboxConfigBuilder {
     final flow = (outbound['flow'] ?? '').toString();
     final vision = flow.contains('vision');
     final type = (outbound['type'] ?? '').toString();
-    final muxSafe = type != 'hysteria2' && type != 'tuic' && type != 'wireguard';
+    final muxSafe = type != 'hysteria2' && type != 'tuic' && type != 'wireguard' && type != 'anytls' && type != 'mieru';
     if (settings.muxEnabled && !vision && muxSafe) {
       outbound['multiplex'] = {
         'enabled': true,

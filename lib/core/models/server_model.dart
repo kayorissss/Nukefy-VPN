@@ -1,3 +1,5 @@
+import '../utils/server_identity.dart';
+import '../utils/geo_utils.dart';
 class ServerModel {
   ServerModel({
     required this.id,
@@ -6,6 +8,7 @@ class ServerModel {
     required this.port,
     required this.protocol,
     this.countryCode,
+    this.informational,
     this.pingMs,
     this.isPinned = false,
     this.isNew = false,
@@ -25,6 +28,9 @@ class ServerModel {
   int port;
   String protocol;
   String? countryCode;
+  bool? informational;
+  bool get isInformational => informational ?? (subscriptionId != null && ServerIdentity.isNotice(name, address, port));
+  String get displayName => GeoUtils.displayName(name, countryCode);
   int? pingMs;
   bool isPinned;
   bool isNew;
@@ -44,8 +50,20 @@ class ServerModel {
   bool get isWireGuard =>
       protocol == 'wireguard' || protocol == 'amneziawg';
 
+  /// XHTTP/SplitHTTP is an Xray transport, not a sing-box transport. Keep
+  /// this detection on the normalized outbound so imported links and saved
+  /// subscription entries take the same core path.
+  bool get usesXhttp {
+    final transport = outbound?['transport'];
+    if (transport is Map) {
+      final type = '${transport['type'] ?? ''}'.toLowerCase();
+      return type == 'xhttp' || type == 'splithttp';
+    }
+    return false;
+  }
+
   String get fingerprint =>
-      '$protocol|${address.toLowerCase()}|$port|${name.toLowerCase()}';
+      ServerIdentity.of(protocol, address, port, outbound, endpoint, rawLink);
 
   ServerModel copyWith({
     String? name,
@@ -68,6 +86,7 @@ class ServerModel {
   }) {
     return ServerModel(
       id: id,
+      informational: informational,
       name: name ?? this.name,
       address: address ?? this.address,
       port: port ?? this.port,
@@ -100,6 +119,7 @@ class ServerModel {
         'port': port,
         'protocol': protocol,
         'countryCode': countryCode,
+        'informational': informational,
         'pingMs': pingMs,
         'isPinned': isPinned,
         'isNew': isNew,
@@ -121,6 +141,7 @@ class ServerModel {
       port: (json['port'] as num?)?.toInt() ?? 443,
       protocol: (json['protocol'] as String?) ?? 'unknown',
       countryCode: json['countryCode'] as String?,
+      informational: json['informational'] as bool?,
       pingMs: (json['pingMs'] as num?)?.toInt(),
       isPinned: json['isPinned'] == true,
       isNew: json['isNew'] == true,
