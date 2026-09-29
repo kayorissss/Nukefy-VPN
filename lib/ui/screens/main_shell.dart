@@ -13,6 +13,7 @@ import '../../core/providers/vpn_provider.dart';
 import '../../core/services/music_service.dart';
 import '../../core/services/tg_ws_proxy_service.dart';
 import '../../core/services/zapret_service.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../widgets/music_visualizer.dart';
 import '../widgets/nukefy_background.dart';

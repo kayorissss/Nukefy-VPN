@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 
 /// Latency indicator. Shows the number of milliseconds; when the server was
