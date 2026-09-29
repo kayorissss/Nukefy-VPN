@@ -114,9 +114,7 @@ class _DnsScreenState extends State<DnsScreen> {
     final s = settings.strings;
     final bottom = MediaQuery.paddingOf(context).bottom;
     final selected = _presets.containsKey(value.dnsPreset) ? value.dnsPreset : 'custom';
-    return SafeArea(
-      bottom: false,
-      child: ResponsiveSections(
+    final content = ResponsiveSections(
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
         children: [
           SectionCard(
@@ -179,8 +177,25 @@ class _DnsScreenState extends State<DnsScreen> {
             ),
           ),
         ],
-      ),
-    );
+      );
+    // The DNS page is also reachable from the mobile/general settings route.
+    // Give that pushed route a real back affordance; without it the page
+    // covered the shell with no AppBar and users had to kill the app.
+    if (Navigator.of(context).canPop()) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: Text(s.t('dnsTitle')),
+          leading: IconButton(
+            tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+        ),
+        body: SafeArea(bottom: false, child: content),
+      );
+    }
+    return SafeArea(bottom: false, child: content);
   }
 }
 

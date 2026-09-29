@@ -214,6 +214,10 @@ class VpnProvider extends ChangeNotifier {
     _sessionUp = 0;
     _sessionDown = 0;
     _stats?.startSession();
+    // sing-box exposes the same traffic websocket on desktop and Android.
+    // Start it for every successful session so Statistics is not a static
+    // zero/empty screen on Windows.
+    unawaited(_listenTraffic());
     await _stats?.addLog(server.name, 'connected', message: mode);
     _startTicker();
     notifyListeners();
@@ -302,7 +306,7 @@ class VpnProvider extends ChangeNotifier {
       _sessionUp = 0;
       _sessionDown = 0;
       _stats?.startSession();
-      if (useTunFrontend) _listenTraffic();
+      if (useTunFrontend) unawaited(_listenTraffic());
       await _stats?.addLog(server.name, 'connected', message: mode);
       _startTicker();
       notifyListeners();
@@ -361,7 +365,7 @@ class VpnProvider extends ChangeNotifier {
     _sessionUp = 0;
     _sessionDown = 0;
     _stats?.startSession();
-    _listenTraffic();
+    unawaited(_listenTraffic());
     _startTicker();
     notifyListeners();
   }
@@ -426,33 +430,42 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _listenTraffic() {
+  Future<void> _listenTraffic({int attempt = 0}) async {
+    await _traffic?.sink.close();
+    _traffic = null;
     try {
       final channel = WebSocketChannel.connect(
         Uri.parse('ws://127.0.0.1:${AppConstants.clashApiPort}/traffic'),
       );
       _traffic = channel;
+      void retry() {
+        if (status != VpnStatus.connected || attempt >= 4 || _traffic != channel) return;
+        unawaited(Future<void>.delayed(const Duration(seconds: 1), () => _listenTraffic(attempt: attempt + 1)));
+      }
+
       channel.stream.listen((event) {
-        final text = event is List<int> ? utf8.decode(event) : '$event';
-        final json = jsonDecode(text);
-        if (json is! Map) return;
-        final up = (json['up'] as num?)?.toInt() ?? 0;
-        final down = (json['down'] as num?)?.toInt() ?? 0;
-        _sessionUp += up;
-        _sessionDown += down;
-        _stats?.applyTraffic(
-          upBytesPerSecond: up,
-          downBytesPerSecond: down,
-          totalUp: _sessionUp,
-          totalDown: _sessionDown,
-        );
-        if (Platform.isAndroid) {
-          // Notification text is updated by the native service on the next poll.
+        try {
+          final text = event is List<int> ? utf8.decode(event) : '$event';
+          final json = jsonDecode(text);
+          if (json is! Map) return;
+          final up = (json['up'] as num?)?.toInt() ?? 0;
+          final down = (json['down'] as num?)?.toInt() ?? 0;
+          _sessionUp += up;
+          _sessionDown += down;
+          _stats?.applyTraffic(
+            upBytesPerSecond: up,
+            downBytesPerSecond: down,
+            totalUp: _sessionUp,
+            totalDown: _sessionDown,
+          );
+          notifyListeners();
+        } catch (error) {
+          _platform.appendLog('traffic payload: $error');
         }
-        notifyListeners();
       }, onError: (Object error) {
         _platform.appendLog('traffic: $error');
-      });
+        retry();
+      }, onDone: retry);
     } catch (error) {
       _platform.appendLog('traffic connect: $error');
     }

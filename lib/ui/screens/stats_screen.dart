@@ -39,6 +39,8 @@ class _StatsScreenState extends State<StatsScreen> {
     final settings = context.watch<SettingsProvider>();
     final s = settings.strings;
     final p = context.palette;
+    final totalUp = settings.settings.allTimeUp + stats.sessionUp;
+    final totalDown = settings.settings.allTimeDown + stats.sessionDown;
     return SafeArea(
       bottom: false,
       child: ResponsiveSections(
@@ -54,22 +56,39 @@ class _StatsScreenState extends State<StatsScreen> {
               borderRadius: BorderRadius.circular(22),
               border: Border.all(color: Theme.of(context).dividerColor),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(s.t('statsSessionTime').toUpperCase(), style: context.palette.captionStyle),
-                      const SizedBox(height: 8),
-                      Text(FormatUtils.duration(stats.sessionDuration), style: AppTextStyles.metric.copyWith(fontFamily: AppTextStyles.mono, fontSize: 30)),
-                    ],
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(s.t('statsSessionTime').toUpperCase(), style: context.palette.captionStyle),
+                          const SizedBox(height: 8),
+                          Text(FormatUtils.duration(stats.sessionDuration), style: AppTextStyles.metric.copyWith(fontFamily: AppTextStyles.mono, fontSize: 30)),
+                        ],
+                      ),
+                    ),
+                    Container(width: 1, height: 58, color: Theme.of(context).dividerColor),
+                    Expanded(child: _SpeedNow(icon: Icons.arrow_downward_rounded, caption: s.t('trafficDown'), value: FormatUtils.speed(stats.downBps), color: p.success)),
+                    Expanded(child: _SpeedNow(icon: Icons.arrow_upward_rounded, caption: s.t('upload'), value: FormatUtils.speed(stats.upBps), color: p.accent)),
+                  ],
                 ),
-                Container(width: 1, height: 58, color: Theme.of(context).dividerColor),
-                Expanded(child: _SpeedNow(icon: Icons.arrow_downward_rounded, caption: s.t('trafficDown'), value: FormatUtils.speed(stats.downBps), color: p.success)),
-                Expanded(child: _SpeedNow(icon: Icons.arrow_upward_rounded, caption: s.t('upload'), value: FormatUtils.speed(stats.upBps), color: p.accent)),
+                const SizedBox(height: 14),
+                Divider(height: 1, color: p.border),
+                const SizedBox(height: 10),
+                Text(s.t('allTraffic').toUpperCase(), style: p.captionStyle),
+                const SizedBox(height: 7),
+                Row(
+                  children: [
+                    Expanded(child: _TrafficTotal(icon: Icons.arrow_downward_rounded, label: s.t('trafficDown'), value: FormatUtils.bytes(totalDown), color: p.success)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _TrafficTotal(icon: Icons.arrow_upward_rounded, label: s.t('upload'), value: FormatUtils.bytes(totalUp), color: p.accent)),
+                  ],
+                ),
               ],
             ),
           ),
@@ -98,9 +117,27 @@ class _StatsScreenState extends State<StatsScreen> {
                 SizedBox(
                   height: 240,
                   width: double.infinity,
-                  child: CustomPaint(
-                    painter: _SpeedChartPainter(samples: stats.samples, palette: context.palette),
-                    child: const SizedBox.expand(),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CustomPaint(
+                        painter: _SpeedChartPainter(samples: stats.samples, palette: context.palette),
+                      ),
+                      if (stats.samples.isEmpty)
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.monitor_heart_outlined, size: 30, color: p.textSecondary),
+                                const SizedBox(height: 10),
+                                Text(s.t('statsNoTraffic'), textAlign: TextAlign.center, style: p.secondaryStyle),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],
@@ -178,6 +215,37 @@ class _JournalLine extends StatelessWidget {
             Expanded(child: Text('${FormatUtils.clock(entry.time)} · ${entry.serverName} · ${entry.status}$message', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodySecondary.copyWith(color: palette.textSecondary))),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TrafficTotal extends StatelessWidget {
+  const _TrafficTotal({required this.icon, required this.label, required this.value, required this.color});
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: p.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 7),
+          Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: p.captionStyle.copyWith(fontSize: 9))),
+          const SizedBox(width: 6),
+          Flexible(child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.end, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700, color: color))),
+        ],
       ),
     );
   }

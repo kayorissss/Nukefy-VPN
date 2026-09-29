@@ -125,7 +125,7 @@ class MainShell extends StatelessWidget {
                                   child: Align(
                                     alignment: Alignment.topCenter,
                                     child: ConstrainedBox(
-                                      constraints: const BoxConstraints(maxWidth: 1680),
+                                      constraints: const BoxConstraints(maxWidth: 2200),
                                       child: SizedBox(width: double.infinity, child: body),
                                     ),
                                   ),
@@ -757,22 +757,26 @@ class _RailMusicMini extends StatelessWidget {
     final p = context.palette;
     final s = context.read<SettingsProvider>().strings;
     final artwork = track.artworkPath;
-    final fallback = Container(
+    final total = music.duration.inMilliseconds <= 0 ? 1.0 : music.duration.inMilliseconds.toDouble();
+    final position = music.position.inMilliseconds.clamp(0, total.toInt()).toDouble();
+    final fallback = ColoredBox(
       color: p.accent.withValues(alpha: .14),
-      child: Icon(Icons.music_note_rounded, color: p.accent, size: 24),
+      child: Icon(Icons.music_note_rounded, color: p.accent, size: 22),
     );
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
       decoration: BoxDecoration(
         color: p.surface,
         borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: p.accent.withValues(alpha: .35)),
+        border: Border.all(color: p.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               SizedBox(
                 width: 42,
@@ -788,6 +792,7 @@ class _RailMusicMini extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       track.title.trim().isEmpty ? s.t('musicUntitled') : track.title,
@@ -805,56 +810,73 @@ class _RailMusicMini extends StatelessWidget {
                   ],
                 ),
               ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                tooltip: s.t('musicStop'),
+                onPressed: music.stop,
+                icon: Icon(Icons.stop_rounded, size: 17, color: p.textSecondary),
+              ),
             ],
           ),
-          const SizedBox(height: 7),
-          SizedBox(
-            height: 20,
-            child: MusicVisualizer(active: music.isPlaying, color: p.accent, height: 18, barCount: 18),
+          const SizedBox(height: 3),
+          Row(
+            children: [
+              Text(_railMusicDuration(music.position), style: p.captionStyle.copyWith(fontSize: 8)),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 2,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 9),
+                  ),
+                  child: Slider(
+                    value: position,
+                    max: total,
+                    onChanged: (value) => music.seek(Duration(milliseconds: value.round())),
+                  ),
+                ),
+              ),
+              Text(_railMusicDuration(music.duration), style: p.captionStyle.copyWith(fontSize: 8)),
+            ],
           ),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 tooltip: s.t('musicPrevious'),
                 onPressed: music.previous,
-                icon: const Icon(Icons.skip_previous_rounded, size: 18),
+                icon: const Icon(Icons.skip_previous_rounded, size: 19),
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 tooltip: music.isPlaying ? s.t('musicPause') : s.t('musicPlay'),
                 onPressed: music.toggle,
-                icon: Icon(music.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: p.accent, size: 22),
+                icon: Icon(music.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded, color: p.accent, size: 27),
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 tooltip: s.t('musicNext'),
                 onPressed: music.next,
-                icon: const Icon(Icons.skip_next_rounded, size: 18),
+                icon: const Icon(Icons.skip_next_rounded, size: 19),
               ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                tooltip: s.t('musicStop'),
-                onPressed: music.stop,
-                icon: const Icon(Icons.stop_rounded, size: 17),
-              ),
-            ],
-          ),
-          Row(
-            children: [
+              const SizedBox(width: 5),
               Icon(Icons.volume_down_rounded, size: 14, color: p.textSecondary),
-              Expanded(
+              SizedBox(
+                width: 48,
                 child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(trackHeight: 2, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4)),
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 2,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 3),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 7),
+                  ),
                   child: Slider(value: music.volume, min: 0, max: 1, onChanged: music.setVolume),
                 ),
               ),
-              Icon(Icons.volume_up_rounded, size: 14, color: p.textSecondary),
             ],
           ),
         ],
@@ -862,6 +884,8 @@ class _RailMusicMini extends StatelessWidget {
     );
   }
 }
+
+String _railMusicDuration(Duration value) => '${value.inMinutes.remainder(60).toString().padLeft(2, '0')}:${value.inSeconds.remainder(60).toString().padLeft(2, '0')}';
 
 class _RailItem extends StatelessWidget {
   const _RailItem({

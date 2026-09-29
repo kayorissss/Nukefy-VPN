@@ -23,11 +23,16 @@ class ResponsiveSections extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, bounds) {
-        final columns = ((bounds.maxWidth - 40) / minColumnWidth).floor().clamp(1, maxColumns).toInt();
         final sections = children.where((w) => w is! SizedBox).toList();
         final headerCount = fullWidthCount.clamp(0, sections.length).toInt();
         final header = sections.take(headerCount);
         final content = sections.skip(headerCount).toList();
+        // A page with one remaining section must use the whole available
+        // width. The old column calculation put Appearance and About into
+        // the first half of the desktop canvas and left a large dead area on
+        // the right, which looked like a broken fullscreen layout.
+        final requestedColumns = ((bounds.maxWidth - 40) / minColumnWidth).floor().clamp(1, maxColumns).toInt();
+        final columns = content.isEmpty ? 1 : requestedColumns.clamp(1, content.length).toInt();
 
         Widget columnsView() {
           if (columns == 1) {

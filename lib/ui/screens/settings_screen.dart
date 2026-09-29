@@ -1,4 +1,3 @@
-import '../widgets/responsive_sections.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/models/vpn_status.dart';
+import '../../core/providers/nav_provider.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/vpn_provider.dart';
 import '../../core/services/app_log.dart';
@@ -23,6 +23,7 @@ import '../../l10n/strings.dart';
 import '../dialogs/progress_dialog.dart';
 import '../import_actions.dart';
 import '../widgets/nukefy_feedback.dart';
+import '../widgets/responsive_sections.dart';
 import '../widgets/section_card.dart';
 import 'dns_screen.dart';
 import 'log_screen.dart';
@@ -205,7 +206,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.dns_rounded,
                   title: s.t('dnsTitle'),
                   subtitle: '${value.dnsPreset} · ${value.proxyDns}',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DnsScreen())),
+                  onTap: () {
+                    final desktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS || MediaQuery.sizeOf(context).width >= 840;
+                    if (desktop) {
+                      context.read<NavProvider>().go(NavDestination.settingsDns);
+                    } else {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const DnsScreen()));
+                    }
+                  },
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(2, 8, 2, 12),
@@ -731,9 +739,14 @@ Future<void> _changeAppIcon(BuildContext context, SettingsProvider settings, Str
     cancel: s.t('cancel'),
   );
   if (!ok || !context.mounted) return;
+  final previous = settings.settings.appIcon;
   await settings.update((item) => item.appIcon = name);
-  final applied = await VpnPlatform().setAppIcon(name);
-  if (!applied && Platform.isAndroid) {
+  // Android switches launcher aliases through the platform channel. Desktop
+  // updates the tray/window icon from SettingsProvider, so setAppIcon is a
+  // deliberate no-op there rather than a failed operation.
+  final applied = !Platform.isAndroid || await VpnPlatform().setAppIcon(name);
+  if (!applied) {
+    await settings.update((item) => item.appIcon = previous);
     if (context.mounted) showNukefySnack(context, s.t('appIconFailed'), error: true);
     return;
   }

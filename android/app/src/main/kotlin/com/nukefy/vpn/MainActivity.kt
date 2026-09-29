@@ -98,25 +98,21 @@ class MainActivity : FlutterActivity() {
                         result.success(setAppIcon(name))
                     }
                     "restartApp" -> {
+                        // Resolve the currently enabled launcher alias. The
+                        // previous getLaunchIntentForPackage-only path could
+                        // resolve the disabled default alias on some launchers,
+                        // leaving the old Activity above a second dead task.
                         val launch = packageManager.getLaunchIntentForPackage(packageName)
-                        if (launch == null) {
-                            result.success(false)
-                        } else {
-                            // CLEAR_TASK replaces the current task atomically.
-                            // Starting a launcher intent with CLEAR_TOP alone
-                            // left the old Flutter Activity above the new one,
-                            // which produced a dead-looking duplicate window
-                            // after changing the icon.
-                            launch.addFlags(
-                                Intent.FLAG_ACTIVITY_NEW_TASK or
-                                    Intent.FLAG_ACTIVITY_CLEAR_TASK or
-                                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                                    Intent.FLAG_ACTIVITY_NO_ANIMATION,
-                            )
-                            startActivity(launch)
-                            overridePendingTransition(0, 0)
-                            result.success(true)
-                        }
+                            ?: Intent(this, MainActivity::class.java)
+                        launch.addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                Intent.FLAG_ACTIVITY_NO_ANIMATION,
+                        )
+                        startActivity(launch)
+                        overridePendingTransition(0, 0)
+                        result.success(true)
                     }
                     "openVpnSettings" -> {
                         startActivity(Intent(Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
