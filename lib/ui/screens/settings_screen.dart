@@ -30,24 +30,25 @@ import 'routing_screen.dart';
 import 'update_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.section});
+  const SettingsScreen({super.key, this.initialSection = 0, this.showSubtabs = true});
 
-  /// Desktop opens each settings area as its own navigation destination.
-  /// Mobile keeps the compact in-page switcher for quick thumb access.
-  final int? section;
+  /// Desktop rail destinations open a section directly. Mobile keeps the
+  /// compact local tab strip because there is no permanent side rail.
+  final int initialSection;
+  final bool showSubtabs;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late int _section = widget.section ?? 0;
+  late int _section = widget.initialSection.clamp(0, 2).toInt();
 
   @override
   void didUpdateWidget(covariant SettingsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.section != oldWidget.section && widget.section != null) {
-      _section = widget.section!;
+    if (oldWidget.initialSection != widget.initialSection) {
+      _section = widget.initialSection.clamp(0, 2).toInt();
     }
   }
 
@@ -63,13 +64,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       bottom: false,
       child: ResponsiveSections(
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
+        // The rail is the desktop section switcher. On mobile the local tabs
+        // and the update banner remain page-level, full-width elements.
+        minColumnWidth: 460,
+        maxColumns: 2,
+        fullWidthCount: (widget.showSubtabs ? 1 : 0) + (_section == 0 ? 1 : 0),
         children: [
-          // Desktop uses the side-rail destinations. On a phone the same
-          // three areas stay available as a compact thumb-friendly switcher.
-          if (MediaQuery.sizeOf(context).width < 840)
-            _SettingsSubtabs(selected: _section, onChanged: (value) => setState(() => _section = value)),
           // Desktop downloads sing-box as a separate binary; Android ships
           // the core inside the APK (libbox), so there is nothing to install.
+          if (widget.showSubtabs)
+            _SettingsSubtabs(selected: _section, onChanged: (value) => setState(() => _section = value)),
           if (_section == 0) const _UpdateBanner(),
           if (_section == 0 && !Platform.isAndroid) ...[
             _CoreCard(vpn: vpn, strings: s),
@@ -196,6 +200,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: '${_perAppLabel(s, value.perAppMode)} · ${s.t('perAppHint')}',
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PerAppScreen())),
                   ),
+                SettingsTile(
+                  icon: Icons.dns_rounded,
+                  title: s.t('dnsTitle'),
+                  subtitle: '${value.dnsPreset} · ${value.proxyDns}',
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DnsScreen())),
+                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(2, 8, 2, 12),
                   child: Column(
@@ -230,12 +240,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: s.t('blockQuicHint'),
                   value: value.blockQuic,
                   onChanged: (next) => settings.update((item) => item.blockQuic = next),
-                ),
-                SettingsTile(
-                  icon: Icons.dns_rounded,
-                  title: s.t('dnsTitle'),
-                  subtitle: '${value.dnsPreset} · ${value.proxyDns}',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DnsScreen())),
                 ),
               ],
             ),
@@ -663,24 +667,29 @@ class _AppearanceCard extends StatelessWidget {
                 ),
               ),
               SettingsTile(icon: Icons.palette_outlined, title: s.t('themes'), subtitle: s.t('themesHint')),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
-                child: LayoutBuilder(
-                  builder: (context, constraints) => Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (final entry in ThemePresets.all.entries)
-                        _ThemeChoice(
-                          width: constraints.maxWidth < 420 ? (constraints.maxWidth - 10) / 2 : 150,
-                          label: _themeLabel(s, entry.key),
-                          colors: Theme.of(context).brightness == Brightness.dark ? entry.value.dark : entry.value.light,
-                          selected: value.visualTheme == entry.key,
-                          onTap: () => settings.update((item) => item.visualTheme = entry.key),
-                        ),
-                    ],
-                  ),
-                ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 620 ? 4 : constraints.maxWidth >= 440 ? 3 : 2;
+                  final gap = 10.0;
+                  final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
+                    child: Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final entry in ThemePresets.all.entries)
+                          _ThemeChoice(
+                            width: width,
+                            label: _themeLabel(s, entry.key),
+                            colors: Theme.of(context).brightness == Brightness.dark ? entry.value.dark : entry.value.light,
+                            selected: value.visualTheme == entry.key,
+                            onTap: () => settings.update((item) => item.visualTheme = entry.key),
+                          ),
+                      ],
+                    ),
+                  );
+                },
               ),
               SettingsTile(icon: Icons.language_rounded, title: s.t('language'), trailing: NukefyDropdown<LanguagePreference>(value: value.language, items: {LanguagePreference.ru: s.t('russian'), LanguagePreference.en: s.t('english'), LanguagePreference.system: s.t('system')}, onChanged: (next) => settings.update((item) => item.language = next))),
               if (Platform.isAndroid || Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[

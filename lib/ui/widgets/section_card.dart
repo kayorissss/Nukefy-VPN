@@ -255,8 +255,8 @@ class NukefyDropdown<T> extends StatelessWidget {
       ],
       builder: (context, controller, child) => GestureDetector(
         onTap: () => controller.isOpen ? controller.close() : controller.open(),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: buttonWidth),
+        child: SizedBox(
+          width: buttonWidth,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),

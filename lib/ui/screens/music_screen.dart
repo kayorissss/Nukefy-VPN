@@ -197,34 +197,41 @@ class _MusicScreenState extends State<MusicScreen> {
         return StatefulBuilder(
           builder: (dialog, setDialogState) => AlertDialog(
             title: Text(s.t('musicEditTrack')),
-            content: SizedBox(
-              width: 620,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            content: LayoutBuilder(
+              builder: (dialog, constraints) {
+                final compact = constraints.maxWidth < 560;
+                final details = Column(
                   children: [
-                    Row(
+                    TextField(controller: title, autofocus: true, decoration: InputDecoration(labelText: s.t('musicTitle'))),
+                    const SizedBox(height: 12),
+                    TextField(controller: artist, decoration: InputDecoration(labelText: s.t('musicArtist'))),
+                    const SizedBox(height: 12),
+                    Align(alignment: AlignmentDirectional.centerStart, child: Text('${s.t('musicAlbum')}: ${track.album.isEmpty ? '—' : track.album}', style: context.palette.secondaryStyle)),
+                    const SizedBox(height: 4),
+                    Align(alignment: AlignmentDirectional.centerStart, child: Text('${s.t('musicFileSize')}: ${FormatUtils.bytes(track.size)}', style: context.palette.captionStyle)),
+                  ],
+                );
+                return SizedBox(
+                  width: constraints.maxWidth.isFinite && constraints.maxWidth < 620 ? constraints.maxWidth : 620,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _MusicArtwork(track: track, size: 150),
-                        const SizedBox(width: 18),
-                        Expanded(
-                          child: Column(
+                        if (compact) ...[
+                          Center(child: _MusicArtwork(track: track, size: 128)),
+                          const SizedBox(height: 16),
+                          details,
+                        ] else
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              TextField(controller: title, autofocus: true, decoration: InputDecoration(labelText: s.t('musicTitle'))),
-                              const SizedBox(height: 12),
-                              TextField(controller: artist, decoration: InputDecoration(labelText: s.t('musicArtist'))),
-                              const SizedBox(height: 12),
-                              Align(alignment: AlignmentDirectional.centerStart, child: Text('${s.t('musicAlbum')}: ${track.album.isEmpty ? '—' : track.album}', style: context.palette.secondaryStyle)),
-                              const SizedBox(height: 4),
-                              Align(alignment: AlignmentDirectional.centerStart, child: Text('${s.t('musicFileSize')}: ${FormatUtils.bytes(track.size)}', style: context.palette.captionStyle)),
+                              _MusicArtwork(track: track, size: 150),
+                              const SizedBox(width: 18),
+                              Expanded(child: details),
                             ],
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
+                        const SizedBox(height: 18),
                     Text(s.t('musicAddToPlaylist'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 6),
                     if (music.playlists.isEmpty)
@@ -246,9 +253,11 @@ class _MusicScreenState extends State<MusicScreen> {
                           }),
                         ),
                       ),
-                  ],
-                ),
-              ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(dialog), child: Text(s.t('cancel'))),
@@ -1183,7 +1192,35 @@ class _EmptyMusic extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Container(width: 90, height: 90, decoration: BoxDecoration(color: p.accent.withValues(alpha: .12), shape: BoxShape.circle), child: Icon(Icons.library_music_outlined, size: 46, color: p.accent)), const SizedBox(height: 18), Text(label, style: AppTextStyles.headline), const SizedBox(height: 14), FilledButton.icon(onPressed: onImport, icon: const Icon(Icons.add), label: Text(context.read<SettingsProvider>().strings.t('musicImport')))]));
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite && constraints.maxWidth < 520 ? constraints.maxWidth : 520.0;
+        return Center(
+          child: SizedBox(
+            width: width,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 90,
+                  height: 90,
+                  decoration: BoxDecoration(color: p.accent.withValues(alpha: .12), shape: BoxShape.circle),
+                  child: Icon(Icons.library_music_outlined, size: 46, color: p.accent),
+                ),
+                const SizedBox(height: 18),
+                Text(label, textAlign: TextAlign.center, softWrap: true, style: AppTextStyles.headline),
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: onImport,
+                  icon: const Icon(Icons.add),
+                  label: Text(context.read<SettingsProvider>().strings.t('musicImport')),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

@@ -288,13 +288,10 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     await _menu();
   }
 
-  Future<void> _restart() => _quit(restart: true);
-
-  /// Hiding the window first makes the exit feel instant; the cleanup below
-  /// (winws, sing-box) runs while it is already gone and is bounded, so a
-  /// stuck helper process can never hold the quit for long. A restart spawns
-  /// only after this cleanup, then hands the instance port to the replacement.
-  Future<void> _quit({bool restart = false}) async {
+  Future<void> _restart() async {
+    // The replacement must be spawned only after the old process has released
+    // its core, tray and single-instance resources. Starting it first makes it
+    // connect to this process as a duplicate and then exit immediately.
     await windowManager.hide();
     final vpn = context.read<VpnProvider>();
     await Future.wait<void>([
@@ -302,16 +299,26 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
       _bounded(vpn.disconnect),
     ]);
     await windowManager.setPreventClose(false);
-    if (restart) {
-      // restartApp exits this process only after the replacement was started.
-      // If spawning fails it returns, so keep the current window usable.
-      await VpnPlatform().restartApp(exitCurrent: true);
-      try {
-        await windowManager.show();
-        await windowManager.focus();
-      } catch (_) {}
-      return;
-    }
+    // restartApp exits this process only after the replacement was started.
+    // If spawning fails it returns, so keep the current window usable.
+    await VpnPlatform().restartApp(exitCurrent: true);
+    try {
+      await windowManager.show();
+      await windowManager.focus();
+    } catch (_) {}
+  }
+
+  /// Hiding the window first makes the exit feel instant; the cleanup below
+  /// (winws, sing-box) runs while it is already gone and is bounded, so a
+  /// stuck helper process can never hold the quit for long.
+  Future<void> _quit() async {
+    await windowManager.hide();
+    final vpn = context.read<VpnProvider>();
+    await Future.wait<void>([
+      _bounded(() => ZapretService.instance.shutdown()),
+      _bounded(vpn.disconnect),
+    ]);
+    await windowManager.setPreventClose(false);
     await windowManager.destroy();
     // The window is gone; make sure the process goes with it instead of
     // lingering until the engine winds down.
