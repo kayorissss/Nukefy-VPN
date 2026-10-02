@@ -133,12 +133,6 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   void onWindowUnmaximize() => AppPerf.visible = true;
 
   @override
-  void onWindowShow() => AppPerf.visible = true;
-
-  @override
-  void onWindowHide() => AppPerf.visible = false;
-
-  @override
   void onWindowClose() async {
     final settings = context.read<SettingsProvider>();
     var action = settings.settings.closeAction;
@@ -151,6 +145,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     switch (action) {
       case 'tray':
         await windowManager.hide();
+        AppPerf.visible = false;
       case 'exit':
         await _quit();
       default:
@@ -211,6 +206,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
 
   @override
   void onTrayIconMouseDown() {
+    AppPerf.visible = true;
     windowManager.show();
     windowManager.focus();
   }
@@ -259,6 +255,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   }
 
   Future<void> _showWindow() async {
+    AppPerf.visible = true;
     await windowManager.show();
     await windowManager.focus();
   }

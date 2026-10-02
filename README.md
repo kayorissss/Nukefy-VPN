@@ -4,7 +4,7 @@
 >
 > VLESS Reality · VMess · Trojan · Shadowsocks · Hysteria2 · TUIC · WireGuard · AmneziaWG
 
-- **Текущий релиз:** `2.5.7`
+- **Текущий релиз:** `2.5.8`
 - **Автор:** [@kayorisan](https://t.me/kayorisan)
 - **Скачать:** [GitHub Releases](https://github.com/kayorissss/Nukefy-VPN/releases/latest)
 
