@@ -45,6 +45,14 @@ class AppSettings {
     this.zapretGameUdp = '1024-65535',
     this.zapretAutoUpdateCheck = true,
     this.zapretSkippedVersion,
+    this.zapretWssize = false,
+    this.zapretDebugLog = false,
+    this.zapretAutoRestart = true,
+    this.karingEnabled = false,
+    this.karingBalancer = true,
+    this.karingExcludeRu = true,
+    this.karingAllowInsecure = true,
+    this.karingHourly = true,
     List<String> zapretCheckTargets = const ['youtube', 'discord'],
     this.closeAction = 'ask',
     this.language = LanguagePreference.ru,
@@ -108,6 +116,18 @@ class AppSettings {
   String zapretGameUdp;
   /// Mirrors utils/check_updates.enabled.
   bool zapretAutoUpdateCheck;
+  /// winws `--wssize` argument (TCP window size).
+  bool zapretWssize;
+  /// winws `--debug` + log file inside zapret/logs.
+  bool zapretDebugLog;
+  /// Restart winws automatically when the strategy changes.
+  bool zapretAutoRestart;
+  /// Karing-style whitelist bypass profile.
+  bool karingEnabled;
+  bool karingBalancer;
+  bool karingExcludeRu;
+  bool karingAllowInsecure;
+  bool karingHourly;
   String? zapretSkippedVersion;
   /// What the strategy analysis checks: youtube | discord | games.
   List<String> zapretCheckTargets;
@@ -174,6 +194,14 @@ class AppSettings {
         'zapretGameUdp': zapretGameUdp,
         'zapretAutoUpdateCheck': zapretAutoUpdateCheck,
         'zapretSkippedVersion': zapretSkippedVersion,
+        'zapretWssize': zapretWssize,
+        'zapretDebugLog': zapretDebugLog,
+        'zapretAutoRestart': zapretAutoRestart,
+        'karingEnabled': karingEnabled,
+        'karingBalancer': karingBalancer,
+        'karingExcludeRu': karingExcludeRu,
+        'karingAllowInsecure': karingAllowInsecure,
+        'karingHourly': karingHourly,
         'zapretCheckTargets': zapretCheckTargets,
         'closeAction': closeAction,
         'language': language.name,
@@ -236,6 +264,14 @@ class AppSettings {
       zapretGameUdp: (json['zapretGameUdp'] as String?) ?? '1024-65535',
       zapretAutoUpdateCheck: json['zapretAutoUpdateCheck'] != false,
       zapretSkippedVersion: json['zapretSkippedVersion'] as String?,
+      zapretWssize: json['zapretWssize'] == true,
+      zapretDebugLog: json['zapretDebugLog'] == true,
+      zapretAutoRestart: json['zapretAutoRestart'] != false,
+      karingEnabled: json['karingEnabled'] == true,
+      karingBalancer: json['karingBalancer'] != false,
+      karingExcludeRu: json['karingExcludeRu'] != false,
+      karingAllowInsecure: json['karingAllowInsecure'] != false,
+      karingHourly: json['karingHourly'] != false,
       zapretCheckTargets: (json['zapretCheckTargets'] as List?)
               ?.map((e) => e.toString())
               .where((e) => const ['youtube', 'discord'].contains(e) || RegExp(r'^game:[A-Za-z0-9][A-Za-z0-9_-]{0,100}$').hasMatch(e))

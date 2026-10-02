@@ -7,6 +7,7 @@ import 'core/providers/settings_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'ui/screens/main_shell.dart';
 import 'ui/screens/welcome_screen.dart';
+import 'ui/widgets/nukefy_splash.dart';
 
 class NukefyApp extends StatelessWidget {
   const NukefyApp({super.key, required this.navigatorKey});
@@ -32,7 +33,7 @@ class NukefyApp extends StatelessWidget {
       theme: AppTheme.light(settings.settings.accent, settings.settings.visualTheme),
       darkTheme: AppTheme.dark(settings.settings.accent, settings.settings.visualTheme),
       themeMode: settings.themeMode,
-      home: welcome ? const WelcomeScreen() : const MainShell(),
+      home: NukefySplash(child: welcome ? const WelcomeScreen() : const MainShell()),
       ),
     );
   }

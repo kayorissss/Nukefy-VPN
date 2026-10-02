@@ -23,24 +23,38 @@ class DesktopInstanceGuard {
 
   /// Returns true when this process owns the instance. Returns false only
   /// after a running instance positively acknowledges the show request.
-  Future<bool> acquire({required Future<void> Function() onShow}) async {
+  ///
+  /// [retry] is used by a replacement process spawned for an in-app restart:
+  /// the dying parent releases the listener a moment after the child starts,
+  /// and binding early used to produce a second, half-dead window. With a
+  /// retry budget the child simply waits for the port to free.
+  Future<bool> acquire({
+    required Future<void> Function() onShow,
+    Duration retry = Duration.zero,
+  }) async {
     if (_server != null) return true;
     _onShow = onShow;
-    try {
-      _server = await ServerSocket.bind(
-        InternetAddress.loopbackIPv4,
-        port,
-        shared: false,
-      );
-      _server!.listen(_handleClient, onError: (_) {});
-      active = this;
-      return true;
-    } on SocketException {
-      final delivered = await _notifyExisting();
-      if (delivered) return false;
-      // A stale listener or an unrelated process occupying the port must not
-      // make Nukefy silently exit. Let the current process continue normally.
-      return true;
+    final deadline = Stopwatch()..start();
+    while (true) {
+      try {
+        _server = await ServerSocket.bind(
+          InternetAddress.loopbackIPv4,
+          port,
+          shared: false,
+        );
+        _server!.listen(_handleClient, onError: (_) {});
+        active = this;
+        return true;
+      } on SocketException {
+        final delivered = await _notifyExisting();
+        if (delivered) return false;
+        if (deadline.elapsed >= retry) {
+          // A stale listener or an unrelated process occupying the port must
+          // not make Nukefy silently exit. Continue without the listener.
+          return true;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
     }
   }
 

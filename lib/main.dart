@@ -17,6 +17,7 @@ import 'core/constants/app_constants.dart';
 import 'core/models/vpn_status.dart';
 import 'core/providers/vpn_provider.dart';
 import 'core/services/app_log.dart';
+import 'core/services/app_perf.dart';
 import 'core/services/desktop_instance_guard.dart';
 import 'core/services/music_audio_handler.dart';
 import 'core/services/music_service.dart';
@@ -54,7 +55,12 @@ Future<void> _main() async {
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
     desktopGuard = DesktopInstanceGuard();
+    // A replacement process spawned by an in-app restart waits for the dying
+    // parent to release the single-instance listener instead of racing it:
+    // binding too early used to open a second, half-dead window.
+    final restarting = Platform.executableArguments.contains('--nukefy-restart');
     final primary = await desktopGuard.acquire(
+      retry: restarting ? const Duration(seconds: 8) : Duration.zero,
       onShow: () async {
         // A second taskbar/tray launch talks to the existing process instead
         // of creating a second Flutter engine and losing the entered server.
@@ -261,6 +267,7 @@ class _ResumeActions extends WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    AppPerf.visible = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.resumed) onResume();
   }
 }

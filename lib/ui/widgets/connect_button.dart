@@ -62,7 +62,10 @@ class _ConnectButtonState extends State<ConnectButton>
         _pulse.repeat(reverse: true);
       case VpnStatus.connected:
         _spin.stop();
-        _pulse.repeat(reverse: true);
+        // A steady glow instead of a 60 fps pulse: the blurred ring repaint
+        // was one of the main idle CPU/GPU costs of the whole app.
+        _pulse.stop();
+        _pulse.value = 0.5;
       case VpnStatus.disconnected:
       case VpnStatus.error:
         _spin.stop();

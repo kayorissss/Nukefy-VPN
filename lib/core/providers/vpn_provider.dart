@@ -9,6 +9,8 @@ import '../constants/app_constants.dart';
 import '../models/app_settings.dart';
 import '../models/server_model.dart';
 import '../models/vpn_status.dart';
+import '../services/app_perf.dart';
+import '../services/karing_service.dart';
 import '../services/singbox_config_builder.dart';
 import '../services/vpn_platform.dart';
 import '../services/xray_config_builder.dart';
@@ -190,6 +192,12 @@ class VpnProvider extends ChangeNotifier {
       cachePath: '${dir.path}/cache.db',
       desktopTun: !Platform.isAndroid && useTun,
       forceProxyOnly: !useTun,
+      balancerPool: KaringService.balancerPool(
+        servers: servers.servers,
+        subscriptions: servers.subscriptions,
+        settings: settings.settings,
+        activeSubscriptionId: server.subscriptionId,
+      ),
     );
     await _platform.stopXray();
     final result = await _platform.start(
@@ -326,6 +334,8 @@ class VpnProvider extends ChangeNotifier {
   void _startTicker() {
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      // A minimized window must not repaint the whole tree every second.
+      if (!AppPerf.visible) return;
       _stats?.tickDuration();
       notifyListeners();
     });

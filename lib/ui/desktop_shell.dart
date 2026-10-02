@@ -9,6 +9,7 @@ import 'package:tray_manager/legacy.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../core/models/vpn_status.dart';
+import '../core/services/app_perf.dart';
 import '../core/providers/servers_provider.dart';
 import '../core/providers/settings_provider.dart';
 import '../core/providers/vpn_provider.dart';
@@ -28,14 +29,10 @@ class DesktopShell extends StatefulWidget {
 }
 
 class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayListener {
-  String? _iconName;
-
   @override
   void initState() {
     super.initState();
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
-    _iconName = context.read<SettingsProvider>().settings.appIcon;
-    context.read<SettingsProvider>().addListener(_settingsChanged);
     context.read<VpnProvider>().addListener(_queueMenu);
     context.read<ServersProvider>().addListener(_queueMenu);
     context.read<MusicService>().addListener(_queueMenu);
@@ -46,13 +43,6 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     _init();
   }
 
-  void _settingsChanged() {
-    final next = context.read<SettingsProvider>().settings.appIcon;
-    if (next == _iconName || !mounted) return;
-    _iconName = next;
-    _init();
-  }
-
   void _queueMenu() {
     if (mounted) unawaited(_menu());
   }
@@ -60,12 +50,10 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   Future<void> _init() async {
     await windowManager.setPreventClose(true);
     final dir = await getApplicationSupportDirectory();
-    final selected = _iconName ?? 'default';
-    final asset = Platform.isWindows
-        ? (selected == 'default' ? 'assets/icons/app_icon.ico' : 'assets/icons/app_icon_$selected.ico')
-        : (selected == 'default' ? 'assets/icons/tray_icon.png' : 'assets/icons/app_icon_$selected.png');
-    // New file name per icon revision so a stale cached copy is never reused.
-    final icon = File('${dir.path}/${Platform.isWindows ? 'tray_icon_${selected}.ico' : 'tray_icon_${selected}.png'}');
+    // One monochrome icon for tray, taskbar and window. A fixed file name is
+    // fine now that there are no variants to switch between.
+    final asset = Platform.isWindows ? 'assets/icons/app_icon.ico' : 'assets/icons/tray_icon.png';
+    final icon = File('${dir.path}/${Platform.isWindows ? 'tray_icon.ico' : 'tray_icon.png'}');
     try {
       final data = await rootBundle.load(asset);
       await icon.writeAsBytes(data.buffer.asUint8List(), flush: true);
@@ -117,7 +105,6 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   @override
   void dispose() {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      context.read<SettingsProvider>().removeListener(_settingsChanged);
       context.read<VpnProvider>().removeListener(_queueMenu);
       context.read<ServersProvider>().removeListener(_queueMenu);
       context.read<MusicService>().removeListener(_queueMenu);
@@ -130,6 +117,26 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   }
 
   bool _asking = false;
+
+  // A minimized or hidden window must not keep repainting: the traffic
+  // ticker and log tail consult AppPerf.visible before notifying listeners.
+  @override
+  void onWindowMinimize() => AppPerf.visible = false;
+
+  @override
+  void onWindowRestore() => AppPerf.visible = true;
+
+  @override
+  void onWindowMaximize() => AppPerf.visible = true;
+
+  @override
+  void onWindowUnmaximize() => AppPerf.visible = true;
+
+  @override
+  void onWindowShow() => AppPerf.visible = true;
+
+  @override
+  void onWindowHide() => AppPerf.visible = false;
 
   @override
   void onWindowClose() async {
@@ -289,14 +296,15 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   }
 
   Future<void> _restart() async {
-    // The replacement must be spawned only after the old process has released
-    // its core, tray and single-instance resources. Starting it first makes it
-    // connect to this process as a duplicate and then exit immediately.
+    // The replacement waits for this process to release the single-instance
+    // listener (see DesktopInstanceGuard.acquire), so the hand-off order is:
+    // hide → bounded cleanup → spawn → exit. Nothing here may await longer
+    // than a couple of seconds or the user sees two windows.
     await windowManager.hide();
     final vpn = context.read<VpnProvider>();
     await Future.wait<void>([
-      _bounded(() => ZapretService.instance.shutdown()),
-      _bounded(vpn.disconnect),
+      _bounded(() => ZapretService.instance.shutdown(), seconds: 1),
+      _bounded(vpn.disconnect, seconds: 1),
     ]);
     await windowManager.setPreventClose(false);
     // restartApp exits this process only after the replacement was started.

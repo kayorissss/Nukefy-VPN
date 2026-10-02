@@ -44,6 +44,7 @@ class SingboxConfigBuilder {
     required String cachePath,
     required bool desktopTun,
     required bool forceProxyOnly,
+    List<ServerModel> balancerPool = const [],
   }) {
     final config = build(
       server: server,
@@ -53,6 +54,7 @@ class SingboxConfigBuilder {
       cachePath: cachePath,
       desktopTun: desktopTun,
       forceProxyOnly: forceProxyOnly,
+      balancerPool: balancerPool,
     );
     return const JsonEncoder.withIndent('  ').convert(config);
   }
@@ -65,19 +67,39 @@ class SingboxConfigBuilder {
     required String cachePath,
     required bool desktopTun,
     required bool forceProxyOnly,
+    List<ServerModel> balancerPool = const [],
   }) {
     // The caller decides whether TUN is possible; `forceProxyOnly` is the
     // single switch (Android always has TUN via VpnService, desktop follows
     // the user setting).
     final useTun = !forceProxyOnly;
+    // Karing-style latency balancer: every node of the whitelist subscription
+    // becomes its own outbound and a urltest group tagged `proxy` keeps the
+    // fastest one active, switching over seamlessly when a node dies.
+    final pool = detour == null
+        ? balancerPool.where((item) => !item.isWireGuard).toList()
+        : const <ServerModel>[];
+    final useBalancer = pool.length > 1 && pool.any((item) => item.id == server.id);
     final proxy = _tagged(_cloneOutbound(server), 'proxy');
     _applyMuxAndFragment(proxy, settings);
+    if (settings.karingEnabled && settings.karingAllowInsecure) _allowInsecure(proxy);
     if (detour != null) {
       proxy['detour'] = 'bridge';
     }
 
     final outbounds = <Map<String, dynamic>>[
-      if (!server.isWireGuard) proxy,
+      if (useBalancer)
+        for (var i = 0; i < pool.length; i++) _poolOutbound(pool[i], 'kb$i', settings),
+      if (useBalancer)
+        {
+          'type': 'urltest',
+          'tag': 'proxy',
+          'outbounds': [for (var i = 0; i < pool.length; i++) 'kb$i'],
+          'url': _balancerUrl,
+          'interval': _balancerInterval,
+          'tolerance': 100,
+        },
+      if (!useBalancer && !server.isWireGuard) proxy,
       if (detour != null && !detour.isWireGuard)
         _tagged(_cloneOutbound(detour), 'bridge'),
       {'type': 'direct', 'tag': 'direct'},
@@ -390,6 +412,25 @@ class SingboxConfigBuilder {
       'url': url,
       'download_detour': 'direct',
     };
+  }
+
+  static const String _balancerUrl = 'https://cp.cloudflare.com/generate_204';
+  static const String _balancerInterval = '4m';
+
+  static Map<String, dynamic> _poolOutbound(ServerModel server, String tag, AppSettings settings) {
+    final outbound = _tagged(_cloneOutbound(server), tag);
+    _applyMuxAndFragment(outbound, settings);
+    if (settings.karingAllowInsecure) _allowInsecure(outbound);
+    return outbound;
+  }
+
+  /// Karing's "allow insecure": accept self-signed certificates on plain TLS
+  /// outbounds. Reality carries its own verification and is left untouched.
+  static void _allowInsecure(Map<String, dynamic> outbound) {
+    final tls = outbound['tls'];
+    if (tls is Map && tls['reality'] != true) {
+      outbound['tls'] = {...Map<String, dynamic>.from(tls), 'insecure': true};
+    }
   }
 
   static Map<String, dynamic> _cloneOutbound(ServerModel server) {

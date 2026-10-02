@@ -93,10 +93,6 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                     "requestAddTile" -> requestAddTile(result)
-                    "setAppIcon" -> {
-                        val name = call.argument<String>("icon") ?: "default"
-                        result.success(setAppIcon(name))
-                    }
                     "restartApp" -> {
                         // Resolve the currently enabled launcher alias. The
                         // previous getLaunchIntentForPackage-only path could
@@ -199,27 +195,6 @@ class MainActivity : FlutterActivity() {
             out.toByteArray()
         } catch (_: Exception) {
             null
-        }
-    }
-
-    /** Switches the launcher icon by enabling one activity-alias and disabling the rest. */
-    private fun setAppIcon(name: String): Boolean {
-        val aliases = listOf("Default", "Stealth", "Violet", "Pink", "Crimson", "Emerald")
-        val wanted = aliases.firstOrNull { it.equals(name, ignoreCase = true) } ?: "Default"
-        val pm = packageManager
-        return try {
-            for (alias in aliases) {
-                val component = android.content.ComponentName(this, "$packageName.Icon$alias")
-                val state = if (alias == wanted) {
-                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                } else {
-                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-                }
-                pm.setComponentEnabledSetting(component, state, android.content.pm.PackageManager.DONT_KILL_APP)
-            }
-            true
-        } catch (_: Exception) {
-            false
         }
     }
 

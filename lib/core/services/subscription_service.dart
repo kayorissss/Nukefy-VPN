@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../constants/app_constants.dart';
 import '../models/subscription_model.dart';
+import 'whitelist_mirrors.dart';
 import '../utils/base64_utils.dart';
 import '../utils/link_parser.dart';
 
@@ -19,6 +20,7 @@ class SubscriptionFetch {
     this.totalBytes,
     this.expireAt,
     this.intervalMinutes,
+    this.sourceUrl,
     this.warnings = const [],
   });
 
@@ -29,6 +31,8 @@ class SubscriptionFetch {
   final int? totalBytes;
   final DateTime? expireAt;
   final int? intervalMinutes;
+  /// Mirror that actually served the subscription (fallback-aware).
+  final String? sourceUrl;
   final List<String> warnings;
 }
 
@@ -57,13 +61,37 @@ class SubscriptionService {
     'streisand': 'Streisand/1.6.8',
   };
 
+  /// Fetches a subscription, falling back to known mirrors of the same
+  /// repository. On restricted mobile networks the primary host is often the
+  /// only thing that is blocked, and re-adding the subscription by hand used
+  /// to be the only workaround — now the next mirror is tried automatically.
   Future<SubscriptionFetch> fetch(
     SubscriptionModel subscription, {
     String? userAgent,
   }) async {
+    final urls = <String>[
+      subscription.url,
+      ...WhitelistCatalog.fallbacksFor(subscription.url),
+    ];
+    Object? lastError;
+    for (final url in urls) {
+      try {
+        return await _fetchOnce(subscription, url, userAgent: userAgent);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError ?? SubscriptionException('subscription-fetch-failed');
+  }
+
+  Future<SubscriptionFetch> _fetchOnce(
+    SubscriptionModel subscription,
+    String url, {
+    String? userAgent,
+  }) async {
     final device = await DeviceIdentity.load();
     final response = await _dio.get<String>(
-      subscription.url,
+      url,
       options: Options(
         responseType: ResponseType.plain,
         headers: {
@@ -110,6 +138,7 @@ class SubscriptionService {
       totalBytes: _userInfo(headers, 'total'),
       expireAt: _expire(headers),
       intervalMinutes: int.tryParse(headers['profile-update-interval'] ?? ''),
+      sourceUrl: url == subscription.url ? null : url,
       warnings: parsed.warnings,
     );
   }

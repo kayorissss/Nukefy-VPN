@@ -27,6 +27,9 @@ import 'dns_screen.dart';
 import 'speed_test_screen.dart';
 import 'stats_screen.dart';
 import 'telegram_proxy_screen.dart';
+import 'addons_screen.dart';
+import 'autotune_screen.dart';
+import 'karing_screen.dart';
 import 'zapret_screen.dart';
 import 'zapret_games_screen.dart';
 
@@ -50,11 +53,15 @@ class MainShell extends StatelessWidget {
       _TabSpec(Icons.home_rounded, Icons.home_outlined, s.t('home'), NavDestination.home),
       _TabSpec(Icons.public_rounded, Icons.public_outlined, s.t('servers'), NavDestination.servers),
       if (zapret) _TabSpec(Icons.shield_rounded, Icons.shield_outlined, s.t('zapret'), NavDestination.zapret),
+      _TabSpec(Icons.route_rounded, Icons.route_outlined, s.t('tabKaring'), NavDestination.karing),
       _TabSpec(Icons.speed_rounded, Icons.speed_outlined, s.t('speedTest'), NavDestination.speedTest),
       _TabSpec(Icons.library_music_rounded, Icons.library_music_outlined, s.t('music'), NavDestination.music),
       if (zapret) _TabSpec(Icons.send_rounded, Icons.send_outlined, s.t('tgProxy'), NavDestination.telegramProxy),
       _TabSpec(Icons.radar_rounded, Icons.radar_outlined, s.t('jammers'), NavDestination.jammers),
       _TabSpec(Icons.insights_rounded, Icons.insights_outlined, s.t('stats'), NavDestination.stats),
+      _TabSpec(Icons.extension_rounded, Icons.extension_outlined, s.t('tabAddons'), NavDestination.addons),
+      _TabSpec(Icons.auto_awesome_rounded, Icons.auto_awesome_outlined, s.t('tabAuto'), NavDestination.autotune),
+      _TabSpec(Icons.dns_rounded, Icons.dns_outlined, s.t('dnsTitle'), NavDestination.dns),
       _TabSpec(Icons.settings_rounded, Icons.settings_outlined, s.t('settings'), NavDestination.settings),
     ];
 
@@ -63,7 +70,6 @@ class MainShell extends StatelessWidget {
       if (zapret) ZapretGamesScreen(active: destination == NavDestination.zapretApps, embedded: true),
       if (zapret) ZapretScreen(active: destination == NavDestination.zapretSettings, settingsOnly: true),
       if (desktop) SettingsScreen(initialSection: 1, showSubtabs: false),
-      if (desktop) DnsScreen(),
       if (desktop) SettingsScreen(initialSection: 2, showSubtabs: false),
     ];
     final pageIndex = switch (destination) {
@@ -71,15 +77,16 @@ class MainShell extends StatelessWidget {
       NavDestination.zapretSettings => tabs.length + 1,
       NavDestination.settingsGeneral => tabs.indexWhere((tab) => tab.destination == NavDestination.settings),
       NavDestination.settingsAppearance => tabs.length + (zapret ? 2 : 0),
-      NavDestination.settingsDns => tabs.length + (zapret ? 2 : 0) + 1,
-      NavDestination.settingsAbout => tabs.length + (zapret ? 2 : 0) + 2,
+      NavDestination.settingsAbout => tabs.length + (zapret ? 2 : 0) + 1,
+      // DNS is a first-class tab now; the legacy settings child route follows.
+      NavDestination.settingsDns => tabs.indexWhere((tab) => tab.destination == NavDestination.dns),
       _ => tabs.indexWhere((tab) => tab.destination == destination),
     };
     final activeTab = switch (destination) {
       // Child destinations own the highlight. Keeping the parent selected at
       // the same time made Zapret look like two active tabs, especially on
       // the mobile bottom bar.
-      NavDestination.zapretApps || NavDestination.zapretSettings || NavDestination.settingsGeneral || NavDestination.settingsAppearance || NavDestination.settingsDns || NavDestination.settingsAbout => -1,
+      NavDestination.zapretApps || NavDestination.zapretSettings || NavDestination.settingsGeneral || NavDestination.settingsAppearance || NavDestination.settingsAbout => -1,
       _ => pageIndex,
     };
     final body = AnimatedSwitcher(
@@ -167,6 +174,10 @@ class MainShell extends StatelessWidget {
         NavDestination.home => const HomeScreen(),
         NavDestination.servers => const ServersScreen(),
         NavDestination.zapret => ZapretScreen(active: active == NavDestination.zapret),
+        NavDestination.karing => KaringScreen(active: active == NavDestination.karing),
+        NavDestination.addons => const AddonsScreen(),
+        NavDestination.autotune => const AutoTuneScreen(),
+        NavDestination.dns => const DnsScreen(),
         NavDestination.speedTest => const SpeedTestScreen(),
         NavDestination.music => const MusicScreen(),
         NavDestination.telegramProxy => const TelegramProxyScreen(),
@@ -615,7 +626,7 @@ class _SideRail extends StatelessWidget {
                           !(tabs[i].destination == NavDestination.zapret &&
                               (destination == NavDestination.zapretApps || destination == NavDestination.zapretSettings)) &&
                           !(tabs[i].destination == NavDestination.settings &&
-                              (destination == NavDestination.settingsGeneral || destination == NavDestination.settingsAppearance || destination == NavDestination.settingsDns || destination == NavDestination.settingsAbout)),
+                              (destination == NavDestination.settingsGeneral || destination == NavDestination.settingsAppearance || destination == NavDestination.settingsAbout)),
                       collapsed: collapsed,
                       onTap: () => nav.go(
                         tabs[i].destination == NavDestination.settings ? NavDestination.settingsGeneral : tabs[i].destination,
@@ -704,13 +715,6 @@ class _SideRail extends StatelessWidget {
                                   collapsed: false,
                                   nested: true,
                                   onTap: () => nav.go(NavDestination.settingsAppearance),
-                                ),
-                                _RailItem(
-                                  spec: _TabSpec(Icons.dns_outlined, Icons.dns_rounded, s.t('dnsTitle'), NavDestination.settingsDns),
-                                  selected: destination == NavDestination.settingsDns,
-                                  collapsed: false,
-                                  nested: true,
-                                  onTap: () => nav.go(NavDestination.settingsDns),
                                 ),
                                 _RailItem(
                                   spec: _TabSpec(Icons.info_outline_rounded, Icons.info_rounded, s.t('aboutTab'), NavDestination.settingsAbout),

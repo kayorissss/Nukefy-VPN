@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-
-import '../../core/providers/settings_provider.dart';
 import '../../core/theme/app_colors.dart';
 
 /// The app mark. Plain image with a soft glow — no frames.
@@ -14,8 +11,7 @@ class NukefyLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final iconName = context.watch<SettingsProvider>().settings.appIcon;
-    final image = _image(p, iconName);
+    final image = _image(p);
     return Container(
       width: size,
       height: size,
@@ -32,31 +28,22 @@ class NukefyLogo extends StatelessWidget {
             : null,
       ),
       clipBehavior: Clip.antiAlias,
-      // Carbon keeps the built-in default mark neutral, but an explicitly
-      // chosen icon variant must remain visibly chosen (pink, emerald, etc.).
-      child: _isMonochrome(p) && iconName == 'default'
-          ? ColorFiltered(
-              colorFilter: const ColorFilter.matrix(<double>[
-                .2126, .7152, .0722, 0, 0,
-                .2126, .7152, .0722, 0, 0,
-                .2126, .7152, .0722, 0, 0,
-                0, 0, 0, 1, 0,
-              ]),
-              child: image,
-            )
-          : image,
+      // One monochrome mark everywhere: the shipped icon is already
+      // black-and-white, the filter only keeps it neutral on light themes.
+      child: ColorFiltered(
+        colorFilter: const ColorFilter.matrix(<double>[
+          .2126, .7152, .0722, 0, 0,
+          .2126, .7152, .0722, 0, 0,
+          .2126, .7152, .0722, 0, 0,
+          0, 0, 0, 1, 0,
+        ]),
+        child: image,
+      ),
     );
   }
 
-  bool _isMonochrome(NukefyPalette p) {
-    final color = p.accent;
-    // Use the non-deprecated channel accessors introduced with Flutter's
-    // colour API. Carbon's accent is deliberately equal on all channels.
-    return color.r == color.g && color.g == color.b;
-  }
-
-  Widget _image(NukefyPalette p, String icon) {
-    final asset = icon == 'default' ? 'assets/icons/app_icon.png' : 'assets/icons/app_icon_$icon.png';
+  Widget _image(NukefyPalette p) {
+    const asset = 'assets/icons/app_icon.png';
     return Image.asset(
       asset,
       fit: BoxFit.cover,

@@ -6,11 +6,15 @@ enum NavDestination {
   home,
   servers,
   zapret,
+  karing,
   speedTest,
   music,
   telegramProxy,
   jammers,
   stats,
+  addons,
+  autotune,
+  dns,
   settings,
   settingsGeneral,
   settingsAppearance,
@@ -38,7 +42,7 @@ class NavProvider extends ChangeNotifier {
     if (value == NavDestination.zapretApps || value == NavDestination.zapretSettings) {
       zapretExpanded = true;
     }
-    if (value == NavDestination.settings || value == NavDestination.settingsGeneral || value == NavDestination.settingsAppearance || value == NavDestination.settingsDns || value == NavDestination.settingsAbout) {
+    if (value == NavDestination.settings || value == NavDestination.settingsGeneral || value == NavDestination.settingsAppearance || value == NavDestination.settingsAbout) {
       settingsExpanded = true;
     }
     notifyListeners();

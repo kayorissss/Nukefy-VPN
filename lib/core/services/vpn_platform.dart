@@ -502,16 +502,6 @@ class VpnPlatform {
     });
   }
 
-  /// Android: switch the launcher icon (activity-alias). No-op elsewhere.
-  Future<bool> setAppIcon(String name) async {
-    if (!Platform.isAndroid) return false;
-    try {
-      return (await _channel.invokeMethod<bool>('setAppIcon', {'icon': name})) ?? false;
-    } catch (_) {
-      return false;
-    }
-  }
-
   /// Starts a replacement process. On desktop the instance listener is
   /// released before spawning, so the new process can become the owner before
   /// the old Flutter engine exits. [exitCurrent] is used by an in-app restart;
@@ -530,7 +520,7 @@ class VpnPlatform {
       try {
         await Process.start(
           Platform.resolvedExecutable,
-          Platform.executableArguments,
+          [...Platform.executableArguments, '--nukefy-restart'],
           mode: ProcessStartMode.detached,
         );
       } catch (_) {

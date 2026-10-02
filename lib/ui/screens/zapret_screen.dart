@@ -38,6 +38,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
   List<ZapretProbeTarget> _targets = ZapretProbe.defaults;
   CancelToken? _cancel;
   String? _current, _best, _error;
+  String? _failureReport;
   bool _analyzing = false, _quick = true, _showLog = false, _showTools = false;
   int _step = 0;
   ZapretUpdateInfo? _update;
@@ -149,6 +150,17 @@ class _ZapretScreenState extends State<ZapretScreen> {
           if (_quick && passed == selected.length) break;
         }
         completed = !token.isCancelled;
+        // Every strategy failed: collect the machine-level reasons instead
+        // of leaving the user with a wall of red crosses.
+        if (completed && best == null) {
+          try {
+            _failureReport = await _zapret.diagnostics();
+          } catch (_) {
+            _failureReport = null;
+          }
+        } else if (completed) {
+          _failureReport = null;
+        }
       } finally {
         await _zapret.stop();
         // Cancellation restores the original selection and running state.
@@ -586,6 +598,73 @@ class _ZapretScreenState extends State<ZapretScreen> {
           ),
         ),
         SectionCard(
+          title: s.t('zExtra'),
+          icon: Icons.tune_rounded,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(s.t('zAutoRestart')),
+                subtitle: Text(s.t('zAutoRestartHint')),
+                value: settings.settings.zapretAutoRestart,
+                onChanged: busy ? null : (v) => settings.update((a) => a.zapretAutoRestart = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(s.t('zWssize')),
+                subtitle: Text(s.t('zWssizeHint')),
+                value: settings.settings.zapretWssize,
+                onChanged: busy
+                    ? null
+                    : (v) => _run(() async {
+                          await settings.update((a) => a.zapretWssize = v);
+                          _zapret.configure(settings.settings);
+                          await _restart();
+                        }),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(s.t('zDebugLog')),
+                subtitle: Text(s.t('zDebugLogHint')),
+                value: settings.settings.zapretDebugLog,
+                onChanged: busy
+                    ? null
+                    : (v) => _run(() async {
+                          await settings.update((a) => a.zapretDebugLog = v);
+                          _zapret.configure(settings.settings);
+                          await _restart();
+                        }),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _button('zConnectionTest', Icons.network_check_outlined, _connectionTest),
+                  _button('zRestartDiscord', Icons.restart_alt_rounded, _restartDiscord),
+                  _button('zNetworkReset', Icons.restart_alt_rounded, () async {
+                    final confirmed = await confirmDialog(context, title: s.t('zNetworkReset'), body: s.t('zNetworkResetWarning'), confirm: s.t('confirm'), cancel: s.t('cancel'));
+                    if (!confirmed) return;
+                    final report = await VpnPlatform().windowsNetworkReset();
+                    if (mounted) await _text(s.t('zNetworkReset'), report);
+                  }),
+                  _button('zFolder', Icons.folder_open_outlined, _zapret.openFolder),
+                  _button('zDocumentation', Icons.menu_book_outlined, () async {
+                    await launchUrl(Uri.parse('https://github.com/Flowseal/zapret-discord-youtube'), mode: LaunchMode.externalApplication);
+                  }),
+                  _button('zGovHosts', Icons.account_balance_outlined, () async {
+                    final confirmed = await confirmDialog(context, title: s.t('zGovHosts'), body: s.t('zHostsBlockWarning'), confirm: s.t('confirm'), cancel: s.t('cancel'));
+                    if (!confirmed) return;
+                    await _zapret.applyHostBlock(AppConstants.zapretGovernmentMediaHosts);
+                    if (mounted) await _text(s.t('zGovHosts'), AppConstants.zapretGovernmentMediaHosts.join('\n'));
+                  }),
+                ],
+              ),
+            ],
+          ),
+        ),
+        SectionCard(
           title: s.t('logs'),
           icon: Icons.terminal_rounded,
           trailing: IconButton(
@@ -680,6 +759,35 @@ class _ZapretScreenState extends State<ZapretScreen> {
             ],
           ),
         ),
+        if (_failureReport != null && !_analyzing)
+          SectionCard(
+            title: s.t('zapretAllFailed'),
+            icon: Icons.report_problem_rounded,
+            description: s.t('zapretAllFailedHint'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(_failureReport!, style: AppTextStyles.monoValue.copyWith(fontSize: 12)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _button('zDiagnostics', Icons.health_and_safety_outlined, () async {
+                      final report = await _zapret.diagnostics();
+                      if (mounted) setState(() => _failureReport = report);
+                    }),
+                    _button('zServiceInstall', Icons.settings_suggest_outlined, () async {
+                      if (chosen != null) {
+                        _zapret.configure(settings.settings);
+                        await _zapret.installService(chosen);
+                      }
+                    }),
+                  ],
+                ),
+              ],
+            ),
+          ),
         SectionCard(
           title: s.t('zapretStrategies'),
           icon: Icons.view_module_outlined,
@@ -866,6 +974,16 @@ class _ZapretScreenState extends State<ZapretScreen> {
         onTap: busy ? null : () => _run(() async {
           final settings = context.read<SettingsProvider>();
           final running = _zapret.isRunning;
+          if (running && !settings.settings.zapretAutoRestart) {
+            final ok = await confirmDialog(
+              context,
+              title: s.t('zAutoRestart'),
+              body: '${strategy.id}: ${s.t('zapretRestartConfirm')}',
+              confirm: s.t('confirm'),
+              cancel: s.t('cancel'),
+            );
+            if (!ok) return;
+          }
           if (running) await _start(strategy);
           await settings.update((a) => a.zapretStrategy = strategy.id);
         }),

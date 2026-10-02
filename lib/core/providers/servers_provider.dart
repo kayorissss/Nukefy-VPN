@@ -281,6 +281,11 @@ class ServersProvider extends ChangeNotifier {
       for (final server in serversOf(id)) {
         if (previous.contains(server.fingerprint)) server.isNew = false;
       }
+      // A mirror that answered becomes the stored URL: the next refresh
+      // starts from a host that is known to work on this network.
+      if (fetched.sourceUrl != null && fetched.sourceUrl!.isNotEmpty) {
+        sub.url = fetched.sourceUrl!;
+      }
       sub
         ..lastUpdated = DateTime.now()
         ..lastError = null

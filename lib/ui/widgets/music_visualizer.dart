@@ -104,8 +104,9 @@ class _Bar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 100),
+    // Plain container: the parent already rebuilds every animation frame, an
+    // AnimatedContainer per bar added a second ticker for each of them.
+    return Container(
       width: 2.4,
       height: height,
       decoration: BoxDecoration(

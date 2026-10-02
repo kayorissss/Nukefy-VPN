@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../constants/app_constants.dart';
+import 'app_perf.dart';
 
 class TgWsProxyRelease {
   const TgWsProxyRelease({required this.version, required this.url, required this.digest, required this.size});
@@ -234,6 +235,7 @@ class TgWsProxyService extends ChangeNotifier {
     _logOffset = 0;
     await _readLogFile();
     _logTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!AppPerf.visible) return;
       unawaited(_readLogFile());
     });
   }

@@ -46,6 +46,11 @@ class ZapretService extends ChangeNotifier {
   /// Port ranges used for the game filter (Flowseal default: 1024-65535).
   String gameTcpRange = '1024-65535';
   String gameUdpRange = '1024-65535';
+  /// winws `--wssize`: TCP window size argument.
+  bool wssize = false;
+  /// winws `--debug` + mirroring of the captured output into zapret/logs.
+  bool debugLog = false;
+  IOSink? _logSink;
 
   /// Absolute paths of the installed per-game domain lists.
   List<String> gameListPaths = const [];
@@ -76,6 +81,8 @@ class ZapretService extends ChangeNotifier {
     gameMode = settings.zapretGameMode;
     gameTcpRange = settings.zapretGameTcp;
     gameUdpRange = settings.zapretGameUdp;
+    wssize = settings.zapretWssize;
+    debugLog = settings.zapretDebugLog;
     if (!const ['off', 'all', 'tcp', 'udp'].contains(gameMode) || !validPorts(gameTcpRange) || !validPorts(gameUdpRange)) {
       throw const FormatException('Invalid game filter ports');
     }
@@ -185,6 +192,8 @@ class ZapretService extends ChangeNotifier {
         .replaceAll('%GameFilterUDP%', gameUdp)
         .replaceAll('%GameFilter%', gameMode == 'udp' ? gameUdp : gameTcp);
     final args = _tokenize(command);
+    if (wssize) args.add('--wssize=1424');
+    if (debugLog) args.add('--debug=2');
     if (!withUserList || _userListPath == null) return args;
 
     return withHostlists(args, userList: _userListPath!, gameLists: gameListPaths);
@@ -719,6 +728,7 @@ class ZapretService extends ChangeNotifier {
       }
       final args = parseArgs(strategy);
       if (args.isEmpty) throw Exception('strategy has no winws arguments');
+      await _openLogSink();
       final exe = p.join(root!.path, 'bin', 'winws.exe');
       final process = await Process.start(exe, args, workingDirectory: p.join(root!.path, 'bin'));
       if (_closing) { process.kill(); await process.exitCode; return false; }
@@ -758,16 +768,44 @@ class ZapretService extends ChangeNotifier {
     _log.add(line);
     if (_log.length > 200) _log.removeAt(0);
     logRevision.value++;
+    _logSink?.writeln(line);
+  }
+
+  /// Opens/closes the winws log file inside `<zapret>/logs`.
+  Future<void> _openLogSink() async {
+    await _closeLogSink();
+    if (!debugLog) return;
+    final dir = root;
+    if (dir == null) return;
+    final logs = Directory(p.join(dir.path, 'logs'));
+    await logs.create(recursive: true);
+    final stamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
+    _logSink = File(p.join(logs.path, 'winws-$stamp.log')).openWrite(mode: FileMode.append);
+  }
+
+  Future<void> _closeLogSink() async {
+    final sink = _logSink;
+    _logSink = null;
+    if (sink != null) {
+      try {
+        await sink.flush();
+        await sink.close();
+      } catch (_) {}
+    }
   }
 
   /// Prevent an in-flight analysis from spawning another child on exit.
+  /// A system service (if installed) keeps running: only our own child
+  /// process is reaped.
   Future<void> shutdown() async {
     _closing = true;
-    await stop();
+    await stop(includeService: false);
   }
 
-  /// Stops only our process or the explicitly managed zapret service.
-  Future<void> stop() async {
+  /// Stops only our process or, with [includeService], the explicitly
+  /// managed zapret service. App restart/quit keep a system service running:
+  /// it belongs to Windows, not to this process.
+  Future<void> stop({bool includeService = true}) async {
     final process = _process;
     _process = null;
     _runningStrategyId = null;
@@ -781,7 +819,8 @@ class ZapretService extends ChangeNotifier {
         await process.exitCode;
       }
     }
-    if (servicePresent && serviceRunning) await _stopService();
+    if (includeService && servicePresent && serviceRunning) await _stopService();
+    await _closeLogSink();
     notifyListeners();
   }
 }

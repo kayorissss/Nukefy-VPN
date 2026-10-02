@@ -15,7 +15,6 @@ import '../../core/services/app_log.dart';
 import '../../core/services/subscription_service.dart';
 import '../../core/services/update_service.dart';
 import '../../core/services/vpn_platform.dart';
-import '../../core/services/zapret_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/network_diagnostics.dart';
@@ -701,58 +700,12 @@ class _AppearanceCard extends StatelessWidget {
                 },
               ),
               SettingsTile(icon: Icons.language_rounded, title: s.t('language'), trailing: NukefyDropdown<LanguagePreference>(value: value.language, items: {LanguagePreference.ru: s.t('russian'), LanguagePreference.en: s.t('english'), LanguagePreference.system: s.t('system')}, onChanged: (next) => settings.update((item) => item.language = next))),
-              if (Platform.isAndroid || Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[
-                SettingsTile(icon: Icons.apps_rounded, title: s.t('appIcon'), subtitle: s.t('appIconRestartHint')),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(2, 0, 2, 4),
-                  child: Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      for (final name in const ['default', 'stealth', 'violet', 'pink', 'crimson', 'emerald'])
-                        _IconChoice(
-                          name: name,
-                          label: _iconLabel(s, name),
-                          selected: value.appIcon == name,
-                          onTap: () => _changeAppIcon(context, settings, name),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
             ],
           ),
         ),
       ],
     );
   }
-}
-
-Future<void> _changeAppIcon(BuildContext context, SettingsProvider settings, String name) async {
-  final s = settings.strings;
-  if (settings.settings.appIcon == name) return;
-  final ok = await confirmDialog(
-    context,
-    title: s.t('appIconConfirmTitle'),
-    body: s.t('appIconConfirmBody'),
-    confirm: s.t('restart'),
-    cancel: s.t('cancel'),
-  );
-  if (!ok || !context.mounted) return;
-  final previous = settings.settings.appIcon;
-  await settings.update((item) => item.appIcon = name);
-  // Android switches launcher aliases through the platform channel. Desktop
-  // updates the tray/window icon from SettingsProvider, so setAppIcon is a
-  // deliberate no-op there rather than a failed operation.
-  final applied = !Platform.isAndroid || await VpnPlatform().setAppIcon(name);
-  if (!applied) {
-    await settings.update((item) => item.appIcon = previous);
-    if (context.mounted) showNukefySnack(context, s.t('appIconFailed'), error: true);
-    return;
-  }
-  await context.read<VpnProvider>().disconnect();
-  if (Platform.isWindows) await ZapretService.instance.shutdown();
-  await VpnPlatform().restartApp(exitCurrent: !Platform.isAndroid);
 }
 
 class _ConnectionModeChoice extends StatelessWidget {
@@ -1323,93 +1276,3 @@ class _ThemeChoice extends StatelessWidget {
 }
 
 String _themeLabel(S s, String name) => s.t('theme_$name');
-
-/// Name of a launcher icon variant.
-String _iconLabel(S s, String name) => switch (name) {
-      'default' => s.t('appIconDefault'),
-      'stealth' => s.t('appIconStealth'),
-      'violet' => s.t('appIconViolet'),
-      'pink' => s.t('appIconPink'),
-      'crimson' => s.t('appIconCrimson'),
-      'emerald' => s.t('appIconEmerald'),
-      _ => name,
-    };
-
-class _IconChoice extends StatelessWidget {
-  const _IconChoice({required this.name, required this.label, required this.selected, required this.onTap});
-  final String name;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    final asset = name == 'default' ? 'assets/icons/app_icon.png' : 'assets/icons/app_icon_$name.png';
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedScale(
-        duration: const Duration(milliseconds: 240),
-        curve: Curves.easeOutBack,
-        scale: selected ? 1.05 : 1,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: selected ? p.accent : p.border, width: selected ? 2.4 : 1),
-                    boxShadow: selected ? [BoxShadow(color: p.accent.withValues(alpha: 0.45), blurRadius: 12)] : null,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.asset(asset, width: 48, height: 48, filterQuality: FilterQuality.medium),
-                  ),
-                ),
-                if (selected)
-                  Positioned(
-                    right: -3,
-                    top: -3,
-                    child: Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        color: p.accent,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: p.card, width: 2),
-                      ),
-                      child: Icon(
-                        Icons.check_rounded,
-                        size: 11,
-                        color: p.isDark ? const Color(0xFF07131A) : Colors.white,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 7),
-            SizedBox(
-              width: 64,
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.tab.copyWith(
-                  fontSize: 8,
-                  letterSpacing: 0.4,
-                  color: selected ? p.accent : p.textSecondary,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
