@@ -130,6 +130,19 @@ class _MusicScreenState extends State<MusicScreen> {
                     importLabel: s.t('musicImport'),
                     onImport: music.busy ? null : _import,
                     onCreatePlaylist: () => _editPlaylist(context, music, null),
+                    controls: _Toolbar(
+                      search: _search,
+                      hint: s.t('musicSearch'),
+                      view: _view,
+                      newestFirst: _newestFirst,
+                      onQuery: (_) => setState(() {}),
+                      onView: (value) => setState(() => _view = value),
+                      onSort: () => setState(() {
+                        _newestFirst = !_newestFirst;
+                        _customOrder = false;
+                      }),
+                      sortLabel: _newestFirst ? s.t('musicNewest') : s.t('musicOldest'),
+                    ),
                   ),
                   // Playlists sit directly under the page title; view/search
                   // controls belong to the collection below them.
@@ -139,19 +152,6 @@ class _MusicScreenState extends State<MusicScreen> {
                     allLabel: s.t('musicAllTracks'),
                     onSelected: (id) => setState(() => _playlistId = id),
                     onEdit: (playlist) => _editPlaylist(context, music, playlist),
-                  ),
-                  _Toolbar(
-                    search: _search,
-                    hint: s.t('musicSearch'),
-                    view: _view,
-                    newestFirst: _newestFirst,
-                    onQuery: (_) => setState(() {}),
-                    onView: (value) => setState(() => _view = value),
-                    onSort: () => setState(() {
-                      _newestFirst = !_newestFirst;
-                      _customOrder = false;
-                    }),
-                    sortLabel: _newestFirst ? s.t('musicNewest') : s.t('musicOldest'),
                   ),
                   if (music.error != null)
                     _ErrorBanner(message: _musicErrorText(music.error!, s), onClose: () => music.error = null),
@@ -195,7 +195,7 @@ class _MusicScreenState extends State<MusicScreen> {
       builder: (dialog) {
         final selectedPlaylists = <String>{...initialPlaylists};
         return StatefulBuilder(
-          builder: (dialog, setDialogState) => AlertDialog(
+          builder: (dialog, setDialogState) => _WideDialog(
             title: Text(s.t('musicEditTrack')),
             content: LayoutBuilder(
               builder: (dialog, constraints) {
@@ -445,8 +445,51 @@ class _PlaylistIconChoiceState extends State<_PlaylistIconChoice> {
   }
 }
 
+/// Track dialogs are landscape: artwork left, fields right, like an album
+/// page — the old narrow AlertDialog stacked everything vertically.
+class _WideDialog extends StatelessWidget {
+  const _WideDialog({required this.title, required this.content, required this.actions});
+
+  final Widget title;
+  final Widget content;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 860),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DefaultTextStyle(style: AppTextStyles.headline, child: title),
+              const SizedBox(height: 14),
+              content,
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  for (final action in actions) ...[
+                    action,
+                    const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Header extends StatelessWidget {
-  const _Header({required this.title, required this.count, required this.importLabel, required this.onImport, required this.onCreatePlaylist});
+  const _Header({required this.title, required this.count, required this.importLabel, required this.onImport, required this.onCreatePlaylist, this.controls});
+  final Widget? controls;
   final String title;
   final int count;
   final String importLabel;
@@ -503,7 +546,14 @@ class _Header extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [heading, const SizedBox(height: 10), import],
                 )
-              : Row(children: [Expanded(child: heading), const SizedBox(width: 12), import]),
+              : Row(children: [
+                  Expanded(child: heading),
+                  if (controls != null) ...[
+                    Expanded(child: controls!),
+                    const SizedBox(width: 8),
+                  ],
+                  import,
+                ]),
         );
       },
     );

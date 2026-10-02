@@ -84,16 +84,16 @@ Future<void> _main() async {
       backgroundColor: Color(0xFF0D0D0D),
     );
     windowManager.waitUntilReadyToShow(options, () async {
-      // Do not maximize during startup.  The old show → maximize sequence
-      // caused a visible full-screen flash and, on tray launches, sometimes
-      // left the first Flutter frame behind a second non-interactive window.
-      // Always restore the predictable normal size before the first frame.
+      // The app lives maximized: a small floating window wasted screen room
+      // and the user asked for "always maximal, no mini window".
       try {
-        await windowManager.unmaximize();
-        await windowManager.setSize(options.size!);
-        await windowManager.center();
+        await windowManager.maximize();
       } catch (error) {
-        AppLog.log('window restore failed: $error');
+        AppLog.log('window maximize failed: $error');
+        try {
+          await windowManager.setSize(options.size!);
+          await windowManager.center();
+        } catch (_) {}
       }
       await windowManager.show();
       await windowManager.focus();

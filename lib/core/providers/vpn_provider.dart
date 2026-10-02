@@ -184,6 +184,10 @@ class VpnProvider extends ChangeNotifier {
     if (server.detourServerId != null) {
       detour = servers.byId(server.detourServerId);
     }
+    // Windows excludes dynamic port ranges (Hyper-V, NAT): a perfectly
+    // valid 10808 can be unbindable. Probe before handing the config over
+    // and fall back to an ephemeral port instead of failing the session.
+    final ports = await _resolvePorts(settings.settings);
     final json = SingboxConfigBuilder.buildJson(
       server: server,
       detour: detour,
@@ -198,15 +202,43 @@ class VpnProvider extends ChangeNotifier {
         settings: settings.settings,
         activeSubscriptionId: server.subscriptionId,
       ),
+      ports: ports,
     );
     await _platform.stopXray();
-    final result = await _platform.start(
+    var result = await _platform.start(
       configJson: json,
       preferTun: useTun,
       serverName: server.name,
       serverHost: server.address,
       serverPort: server.port,
     );
+    if (!result.ok && (result.error ?? '').contains('bind')) {
+      // Second attempt with purely ephemeral ports.
+      final ephemeral = await _resolvePorts(settings.settings, ephemeral: true);
+      final retryJson = SingboxConfigBuilder.buildJson(
+        server: server,
+        detour: detour,
+        settings: settings.settings,
+        logPath: '${dir.path}/sing-box.log',
+        cachePath: '${dir.path}/cache.db',
+        desktopTun: !Platform.isAndroid && useTun,
+        forceProxyOnly: !useTun,
+        balancerPool: KaringService.balancerPool(
+          servers: servers.servers,
+          subscriptions: servers.subscriptions,
+          settings: settings.settings,
+          activeSubscriptionId: server.subscriptionId,
+        ),
+        ports: ephemeral,
+      );
+      result = await _platform.start(
+        configJson: retryJson,
+        preferTun: useTun,
+        serverName: server.name,
+        serverHost: server.address,
+        serverPort: server.port,
+      );
+    }
     if (!result.ok) {
       status = VpnStatus.error;
       final raw = result.error ?? 'core-failed';
@@ -229,6 +261,29 @@ class VpnProvider extends ChangeNotifier {
     await _stats?.addLog(server.name, 'connected', message: mode);
     _startTicker();
     notifyListeners();
+  }
+
+  /// Bind-probes the configured local ports; substitutes a free ephemeral
+  /// port for every address Windows refuses to bind.
+  static Future<LocalPorts> _resolvePorts(AppSettings settings, {bool ephemeral = false}) async {
+    Future<int> probe(int preferred) async {
+      if (!ephemeral) {
+        try {
+          final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, preferred);
+          await socket.close();
+          return preferred;
+        } catch (_) {}
+      }
+      final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final port = socket.port;
+      await socket.close();
+      return port;
+    }
+    return LocalPorts(
+      socks: await probe(settings.socksPort),
+      http: await probe(settings.httpPort),
+      clash: await probe(AppConstants.clashApiPort),
+    );
   }
 
   static int _xrayInboundPort(int socksPort, int httpPort) {
@@ -262,13 +317,15 @@ class VpnProvider extends ChangeNotifier {
       return;
     }
     final dir = await _platform.configDirectory();
-    final xrayPort = useTunFrontend ? _xrayInboundPort(settings.socksPort, settings.httpPort) : settings.socksPort;
+    final xrayPorts = await _resolvePorts(settings);
+    final xrayPort = useTunFrontend ? _xrayInboundPort(xrayPorts.socks, xrayPorts.http) : xrayPorts.socks;
     try {
       final config = XrayConfigBuilder.buildJson(
         server: server,
         settings: settings,
         logPath: '${dir.path}/xray.log',
         inboundPort: xrayPort,
+        ports: xrayPorts,
       );
       await _platform.stop();
       final xrayResult = await _platform.startXray(configJson: config, workDir: dir.path);
@@ -287,6 +344,7 @@ class VpnProvider extends ChangeNotifier {
           logPath: '${dir.path}/xray-frontend.log',
           cachePath: '${dir.path}/xray-cache.db',
           useTun: true,
+          ports: xrayPorts,
         );
         final frontendResult = await _platform.start(
           configJson: frontend,

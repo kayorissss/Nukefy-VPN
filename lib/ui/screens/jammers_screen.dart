@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -113,7 +116,7 @@ class _JammersScreenState extends State<JammersScreen> {
               _VerdictCard(
                 verdict: _verdict,
                 strings: s,
-                trailing: _verdict == JammerVerdict.none ? _CheckAgainButton(busy: _busy, onTap: _check, label: s.t('checkAgain')) : null,
+                trailing: _CheckAgainButton(busy: _busy, onTap: _check, label: s.t('checkAgain')),
               )
                   .animate()
                   .fadeIn(duration: 350.ms)
@@ -270,27 +273,20 @@ class _VerdictCard extends StatelessWidget {
                     lead,
                     if (trailing != null) ...[
                       const SizedBox(height: 16),
-                      Align(alignment: AlignmentDirectional.centerEnd, child: trailing),
+                      Align(alignment: AlignmentDirectional.center, child: trailing),
                     ],
                   ],
                 )
               : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     iconBox,
                     const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          message,
-                          if (trailing != null) ...[
-                            const SizedBox(height: 14),
-                            Align(alignment: AlignmentDirectional.centerEnd, child: trailing),
-                          ],
-                        ],
-                      ),
-                    ),
+                    Expanded(child: message),
+                    if (trailing != null) ...[
+                      const SizedBox(width: 16),
+                      trailing,
+                    ],
                   ],
                 ),
         );
@@ -333,6 +329,71 @@ class _HostGroup extends StatelessWidget {
   }
 }
 
+/// The real service mark: favicon fetched once and cached on disk. Falls
+/// back to the brand-coloured glyph when the network says no.
+class _ServiceIcon extends StatefulWidget {
+  const _ServiceIcon({required this.host, required this.color, required this.fallback});
+
+  final String host;
+  final Color color;
+  final IconData fallback;
+
+  @override
+  State<_ServiceIcon> createState() => _ServiceIconState();
+}
+
+class _ServiceIconState extends State<_ServiceIcon> {
+  static final Map<String, Uint8List?> _memory = {};
+Uint8List? _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytes = _memory[widget.host];
+    if (_bytes == null && !_memory.containsKey(widget.host)) _fetch();
+  }
+
+  Future<void> _fetch() async {
+    _memory[widget.host] = null;
+    try {
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+      final request = await client.getUrl(Uri.parse('https://www.google.com/s2/favicons?domain=${widget.host}&sz=64'));
+      final response = await request.close().timeout(const Duration(seconds: 8));
+      final builder = BytesBuilder(copy: false);
+      await for (final chunk in response.stream) {
+        builder.add(chunk);
+      }
+      client.close(force: true);
+      final bytes = builder.takeBytes();
+      _memory[widget.host] = bytes.length > 100 ? bytes : null;
+      if (mounted) setState(() => _bytes = _memory[widget.host]);
+    } catch (_) {
+      // Fallback glyph stays.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final bytes = _bytes;
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: widget.color.withValues(alpha: p.isDark ? 0.16 : 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: bytes == null
+          ? Icon(widget.fallback, size: 20, color: widget.color)
+          : ClipRRect(
+              borderRadius: BorderRadius.circular(9),
+              child: Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true,
+                  errorBuilder: (_, _, _) => Icon(widget.fallback, size: 20, color: widget.color)),
+            ),
+    );
+  }
+}
+
 class _HostRow extends StatelessWidget {
   const _HostRow({required this.host, required this.ms});
 
@@ -361,14 +422,10 @@ class _HostRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: p.isDark ? 0.16 : 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(brand?.$1 ?? Icons.language_rounded, size: 20, color: color),
+          _ServiceIcon(
+            host: host,
+            color: color,
+            fallback: brand?.$1 ?? Icons.language_rounded,
           ),
           const SizedBox(width: 12),
           Expanded(

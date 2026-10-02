@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'singbox_config_builder.dart' show LocalPorts;
 import 'dart:io';
 
 import '../constants/app_constants.dart';
@@ -27,6 +28,7 @@ class XrayConfigBuilder {
     required AppSettings settings,
     required String logPath,
     required int inboundPort,
+    LocalPorts? ports,
   }) {
     if (!supports(server)) throw const XrayConfigException('XRAY_UNSUPPORTED_PROTOCOL');
     final outbound = server.outbound ?? const <String, dynamic>{};
@@ -35,6 +37,7 @@ class XrayConfigBuilder {
       throw const XrayConfigException('XRAY_TRANSPORT_MISSING');
     }
     final listen = settings.allowLan ? '0.0.0.0' : '127.0.0.1';
+    final httpPort = ports?.http ?? settings.httpPort;
     final inbounds = <Map<String, dynamic>>[];
     // The SOCKS inbound is internal when the sing-box TUN front-end is
     // active, and becomes the user-facing local proxy otherwise.
@@ -47,11 +50,12 @@ class XrayConfigBuilder {
         'settings': {'udp': true},
       });
     }
-    if (!settings.tunEnabled && settings.localProxyEnabled && settings.httpPort != inboundPort) {
+    final httpPort = ports?.http ?? settings.httpPort;
+    if (!settings.tunEnabled && settings.localProxyEnabled && httpPort != inboundPort) {
       inbounds.add({
         'tag': 'http-in',
         'listen': listen,
-        'port': settings.httpPort,
+        'port': httpPort,
         'protocol': 'http',
         'settings': {},
       });
@@ -84,6 +88,7 @@ class XrayConfigBuilder {
     required String logPath,
     required String cachePath,
     required bool useTun,
+    LocalPorts? ports,
   }) {
     final listen = settings.allowLan ? '0.0.0.0' : '127.0.0.1';
     final inbounds = <Map<String, dynamic>>[];
@@ -101,8 +106,8 @@ class XrayConfigBuilder {
     }
     if (settings.localProxyEnabled) {
       inbounds.addAll([
-        {'type': 'socks', 'tag': 'socks-in', 'listen': listen, 'listen_port': settings.socksPort},
-        {'type': 'http', 'tag': 'http-in', 'listen': listen, 'listen_port': settings.httpPort},
+        {'type': 'socks', 'tag': 'socks-in', 'listen': listen, 'listen_port': ports?.socks ?? settings.socksPort},
+        {'type': 'http', 'tag': 'http-in', 'listen': listen, 'listen_port': httpPort},
       ]);
     }
     final config = <String, dynamic>{
@@ -123,7 +128,7 @@ class XrayConfigBuilder {
         'auto_detect_interface': useTun,
       },
       'experimental': {
-        'clash_api': {'external_controller': '127.0.0.1:${AppConstants.clashApiPort}', 'secret': ''},
+        'clash_api': {'external_controller': '127.0.0.1:${ports?.clash ?? AppConstants.clashApiPort}', 'secret': ''},
         'cache_file': {'enabled': true, 'path': cachePath},
       },
     };

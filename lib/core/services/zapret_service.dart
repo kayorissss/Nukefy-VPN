@@ -62,6 +62,27 @@ class ZapretService extends ChangeNotifier {
   static const String _domainsKey = 'zapret_domains';
   static const String _placeholder = 'domain.example.abc';
 
+  DateTime _snapAt = DateTime.fromMillisecondsSinceEpoch(0);
+  List<String> _domainsCache = const [];
+  String _ipsetCache = 'any';
+  List<String> _fakeFilesCache = const [];
+  final Map<String, String?> _activeFakeCache = {};
+
+  void _invalidateSnapshot() => _snapAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Disk-backed answers are cached for a moment: the settings page rebuilds
+  /// on every tick and reading lists/md5 hashes per frame froze the tab.
+  void _refreshSnapshot() {
+    if (DateTime.now().difference(_snapAt) < const Duration(seconds: 2)) return;
+    _snapAt = DateTime.now();
+    _domainsCache = _readDomains();
+    _ipsetCache = _readIpsetMode();
+    _fakeFilesCache = _readFakeFiles();
+    _activeFakeCache
+      ..clear()
+      ..addEntries(['discord', 'game'].map((kind) => MapEntry(kind, _readActiveFake(kind))));
+  }
+
   bool get isSupported => Platform.isWindows && root != null;
   bool get isRunning => _process != null || serviceRunning;
   bool servicePresent = false;
@@ -180,7 +201,7 @@ class ZapretService extends ChangeNotifier {
         break;
       }
     }
-    var command = buffer.toString();
+    var command = _unescapeCmd(buffer.toString());
     // Flowseal uses the port 12 as "filter disabled"; with the game filter
     // on it swaps in the configured ranges.
     final gameTcp = (gameMode == 'off' || gameMode == 'udp') ? '12' : gameTcpRange;
@@ -248,6 +269,11 @@ class ZapretService extends ChangeNotifier {
   /// Kept in the app storage and mirrored into the zapret list file, so it
   /// survives a reinstall of the app (unlike the .txt next to winws).
   List<String> loadDomains() {
+    _refreshSnapshot();
+    return _domainsCache;
+  }
+
+  List<String> _readDomains() {
     final json = StorageService.instance.readJson(_domainsKey);
     var items = <String>[];
     final stored = (json?['items'] as List?) ?? const [];
@@ -271,6 +297,7 @@ class ZapretService extends ChangeNotifier {
     final clean = domains.map(normalizeDomain).where((e) => e.isNotEmpty).toList();
     await StorageService.instance.writeJson(_domainsKey, {'items': clean});
     _writeUserList(clean);
+    _invalidateSnapshot();
     notifyListeners();
   }
 
@@ -328,6 +355,11 @@ class ZapretService extends ChangeNotifier {
   /// `any` — empty list (bypass everything), `loaded` — the real list,
   /// `none` — stub entry, nothing matches.
   String ipsetMode() {
+    _refreshSnapshot();
+    return _ipsetCache;
+  }
+
+  String _readIpsetMode() {
     final path = _ipsetPath;
     if (path == null) return 'any';
     final file = File(path);
@@ -358,6 +390,7 @@ class ZapretService extends ChangeNotifier {
     } else {
       await file.writeAsString(mode == 'none' ? '$_ipsetStub\n' : '');
     }
+    _invalidateSnapshot();
     notifyListeners();
   }
 
@@ -382,6 +415,7 @@ class ZapretService extends ChangeNotifier {
       // Updating a list must not silently enable a disabled filter.
       final destination = ipsetMode() == 'loaded' ? path : '$path.backup';
       await File(destination).writeAsString('${clean.toSet().join('\n')}\n');
+      _invalidateSnapshot();
       notifyListeners();
     } finally { dio.close(); }
   }
@@ -400,6 +434,11 @@ class ZapretService extends ChangeNotifier {
 
   /// Every `*.bin` in `bin/` except the two active ones.
   List<String> fakeFiles() {
+    _refreshSnapshot();
+    return _fakeFilesCache;
+  }
+
+  List<String> _readFakeFiles() {
     final dir = root;
     if (dir == null) return const [];
     final bin = Directory(p.join(dir.path, 'bin'));
@@ -416,6 +455,11 @@ class ZapretService extends ChangeNotifier {
 
   /// `discord` → bin/ACTIVE_DISCORD_UDP.bin, `game` → bin/ACTIVE_GAME_UDP.bin.
   String? activeFake(String kind) {
+    _refreshSnapshot();
+    return _activeFakeCache[kind];
+  }
+
+  String? _readActiveFake(String kind) {
     final dir = root;
     if (dir == null) return null;
     final target = File(p.join(dir.path, 'bin', kind == 'game' ? 'ACTIVE_GAME_UDP.bin' : 'ACTIVE_DISCORD_UDP.bin'));
@@ -436,6 +480,7 @@ class ZapretService extends ChangeNotifier {
     }
     final bin = p.join(root!.path, 'bin');
     await File(p.join(bin, '$name.bin')).copy(p.join(bin, kind == 'game' ? 'ACTIVE_GAME_UDP.bin' : 'ACTIVE_DISCORD_UDP.bin'));
+    _invalidateSnapshot();
     notifyListeners();
   }
 
@@ -670,6 +715,30 @@ class ZapretService extends ChangeNotifier {
     file.writeAsStringSync(body.toString());
   }
 
+  /// .bat files are cmd scripts: outside of double quotes `^` escapes the
+  /// next character (`^!` → `!`). We launch winws directly instead of through
+  /// cmd, so the escapes must be resolved here — otherwise winws receives a
+  /// literal `^!` and dies with "could not read ^!" before capturing starts.
+  static String _unescapeCmd(String input) {
+    final out = StringBuffer();
+    var quoted = false;
+    for (var i = 0; i < input.length; i++) {
+      final ch = input[i];
+      if (ch == '"') {
+        quoted = !quoted;
+        out.write(ch);
+        continue;
+      }
+      if (!quoted && ch == '^' && i + 1 < input.length) {
+        out.write(input[i + 1]);
+        i++;
+        continue;
+      }
+      out.write(ch);
+    }
+    return out.toString();
+  }
+
   static List<String> _tokenize(String input) {
     final out = <String>[];
     final current = StringBuffer();
@@ -711,6 +780,10 @@ class ZapretService extends ChangeNotifier {
   Future<bool> start(ZapretStrategy strategy) async {
     if (!isSupported || _closing) return false;
     await stop();
+    // WinDivert is released a beat after the previous winws exits; starting
+    // the next capture immediately makes it die silently (analysis showed
+    // strategy headers with no output at all).
+    await Future<void>.delayed(const Duration(milliseconds: 350));
     if (_closing) return false;
     lastError = null;
     _append('> ${strategy.id}');

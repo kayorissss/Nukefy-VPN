@@ -48,6 +48,7 @@ class AppSettings {
     this.zapretWssize = false,
     this.zapretDebugLog = false,
     this.zapretAutoRestart = true,
+    this.musicUnlocked = false,
     this.karingEnabled = false,
     this.karingBalancer = true,
     this.karingExcludeRu = true,
@@ -123,6 +124,7 @@ class AppSettings {
   /// Restart winws automatically when the strategy changes.
   bool zapretAutoRestart;
   /// Karing-style whitelist bypass profile.
+  bool musicUnlocked;
   bool karingEnabled;
   bool karingBalancer;
   bool karingExcludeRu;
@@ -197,6 +199,7 @@ class AppSettings {
         'zapretWssize': zapretWssize,
         'zapretDebugLog': zapretDebugLog,
         'zapretAutoRestart': zapretAutoRestart,
+        'musicUnlocked': musicUnlocked,
         'karingEnabled': karingEnabled,
         'karingBalancer': karingBalancer,
         'karingExcludeRu': karingExcludeRu,
@@ -267,6 +270,7 @@ class AppSettings {
       zapretWssize: json['zapretWssize'] == true,
       zapretDebugLog: json['zapretDebugLog'] == true,
       zapretAutoRestart: json['zapretAutoRestart'] != false,
+      musicUnlocked: json['musicUnlocked'] == true,
       karingEnabled: json['karingEnabled'] == true,
       karingBalancer: json['karingBalancer'] != false,
       karingExcludeRu: json['karingExcludeRu'] != false,

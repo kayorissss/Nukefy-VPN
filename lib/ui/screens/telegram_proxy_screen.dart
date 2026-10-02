@@ -39,14 +39,138 @@ class TelegramProxyScreen extends StatelessWidget {
               if (!Platform.isWindows)
                 _MessageCard(icon: Icons.desktop_windows_rounded, message: s.t('tgProxyWindowsOnly'))
               else ...[
-                _ControlCard(service: service, s: s),
-                const SizedBox(height: 14),
+                LayoutBuilder(
+                  builder: (context, constraints) => constraints.maxWidth >= 860
+                      ? IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(child: _PowerCard(service: service, s: s)),
+                              const SizedBox(width: 14),
+                              Expanded(flex: 2, child: _ControlCard(service: service, s: s)),
+                            ],
+                          ),
+                        )
+                      : Column(
+                          children: [
+                            _PowerCard(service: service, s: s),
+                            const SizedBox(height: 14),
+                            _ControlCard(service: service, s: s),
+                          ],
+                        ),
+                ),
+                // The journal stays below the fold.
+                SizedBox(height: MediaQuery.of(context).size.height * 0.22),
                 _LogCard(service: service, s: s),
               ],
             ]),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Big animated activation button: the proxy is either running or not, and
+/// the primary action must be readable from across the room.
+class _PowerCard extends StatelessWidget {
+  const _PowerCard({required this.service, required this.s});
+  final TgWsProxyService service;
+  final S s;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final color = service.running ? p.success : p.accent;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: p.card, borderRadius: BorderRadius.circular(22), border: Border.all(color: p.border)),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _PowerButton(service: service, s: s, color: color),
+          const SizedBox(height: 14),
+          Text(
+            service.running ? s.t('tgProxyRunning') : s.t('tgProxyStopped'),
+            style: AppTextStyles.status.copyWith(color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PowerButton extends StatefulWidget {
+  const _PowerButton({required this.service, required this.s, required this.color});
+  final TgWsProxyService service;
+  final S s;
+  final Color color;
+
+  @override
+  State<_PowerButton> createState() => _PowerButtonState();
+}
+
+class _PowerButtonState extends State<_PowerButton> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _toggle() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      if (widget.service.running) {
+        await widget.service.stop();
+      } else {
+        await widget.service.start();
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final color = widget.color;
+    final installed = !widget.service.busy;
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: _busy || widget.service.busy ? null : _toggle,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 260),
+            width: 168,
+            height: 168,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [color.withValues(alpha: .26), p.accent2.withValues(alpha: .16)],
+              ),
+              border: Border.all(color: color.withValues(alpha: .6), width: 1.5),
+              boxShadow: [BoxShadow(color: color.withValues(alpha: .2), blurRadius: 36, spreadRadius: 2)],
+            ),
+            child: Center(
+              child: _busy || widget.service.busy
+                  ? SizedBox(width: 40, height: 40, child: CircularProgressIndicator(strokeWidth: 3, color: color))
+                  : Icon(widget.service.running ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 56, color: color),
+            ),
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 10),
+          Text('${widget.s.t('tgProxyError')}: $_error', style: TextStyle(color: p.error, fontSize: 11)),
+        ],
+        if (!installed) ...[
+          const SizedBox(height: 10),
+          Text(widget.s.t('tgProxyNotInstalled'), style: p.captionStyle),
+        ],
+      ],
     );
   }
 }

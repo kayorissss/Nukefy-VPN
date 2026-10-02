@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
-
+import '../../core/models/server_model.dart';
 import '../../core/models/subscription_model.dart';
+import '../../core/models/vpn_status.dart';
+import '../../core/providers/vpn_provider.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/servers_provider.dart';
 import '../../core/providers/settings_provider.dart';
@@ -12,7 +13,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../l10n/strings.dart';
 import '../widgets/nukefy_feedback.dart';
+import '../widgets/connect_button.dart';
 import '../widgets/responsive_sections.dart';
+import 'servers_screen.dart';
 import '../widgets/section_card.dart';
 
 /// Karing-style whitelist bypass page: subscription mirrors, latency
@@ -123,32 +126,167 @@ class _KaringScreenState extends State<KaringScreen> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final servers = context.watch<ServersProvider>();
+    final vpn = context.watch<VpnProvider>();
     final value = settings.settings;
     final s = settings.strings;
     final p = context.palette;
     final subscription = _whitelistSubscription(servers);
+    final pool = subscription == null
+        ? const <ServerModel>[]
+        : servers.serversOf(subscription.id).where((e) => !e.isInformational).toList();
+    final active = vpn.activeServer;
+    final connectedHere = active != null && pool.any((e) => e.id == active.id);
     final bottom = MediaQuery.paddingOf(context).bottom;
+
+    Future<void> toggle() async {
+      if (vpn.status == VpnStatus.connected || vpn.status == VpnStatus.connecting) {
+        await vpn.disconnect();
+        return;
+      }
+      if (connectedHere && active != null) {
+        await vpn.connect(active);
+        return;
+      }
+      if (pool.isEmpty) {
+        if (mounted) showNukefySnack(context, s.t('wlNoSubscription'));
+        return;
+      }
+      await vpn.connect(pool.first);
+    }
+
+    final powerCard = SectionCard(
+      title: s.t('karingTitle'),
+      icon: Icons.route_rounded,
+      child: Column(
+        children: [
+          Center(
+            child: ConnectButton(
+              status: vpn.status,
+              onPressed: toggle,
+            ),
+          ),
+          const SizedBox(height: 14),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 240),
+            child: Text(
+              connectedHere && active != null ? active.displayName : s.t('wlNotConnected'),
+              key: ValueKey(connectedHere ? active?.id ?? 'x' : 'none'),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value.karingEnabled ? s.t('wlModeOn') : s.t('wlModeOff'),
+            textAlign: TextAlign.center,
+            style: p.captionStyle,
+          ),
+          const SizedBox(height: 14),
+          SwitchTile(
+            icon: Icons.route_rounded,
+            title: s.t('karingEnable'),
+            subtitle: s.t('karingEnableHint'),
+            value: value.karingEnabled,
+            onChanged: _setEnabled,
+          ),
+        ],
+      ),
+    );
+
+    final serversCard = SectionCard(
+      title: subscription?.name ?? s.t('karingSub'),
+      icon: Icons.dns_rounded,
+      trailing: subscription == null
+          ? null
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: s.t('checkPing'),
+                  onPressed: servers.refreshing ? null : () => servers.pingSubscription(subscription.id),
+                  icon: const Icon(Icons.speed_rounded, size: 19),
+                ),
+                IconButton(
+                  tooltip: s.t('refresh'),
+                  onPressed: servers.refreshing ? null : () => servers.refreshSubscription(subscription.id),
+                  icon: servers.refreshing
+                      ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.refresh_rounded, size: 19),
+                ),
+              ],
+            ),
+      child: subscription == null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(s.t('karingSubHint'), style: p.secondaryStyle),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _adding ? null : () async {
+                      final mirror = await _karing.firstReachable();
+                      if (!mounted) return;
+                      await _addSubscription(mirror?.url ?? WhitelistCatalog.mirrors.first.url);
+                    },
+                    icon: _adding
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.add_rounded, size: 18),
+                    label: Text(s.t('karingAddSub')),
+                  ),
+                ),
+              ],
+            )
+          : ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 430),
+              child: ListView(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                children: [
+                  for (final server in pool.take(60))
+                    ServerTile(server: server, antiblock: value.antiblock),
+                  if (pool.length > 60)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Text('${s.t('shownCount')}: 60 / ${pool.length}', style: p.captionStyle),
+                    ),
+                ],
+              ),
+            ),
+    );
 
     return SafeArea(
       bottom: false,
       child: ResponsiveSections(
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
         children: [
+          LayoutBuilder(
+            builder: (context, constraints) => constraints.maxWidth >= 860
+                ? IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: powerCard),
+                        const SizedBox(width: 16),
+                        Expanded(flex: 2, child: serversCard),
+                      ],
+                    ),
+                  )
+                : Column(
+                    children: [powerCard, const SizedBox(height: 16), serversCard],
+                  ),
+          ),
+          // The tuning switches and mirrors live below the fold: the first
+          // screen is the connect button and the server list, nothing else.
+          const SizedBox(height: 140),
           SectionCard(
-            title: s.t('karingTitle'),
-            icon: Icons.route_rounded,
+            title: s.t('wlSettingsTitle'),
+            icon: Icons.tune_rounded,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(s.t('karingHint'), style: p.secondaryStyle),
-                const SizedBox(height: 10),
-                SwitchTile(
-                  icon: Icons.route_rounded,
-                  title: s.t('karingEnable'),
-                  subtitle: s.t('karingEnableHint'),
-                  value: value.karingEnabled,
-                  onChanged: _setEnabled,
-                ),
                 SwitchTile(
                   icon: Icons.speed_rounded,
                   title: s.t('karingBalancer'),
@@ -184,79 +322,6 @@ class _KaringScreenState extends State<KaringScreen> {
             ),
           ),
           SectionCard(
-            title: s.t('karingSub'),
-            icon: Icons.rss_feed_rounded,
-            description: s.t('karingSubHint'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (subscription != null) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: p.surface.withValues(alpha: .5),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: p.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(subscription.name, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
-                            ),
-                            Text('${servers.serversOf(subscription.id).length}', style: AppTextStyles.number.copyWith(color: p.accent)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(subscription.url, maxLines: 1, overflow: TextOverflow.ellipsis, style: p.captionStyle),
-                        if (subscription.lastError != null) ...[
-                          const SizedBox(height: 6),
-                          Text('${subscription.lastError}', style: AppTextStyles.bodySecondary.copyWith(color: p.error)),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      FilledButton.icon(
-                        onPressed: servers.refreshing ? null : () => servers.refreshSubscription(subscription.id),
-                        icon: servers.refreshing
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.refresh_rounded, size: 18),
-                        label: Text(s.t('refresh')),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _adding ? null : () => _addSubscription(subscription.url),
-                        icon: const Icon(Icons.sync_rounded, size: 18),
-                        label: Text(s.t('refresh')),
-                      ),
-                    ],
-                  ),
-                ] else
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _adding ? null : () async {
-                        final mirror = await _karing.firstReachable();
-                        if (!mounted) return;
-                        await _addSubscription(mirror?.url ?? WhitelistCatalog.mirrors.first.url);
-                      },
-                      icon: _adding
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.add_rounded, size: 18),
-                      label: Text(s.t('karingAddSub')),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          SectionCard(
             title: s.t('karingMirrors'),
             icon: Icons.cloud_queue_rounded,
             trailing: TextButton(
@@ -277,26 +342,6 @@ class _KaringScreenState extends State<KaringScreen> {
                     selected: subscription?.url == mirror.url,
                     onTap: () => _addSubscription(mirror.url),
                   ),
-              ],
-            ),
-          ),
-          SectionCard(
-            title: s.t('karingAbout'),
-            icon: Icons.menu_book_outlined,
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () => launchUrl(Uri.parse('https://github.com/KaringX/karing'), mode: LaunchMode.externalApplication),
-                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                  label: const Text('KaringX/karing'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => launchUrl(Uri.parse('https://github.com/zieng2/wl'), mode: LaunchMode.externalApplication),
-                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                  label: const Text('zieng2/wl'),
-                ),
               ],
             ),
           ),

@@ -36,6 +36,17 @@ class SingboxConfigBuilder {
     return null;
   }
 
+/// Resolved local inbound ports. Windows reserves unpredictable port
+/// ranges (Hyper-V/NAT), so a configured 10808 can be unbindable; the
+/// provider probes and substitutes a free port per session.
+class LocalPorts {
+  const LocalPorts({required this.socks, required this.http, required this.clash});
+
+  final int socks;
+  final int http;
+  final int clash;
+}
+
   static String buildJson({
     required ServerModel server,
     ServerModel? detour,
@@ -45,6 +56,7 @@ class SingboxConfigBuilder {
     required bool desktopTun,
     required bool forceProxyOnly,
     List<ServerModel> balancerPool = const [],
+    LocalPorts? ports,
   }) {
     final config = build(
       server: server,
@@ -55,6 +67,7 @@ class SingboxConfigBuilder {
       desktopTun: desktopTun,
       forceProxyOnly: forceProxyOnly,
       balancerPool: balancerPool,
+      ports: ports,
     );
     return const JsonEncoder.withIndent('  ').convert(config);
   }
@@ -68,7 +81,11 @@ class SingboxConfigBuilder {
     required bool desktopTun,
     required bool forceProxyOnly,
     List<ServerModel> balancerPool = const [],
+    LocalPorts? ports,
   }) {
+    final socksPort = ports?.socks ?? settings.socksPort;
+    final httpPort = ports?.http ?? settings.httpPort;
+    final clashPort = ports?.clash ?? AppConstants.clashApiPort;
     // The caller decides whether TUN is possible; `forceProxyOnly` is the
     // single switch (Android always has TUN via VpnService, desktop follows
     // the user setting).
@@ -145,13 +162,13 @@ class SingboxConfigBuilder {
         'type': 'socks',
         'tag': 'socks-in',
         'listen': listen,
-        'listen_port': settings.socksPort,
+        'listen_port': socksPort,
       });
       inbounds.add({
         'type': 'http',
         'tag': 'http-in',
         'listen': listen,
-        'listen_port': settings.httpPort,
+        'listen_port': httpPort,
       });
     }
 
@@ -303,7 +320,7 @@ class SingboxConfigBuilder {
       },
       'experimental': {
         'clash_api': {
-          'external_controller': '127.0.0.1:${AppConstants.clashApiPort}',
+          'external_controller': '127.0.0.1:$clashPort',
           'secret': '',
         },
         'cache_file': {

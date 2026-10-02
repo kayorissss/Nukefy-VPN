@@ -640,8 +640,10 @@ class VpnPlatform {
   /// result can be copied instead of being hidden behind a spinner.
   Future<String> flushDnsCache() async {
     if (Platform.isWindows) {
+      // The localized ipconfig banner arrives in the OEM codepage and turns
+      // into mojibake when shown verbatim: report our own sentence instead.
       final result = await Process.run('ipconfig', ['/flushdns']);
-      return '${result.stdout}${result.stderr}'.trim();
+      return result.exitCode == 0 ? '' : 'exit ${result.exitCode}';
     }
     if (Platform.isLinux) {
       final result = await Process.run('resolvectl', ['flush-caches']);
@@ -681,9 +683,10 @@ class VpnPlatform {
       ('ipconfig', ['/flushdns']),
     ]) {
       final result = await Process.run(command.$1, command.$2);
-      results.add('${command.$1}: ${result.stdout}${result.stderr}'.trim());
+      results.add('${command.$1}: ${result.exitCode == 0 ? 'OK' : 'exit ${result.exitCode}'}');
     }
-    return results.join('\\n');
+    results.add('reboot: recommended');
+    return results.join('\n');
   }
 
   Future<String> downloadCore({

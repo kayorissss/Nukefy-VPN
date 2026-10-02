@@ -54,6 +54,22 @@ class ServersScreen extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(child: Text(s.t('servers'), style: AppTextStyles.title)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: SizedBox(
+                            height: 42,
+                            child: TextField(
+                              onChanged: servers.setQuery,
+                              decoration: InputDecoration(
+                                hintText: s.t('search'),
+                                prefixIcon: const Icon(Icons.search_rounded),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
                         // «Ввести вручную», «Импорт из файла» и «Проверить пинг»
                         // live here, the two main actions stay on the surface.
                         PopupMenuButton<String>(
@@ -123,14 +139,6 @@ class ServersScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      onChanged: servers.setQuery,
-                      decoration: InputDecoration(
-                        hintText: s.t('search'),
-                        prefixIcon: const Icon(Icons.search_rounded),
-                      ),
-                    ),
                     const SizedBox(height: 4),
                   ],
                 ),
@@ -161,6 +169,7 @@ class ServersScreen extends StatelessWidget {
                   child: _SubscriptionBlock(
                     key: ValueKey(subs[i].id),
                     subscription: subs[i],
+                    initiallyOpen: i == _openIndex(subs, servers, settings.settings.selectedServerId),
                     number: i + 1,
                     servers: visible.where((e) => e.subscriptionId == subs[i].id).toList(),
                     antiblock: settings.settings.antiblock,
@@ -178,6 +187,15 @@ class ServersScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// The subscription the user actually rides opens expanded; the rest stay
+  /// folded so the page is not a wall of open lists.
+  static int _openIndex(List<SubscriptionModel> subs, ServersProvider provider, String? selectedServerId) {
+    final active = provider.byId(selectedServerId)?.subscriptionId;
+    final index = subs.indexWhere((e) => e.id == active);
+    if (index >= 0) return index;
+    return subs.isEmpty ? -1 : 0;
   }
 
   List<ServerModel> _ordered(ServersProvider provider, bool bridgesFirst) {
@@ -263,13 +281,14 @@ class _SubscriptionBlock extends StatefulWidget {
   final int number;
   final List<ServerModel> servers;
   final bool antiblock;
+  final bool initiallyOpen;
 
   @override
   State<_SubscriptionBlock> createState() => _SubscriptionBlockState();
 }
 
 class _SubscriptionBlockState extends State<_SubscriptionBlock> {
-  bool _open = true;
+  late bool _open = widget.initiallyOpen;
   bool _pinging = false;
 
   static const _page = 40;
@@ -301,10 +320,14 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
           border: Border.all(color: p.border),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Column(
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(22),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             InkWell(
+              borderRadius: BorderRadius.circular(22),
               onTap: () => setState(() => _open = !_open),
               onLongPress: () => _subscriptionMenu(context, sub),
               onSecondaryTap: () => _subscriptionMenu(context, sub),
@@ -414,6 +437,7 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );

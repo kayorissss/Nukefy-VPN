@@ -43,146 +43,275 @@ class _StatsScreenState extends State<StatsScreen> {
     final totalDown = settings.settings.allTimeDown + stats.sessionDown;
     return SafeArea(
       bottom: false,
-      child: ResponsiveSections(
+      child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.paddingOf(context).bottom + 100),
-        children: [
-          // Session summary stays above the graph: duration first, then the
-          // live down/up pair. This mirrors the order people scan while
-          // troubleshooting a connection.
-          Container(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) => constraints.maxWidth >= 900
+                  ? IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(s.t('statsSessionTime').toUpperCase(), style: context.palette.captionStyle),
-                          const SizedBox(height: 8),
-                          Text(FormatUtils.duration(stats.sessionDuration), style: AppTextStyles.metric.copyWith(fontFamily: AppTextStyles.mono, fontSize: 30)),
+                          Expanded(
+                            child:
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(color: Theme.of(context).dividerColor),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 2,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(s.t('statsSessionTime').toUpperCase(), style: context.palette.captionStyle),
+                                            const SizedBox(height: 8),
+                                            Text(FormatUtils.duration(stats.sessionDuration), style: AppTextStyles.metric.copyWith(fontFamily: AppTextStyles.mono, fontSize: 30)),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(width: 1, height: 58, color: Theme.of(context).dividerColor),
+                                      Expanded(child: _SpeedNow(icon: Icons.arrow_downward_rounded, caption: s.t('trafficDown'), value: FormatUtils.speed(stats.downBps), color: p.success)),
+                                      Expanded(child: _SpeedNow(icon: Icons.arrow_upward_rounded, caption: s.t('upload'), value: FormatUtils.speed(stats.upBps), color: p.accent)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Divider(height: 1, color: p.border),
+                                  const SizedBox(height: 10),
+                                  Text(s.t('allTraffic').toUpperCase(), style: p.captionStyle),
+                                  const SizedBox(height: 7),
+                                  Row(
+                                    children: [
+                                      Expanded(child: _TrafficTotal(icon: Icons.arrow_downward_rounded, label: s.t('trafficDown'), value: FormatUtils.bytes(totalDown), color: p.success)),
+                                      const SizedBox(width: 10),
+                                      Expanded(child: _TrafficTotal(icon: Icons.arrow_upward_rounded, label: s.t('upload'), value: FormatUtils.bytes(totalUp), color: p.accent)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            )
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child:
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(color: Theme.of(context).dividerColor),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      _Legend(color: p.success, label: s.t('trafficDown')),
+                                      const SizedBox(width: 14),
+                                      _Legend(color: p.accent, label: s.t('upload')),
+                                      const Spacer(),
+                                      Text(s.t('statsNow'), style: context.palette.captionStyle),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    height: 240,
+                                    width: double.infinity,
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        CustomPaint(
+                                          painter: _SpeedChartPainter(samples: stats.samples, palette: context.palette),
+                                        ),
+                                        if (stats.samples.isEmpty)
+                                          Center(
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(24),
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(Icons.monitor_heart_outlined, size: 30, color: p.textSecondary),
+                                                  const SizedBox(height: 10),
+                                                  Text(s.t('statsNoTraffic'), textAlign: TextAlign.center, style: p.secondaryStyle),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          ),
                         ],
                       ),
-                    ),
-                    Container(width: 1, height: 58, color: Theme.of(context).dividerColor),
-                    Expanded(child: _SpeedNow(icon: Icons.arrow_downward_rounded, caption: s.t('trafficDown'), value: FormatUtils.speed(stats.downBps), color: p.success)),
-                    Expanded(child: _SpeedNow(icon: Icons.arrow_upward_rounded, caption: s.t('upload'), value: FormatUtils.speed(stats.upBps), color: p.accent)),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Divider(height: 1, color: p.border),
-                const SizedBox(height: 10),
-                Text(s.t('allTraffic').toUpperCase(), style: p.captionStyle),
-                const SizedBox(height: 7),
-                Row(
-                  children: [
-                    Expanded(child: _TrafficTotal(icon: Icons.arrow_downward_rounded, label: s.t('trafficDown'), value: FormatUtils.bytes(totalDown), color: p.success)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _TrafficTotal(icon: Icons.arrow_upward_rounded, label: s.t('upload'), value: FormatUtils.bytes(totalUp), color: p.accent)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          // Big traffic chart.
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    _Legend(color: p.success, label: s.t('trafficDown')),
-                    const SizedBox(width: 14),
-                    _Legend(color: p.accent, label: s.t('upload')),
-                    const Spacer(),
-                    Text(s.t('statsNow'), style: context.palette.captionStyle),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 240,
-                  width: double.infinity,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CustomPaint(
-                        painter: _SpeedChartPainter(samples: stats.samples, palette: context.palette),
-                      ),
-                      if (stats.samples.isEmpty)
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.monitor_heart_outlined, size: 30, color: p.textSecondary),
-                                const SizedBox(height: 10),
-                                Text(s.t('statsNoTraffic'), textAlign: TextAlign.center, style: p.secondaryStyle),
-                              ],
-                            ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(color: Theme.of(context).dividerColor),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 2,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(s.t('statsSessionTime').toUpperCase(), style: context.palette.captionStyle),
+                                        const SizedBox(height: 8),
+                                        Text(FormatUtils.duration(stats.sessionDuration), style: AppTextStyles.metric.copyWith(fontFamily: AppTextStyles.mono, fontSize: 30)),
+                                      ],
+                                    ),
+                                  ),
+                                  Container(width: 1, height: 58, color: Theme.of(context).dividerColor),
+                                  Expanded(child: _SpeedNow(icon: Icons.arrow_downward_rounded, caption: s.t('trafficDown'), value: FormatUtils.speed(stats.downBps), color: p.success)),
+                                  Expanded(child: _SpeedNow(icon: Icons.arrow_upward_rounded, caption: s.t('upload'), value: FormatUtils.speed(stats.upBps), color: p.accent)),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              Divider(height: 1, color: p.border),
+                              const SizedBox(height: 10),
+                              Text(s.t('allTraffic').toUpperCase(), style: p.captionStyle),
+                              const SizedBox(height: 7),
+                              Row(
+                                children: [
+                                  Expanded(child: _TrafficTotal(icon: Icons.arrow_downward_rounded, label: s.t('trafficDown'), value: FormatUtils.bytes(totalDown), color: p.success)),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: _TrafficTotal(icon: Icons.arrow_upward_rounded, label: s.t('upload'), value: FormatUtils.bytes(totalUp), color: p.accent)),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(color: Theme.of(context).dividerColor),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  _Legend(color: p.success, label: s.t('trafficDown')),
+                                  const SizedBox(width: 14),
+                                  _Legend(color: p.accent, label: s.t('upload')),
+                                  const Spacer(),
+                                  Text(s.t('statsNow'), style: context.palette.captionStyle),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                height: 240,
+                                width: double.infinity,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    CustomPaint(
+                                      painter: _SpeedChartPainter(samples: stats.samples, palette: context.palette),
+                                    ),
+                                    if (stats.samples.isEmpty)
+                                      Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(24),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.monitor_heart_outlined, size: 30, color: p.textSecondary),
+                                              const SizedBox(height: 10),
+                                              Text(s.t('statsNoTraffic'), textAlign: TextAlign.center, style: p.secondaryStyle),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+            const SizedBox(height: 18),
+            // The journal is one full-width block: header line with the
+            // clear action, then the entries stretched edge to edge.
+            Container(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: Theme.of(context).dividerColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text(s.t('log').toUpperCase(), style: context.palette.sectionStyle),
+                      const Spacer(),
+                      TextButton(onPressed: _clearLogs, child: Text(s.t('clear'))),
                     ],
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Text(s.t('log').toUpperCase(), style: context.palette.sectionStyle),
-              const Spacer(),
-              TextButton(onPressed: _clearLogs, child: Text(s.t('clear'))),
-            ],
-          ),
-          if (stats.logs.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(s.t('logEmpty'), style: context.palette.secondaryStyle),
-            )
-          else ...[
-            Builder(
-              builder: (context) {
-                const pageSize = 8;
-                final newestFirst = stats.logs.reversed.toList(growable: false);
-                final pageCount = (newestFirst.length / pageSize).ceil();
-                final page = _logPage.clamp(0, pageCount - 1);
-                final entries = newestFirst.skip(page * pageSize).take(pageSize);
-                return Column(
-                  children: [
-                    for (final entry in entries)
-                      _JournalLine(entry: entry, palette: p),
-                    if (pageCount > 1)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IconButton(onPressed: page > 0 ? () => setState(() => _logPage = page - 1) : null, icon: const Icon(Icons.chevron_left_rounded)),
-                          Text('${page + 1} / $pageCount', style: context.palette.captionStyle),
-                          IconButton(onPressed: page + 1 < pageCount ? () => setState(() => _logPage = page + 1) : null, icon: const Icon(Icons.chevron_right_rounded)),
-                        ],
-                      ),
+                  const SizedBox(height: 8),
+                  if (stats.logs.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(s.t('logEmpty'), style: context.palette.secondaryStyle),
+                    )
+                  else ...[
+                    Builder(
+                      builder: (context) {
+                        const pageSize = 8;
+                        final newestFirst = stats.logs.reversed.toList(growable: false);
+                        final pageCount = (newestFirst.length / pageSize).ceil();
+                        final page = _logPage.clamp(0, pageCount - 1);
+                        final entries = newestFirst.skip(page * pageSize).take(pageSize);
+                        return Column(
+                          children: [
+                            for (final entry in entries)
+                              _JournalLine(entry: entry, palette: p),
+                            if (pageCount > 1)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  IconButton(onPressed: page > 0 ? () => setState(() => _logPage = page - 1) : null, icon: const Icon(Icons.chevron_left_rounded)),
+                                  Text('${page + 1} / $pageCount', style: context.palette.captionStyle),
+                                  IconButton(onPressed: page + 1 < pageCount ? () => setState(() => _logPage = page + 1) : null, icon: const Icon(Icons.chevron_right_rounded)),
+                                ],
+                              ),
+                          ],
+                        );
+                      },
+                    ),
                   ],
-                );
-              },
+                ],
+              ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }

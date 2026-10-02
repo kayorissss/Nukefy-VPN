@@ -55,7 +55,8 @@ class MainShell extends StatelessWidget {
       if (zapret) _TabSpec(Icons.shield_rounded, Icons.shield_outlined, s.t('zapret'), NavDestination.zapret),
       _TabSpec(Icons.route_rounded, Icons.route_outlined, s.t('tabKaring'), NavDestination.karing),
       _TabSpec(Icons.speed_rounded, Icons.speed_outlined, s.t('speedTest'), NavDestination.speedTest),
-      _TabSpec(Icons.library_music_rounded, Icons.library_music_outlined, s.t('music'), NavDestination.music),
+      if (context.watch<SettingsProvider>().settings.musicUnlocked || context.watch<MusicService>().tracks.isNotEmpty)
+        _TabSpec(Icons.library_music_rounded, Icons.library_music_outlined, s.t('music'), NavDestination.music),
       if (zapret) _TabSpec(Icons.send_rounded, Icons.send_outlined, s.t('tgProxy'), NavDestination.telegramProxy),
       _TabSpec(Icons.radar_rounded, Icons.radar_outlined, s.t('jammers'), NavDestination.jammers),
       _TabSpec(Icons.insights_rounded, Icons.insights_outlined, s.t('stats'), NavDestination.stats),
@@ -751,7 +752,7 @@ class _SideRail extends StatelessWidget {
 }
 
 class _RailMusicMini extends StatelessWidget {
-  const _RailMusicMini();
+  const _RailMusicMini({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -760,131 +761,177 @@ class _RailMusicMini extends StatelessWidget {
     if (track == null) return const SizedBox.shrink();
     final p = context.palette;
     final s = context.read<SettingsProvider>().strings;
-    final artwork = track.artworkPath;
     final total = music.duration.inMilliseconds <= 0 ? 1.0 : music.duration.inMilliseconds.toDouble();
     final position = music.position.inMilliseconds.clamp(0, total.toInt()).toDouble();
-    final fallback = ColoredBox(
-      color: p.accent.withValues(alpha: .14),
-      child: Icon(Icons.music_note_rounded, color: p.accent, size: 22),
-    );
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-      decoration: BoxDecoration(
-        color: p.surface,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: p.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+    final artwork = track.artworkPath;
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: p.accent.withValues(alpha: .3)),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              SizedBox(
-                width: 42,
-                height: 42,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(11),
-                  child: artwork == null
-                      ? fallback
-                      : Image.file(File(artwork), fit: BoxFit.cover, errorBuilder: (_, _, _) => fallback),
+              // Blown-up artwork as a soft backdrop; gradient when absent.
+              if (artwork != null)
+                ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: Image.file(File(artwork), fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink()),
+                )
+              else
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [p.accent.withValues(alpha: .25), p.accent2.withValues(alpha: .15)],
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
+              Container(color: p.background.withValues(alpha: .72)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      track.title.trim().isEmpty ? s.t('musicUntitled') : track.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.bodyRegular.copyWith(fontSize: 11.5, fontWeight: FontWeight.w800),
+                    Row(
+                      children: [
+                        _RailArtwork(path: artwork, size: 42),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(track.title.trim().isEmpty ? s.t('musicUntitled') : track.title,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800, fontSize: 12)),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(track.artist.trim().isEmpty ? s.t('musicUnknownArtist') : track.artist,
+                                        maxLines: 1, overflow: TextOverflow.ellipsis, style: p.captionStyle),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  MusicVisualizer(active: music.isPlaying, color: p.accent, height: 14, barCount: 5),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      track.artist.trim().isEmpty ? s.t('musicUnknownArtist') : track.artist,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: p.captionStyle,
+                    // Visible progress with timestamps on both sides.
+                    Row(
+                      children: [
+                        Text(_railMusicDuration(music.position), style: p.captionStyle.copyWith(fontSize: 8)),
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 3,
+                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                              overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+                            ),
+                            child: Slider(
+                              value: position,
+                              max: total,
+                              onChanged: (value) => music.seek(Duration(milliseconds: value.round())),
+                            ),
+                          ),
+                        ),
+                        Text(_railMusicDuration(music.duration), style: p.captionStyle.copyWith(fontSize: 8)),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _Pressable(onTap: music.previous, child: const Icon(Icons.skip_previous_rounded, size: 20)),
+                        const SizedBox(width: 6),
+                        _Pressable(
+                          onTap: music.toggle,
+                          child: Icon(music.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
+                              color: p.accent, size: 30),
+                        ),
+                        const SizedBox(width: 6),
+                        _Pressable(onTap: music.next, child: const Icon(Icons.skip_next_rounded, size: 20)),
+                        const SizedBox(width: 10),
+                        _Pressable(onTap: music.stop, child: Icon(Icons.stop_rounded, size: 16, color: p.textSecondary)),
+                      ],
                     ),
                   ],
                 ),
               ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                tooltip: s.t('musicStop'),
-                onPressed: music.stop,
-                icon: Icon(Icons.stop_rounded, size: 17, color: p.textSecondary),
-              ),
             ],
           ),
-          const SizedBox(height: 3),
-          Row(
-            children: [
-              Text(_railMusicDuration(music.position), style: p.captionStyle.copyWith(fontSize: 8)),
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 2,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 9),
-                  ),
-                  child: Slider(
-                    value: position,
-                    max: total,
-                    onChanged: (value) => music.seek(Duration(milliseconds: value.round())),
-                  ),
-                ),
-              ),
-              Text(_railMusicDuration(music.duration), style: p.captionStyle.copyWith(fontSize: 8)),
-            ],
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                tooltip: s.t('musicPrevious'),
-                onPressed: music.previous,
-                icon: const Icon(Icons.skip_previous_rounded, size: 19),
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                tooltip: music.isPlaying ? s.t('musicPause') : s.t('musicPlay'),
-                onPressed: music.toggle,
-                icon: Icon(music.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded, color: p.accent, size: 27),
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                tooltip: s.t('musicNext'),
-                onPressed: music.next,
-                icon: const Icon(Icons.skip_next_rounded, size: 19),
-              ),
-              const SizedBox(width: 5),
-              Icon(Icons.volume_down_rounded, size: 14, color: p.textSecondary),
-              SizedBox(
-                width: 48,
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 2,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 3),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 7),
-                  ),
-                  child: Slider(value: music.volume, min: 0, max: 1, onChanged: music.setVolume),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
+    );
+  }
+}
+
+/// Buttons must feel like buttons: a quick scale dip on press.
+class _Pressable extends StatefulWidget {
+  const _Pressable({required this.onTap, required this.child});
+
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_Pressable> createState() => _PressableState();
+}
+
+class _PressableState extends State<_Pressable> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _down = true),
+      onTapUp: (_) => setState(() => _down = false),
+      onTapCancel: () => setState(() => _down = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? 0.86 : 1,
+        duration: const Duration(milliseconds: 90),
+        child: Padding(padding: const EdgeInsets.all(4), child: widget.child),
+      ),
+    );
+  }
+}
+
+class _RailArtwork extends StatelessWidget {
+  const _RailArtwork({required this.path, required this.size});
+
+  final String? path;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final fallback = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [p.accent.withValues(alpha: .3), p.accent2.withValues(alpha: .22)]),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(Icons.music_note_rounded, color: p.accent, size: size * .45),
+    );
+    final file = path;
+    if (file == null) return fallback;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Image.file(File(file), width: size, height: size, fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => fallback),
     );
   }
 }

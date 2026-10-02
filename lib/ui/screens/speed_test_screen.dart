@@ -328,7 +328,9 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                   ),
                 ),
               ],
-              const SizedBox(height: 26),
+              // The history lives below the fold: the first screen is the
+              // gauge and the live numbers only.
+              SizedBox(height: MediaQuery.of(context).size.height * 0.24),
               Text(s.t('speedTestHistory').toUpperCase(), style: AppTextStyles.section.copyWith(color: p.textSecondary)),
               const SizedBox(height: 10),
               if (_history.isEmpty)

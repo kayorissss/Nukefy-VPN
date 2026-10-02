@@ -114,12 +114,17 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
     _plan = items;
   }
 
+  final List<String> _applied = [];
+
   Future<void> _apply() async {
     final settings = context.read<SettingsProvider>();
     final servers = context.read<ServersProvider>();
     final vpn = context.read<VpnProvider>();
     setState(() => _busy = true);
     final chosen = _plan.where((item) => item.checked).map((item) => item.id).toSet();
+    _applied
+      ..clear()
+      ..addAll(_plan.where((item) => item.checked).map((item) => item.label));
     try {
       await settings.update((value) {
         if (chosen.contains('zapret')) value.zapretAutoStart = true;
@@ -382,6 +387,33 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
           Icon(Icons.check_circle_rounded, size: 64, color: p.success),
           const SizedBox(height: 14),
           Text(s.t('autoApplied'), style: AppTextStyles.title),
+          if (_applied.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final label in _applied)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: p.success.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: p.success.withValues(alpha: .4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_rounded, size: 14, color: p.success),
+                        const SizedBox(width: 6),
+                        Text(label, style: AppTextStyles.bodySecondary.copyWith(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ],
           if (_restartNeeded) ...[
             const SizedBox(height: 10),
             Text(s.t('autoRestartNeeded'), style: p.secondaryStyle, textAlign: TextAlign.center),

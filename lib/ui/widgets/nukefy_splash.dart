@@ -73,7 +73,12 @@ class _NukefySplashState extends State<NukefySplash> with SingleTickerProviderSt
                         ),
                         child: Text(
                           'NUKEFY VPN',
-                          style: AppTextStyles.status.copyWith(color: p.text, fontSize: 15, letterSpacing: 4),
+                          style: AppTextStyles.status.copyWith(
+                            color: p.text,
+                            fontSize: 15,
+                            letterSpacing: 4,
+                            decoration: TextDecoration.none,
+                          ),
                         ),
                       ),
                     ),

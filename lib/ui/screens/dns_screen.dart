@@ -4,10 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../../core/providers/settings_provider.dart';
 import '../../core/services/vpn_platform.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../widgets/nukefy_feedback.dart';
-import '../widgets/responsive_sections.dart';
 import '../widgets/section_card.dart';
 
 class DnsScreen extends StatefulWidget {
@@ -114,9 +112,11 @@ class _DnsScreenState extends State<DnsScreen> {
     final s = settings.strings;
     final bottom = MediaQuery.paddingOf(context).bottom;
     final selected = _presets.containsKey(value.dnsPreset) ? value.dnsPreset : 'custom';
-    final content = ResponsiveSections(
+    final content = SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
-        children: [
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           SectionCard(
             title: s.t('dnsTitle'),
             icon: Icons.dns_rounded,
@@ -126,21 +126,21 @@ class _DnsScreenState extends State<DnsScreen> {
               children: [
                 Text(s.t('dnsHint'), style: context.palette.secondaryStyle),
                 const SizedBox(height: 14),
-                LayoutBuilder(
-                  builder: (context, constraints) => Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (final entry in _presets.entries)
-                        _DnsPreset(
-                          width: constraints.maxWidth < 500 ? (constraints.maxWidth - 10) / 2 : 164,
-                          label: s.t(entry.value.labelKey),
-                          icon: entry.value.icon,
-                          selected: selected == entry.key,
-                          onTap: () => _select(entry.key),
-                        ),
-                    ],
-                  ),
+                // Numbered providers flow left to right; the picked one gets
+                // a filled radio dot instead of a check mark.
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (var i = 0; i < _presets.length; i++)
+                      _DnsPreset(
+                        number: i + 1,
+                        label: s.t(_presets.entries.elementAt(i).value.labelKey),
+                        icon: _presets.entries.elementAt(i).value.icon,
+                        selected: selected == _presets.entries.elementAt(i).key,
+                        onTap: () => _select(_presets.entries.elementAt(i).key),
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -177,6 +177,7 @@ class _DnsScreenState extends State<DnsScreen> {
             ),
           ),
         ],
+        ),
       );
     // The DNS page is also reachable from the mobile/general settings route.
     // Give that pushed route a real back affordance; without it the page
@@ -200,9 +201,9 @@ class _DnsScreenState extends State<DnsScreen> {
 }
 
 class _DnsPreset extends StatelessWidget {
-  const _DnsPreset({required this.width, required this.label, required this.icon, required this.selected, required this.onTap});
+  const _DnsPreset({required this.number, required this.label, required this.icon, required this.selected, required this.onTap});
 
-  final double width;
+  final int number;
   final String label;
   final IconData icon;
   final bool selected;
@@ -217,22 +218,41 @@ class _DnsPreset extends StatelessWidget {
       label: label,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(16),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: width,
+          duration: const Duration(milliseconds: 200),
+          width: 250,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             color: selected ? p.accent.withValues(alpha: .14) : p.surface,
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: selected ? p.accent.withValues(alpha: .65) : p.border, width: selected ? 1.4 : 1),
           ),
           child: Row(
             children: [
+              Text('#$number', style: AppTextStyles.number.copyWith(color: selected ? p.accent : p.textDisabled, fontSize: 12)),
+              const SizedBox(width: 10),
               Icon(icon, size: 19, color: selected ? p.accent : p.textSecondary),
               const SizedBox(width: 8),
-              Expanded(child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodySecondary.copyWith(color: selected ? p.text : p.textSecondary, fontWeight: FontWeight.w700))),
-              if (selected) Icon(Icons.check_rounded, size: 17, color: p.accent),
+              Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodySecondary.copyWith(color: selected ? p.text : p.textSecondary, fontWeight: FontWeight.w700))),
+              // Radio dot: an animated circle that fills when picked.
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: selected ? p.accent : p.textDisabled, width: 2),
+                ),
+                child: Center(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: selected ? 10 : 0,
+                    height: selected ? 10 : 0,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: p.accent),
+                  ),
+                ),
+              ),
             ],
           ),
         ),

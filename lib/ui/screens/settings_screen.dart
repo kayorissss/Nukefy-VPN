@@ -517,17 +517,24 @@ class _UpdateBannerState extends State<_UpdateBanner> {
     Future<void>.microtask(_check);
   }
 
+  bool _noUpdates = false;
+
   Future<void> _check() async {
     if (_busy) return;
     setState(() {
       _busy = true;
       _error = null;
+      _noUpdates = false;
     });
     try {
       final info = await UpdateService().check();
       if (!mounted) return;
       final skipped = context.read<SettingsProvider>().settings.skippedVersion;
-      setState(() => _info = info != null && info.version != skipped ? info : null);
+      final visible = info != null && info.version != skipped ? info : null;
+      setState(() {
+        _info = visible;
+        _noUpdates = visible == null;
+      });
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
@@ -558,7 +565,18 @@ class _UpdateBannerState extends State<_UpdateBanner> {
               children: [
                 Text(info == null ? s.t('checkUpdates') : '${s.t('updateAvailable')} · ${info.version}', style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                Text(info == null ? (_error ?? s.t('updateCardHint')) : s.t('updateCardHint'), maxLines: 2, overflow: TextOverflow.ellipsis, style: p.secondaryStyle),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 240),
+                  child: Text(
+                    info == null
+                        ? (_error ?? (_noUpdates && !_busy ? s.t('updatesNone') : s.t('updateCardHint')))
+                        : s.t('updateCardHint'),
+                    key: ValueKey(info == null ? (_error ?? (_noUpdates ? 'none' : 'hint')) : 'update'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: p.secondaryStyle,
+                  ),
+                ),
                 if (_error != null) ...[const SizedBox(height: 4), SelectableText(_error!, style: p.captionStyle)],
               ],
             ),
@@ -683,6 +701,9 @@ class _AppearanceCard extends StatelessWidget {
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(2, 0, 2, 12),
                     child: Wrap(
+                      alignment: WrapAlignment.center,
+                      runAlignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       spacing: gap,
                       runSpacing: gap,
                       children: [
@@ -825,7 +846,7 @@ class _XrayCard extends StatelessWidget {
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
-          child: FilledButton.icon(
+          child: OutlinedButton.icon(
             onPressed: vpn.xrayCoreBusy ? null : () => installed ? _confirmXray(context) : _downloadXray(context),
             icon: vpn.xrayCoreBusy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download_rounded),
             label: Text(installed ? strings.t('xrayUpdate') : strings.t('xrayDownload')),
@@ -1041,7 +1062,7 @@ class _MoreCard extends StatefulWidget {
 }
 
 class _MoreCardState extends State<_MoreCard> {
-  bool _open = false;
+  bool _open = true;
 
   @override
   Widget build(BuildContext context) {
