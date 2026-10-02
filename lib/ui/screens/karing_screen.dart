@@ -4,7 +4,6 @@ import '../../core/models/server_model.dart';
 import '../../core/models/subscription_model.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/vpn_provider.dart';
-import '../../core/models/vpn_status.dart';
 import '../../core/providers/servers_provider.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/services/karing_service.dart';
@@ -134,8 +133,8 @@ class _KaringScreenState extends State<KaringScreen> {
     final pool = subscription == null
         ? const <ServerModel>[]
         : servers.serversOf(subscription.id).where((e) => !e.isInformational).toList();
-    final active = vpn.activeServer;
-    final connectedHere = active != null && pool.any((e) => e.id == active.id);
+    final activeSrv = vpn.activeServer;
+    final connectedHere = activeSrv != null && pool.any((e) => e.id == activeSrv.id);
     final bottom = MediaQuery.paddingOf(context).bottom;
 
     Future<void> toggle() async {
@@ -143,8 +142,8 @@ class _KaringScreenState extends State<KaringScreen> {
         await vpn.disconnect();
         return;
       }
-      if (connectedHere && active != null) {
-        await vpn.connect(active);
+      if (connectedHere && activeSrv != null) {
+        await vpn.connect(activeSrv);
         return;
       }
       if (pool.isEmpty) {
@@ -169,8 +168,8 @@ class _KaringScreenState extends State<KaringScreen> {
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 240),
             child: Text(
-              connectedHere && active != null ? active.displayName : s.t('wlNotConnected'),
-              key: ValueKey(connectedHere ? active?.id ?? 'x' : 'none'),
+              connectedHere && activeSrv != null ? activeSrv.displayName : s.t('wlNotConnected'),
+              key: ValueKey(connectedHere ? activeSrv?.id ?? 'x' : 'none'),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

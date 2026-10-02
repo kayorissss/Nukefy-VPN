@@ -37,7 +37,6 @@ class XrayConfigBuilder {
       throw const XrayConfigException('XRAY_TRANSPORT_MISSING');
     }
     final listen = settings.allowLan ? '0.0.0.0' : '127.0.0.1';
-    final httpPort = ports?.http ?? settings.httpPort;
     final inbounds = <Map<String, dynamic>>[];
     // The SOCKS inbound is internal when the sing-box TUN front-end is
     // active, and becomes the user-facing local proxy otherwise.
@@ -91,6 +90,7 @@ class XrayConfigBuilder {
     LocalPorts? ports,
   }) {
     final listen = settings.allowLan ? '0.0.0.0' : '127.0.0.1';
+    final httpPort = ports?.http ?? settings.httpPort;
     final inbounds = <Map<String, dynamic>>[];
     if (useTun) {
       inbounds.add({

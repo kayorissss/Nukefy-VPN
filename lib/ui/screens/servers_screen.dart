@@ -275,6 +275,7 @@ class _SubscriptionBlock extends StatefulWidget {
     required this.number,
     required this.servers,
     required this.antiblock,
+    this.initiallyOpen = false,
   });
 
   final SubscriptionModel subscription;

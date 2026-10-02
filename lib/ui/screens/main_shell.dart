@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -752,7 +753,7 @@ class _SideRail extends StatelessWidget {
 }
 
 class _RailMusicMini extends StatelessWidget {
-  const _RailMusicMini({super.key});
+  const _RailMusicMini();
 
   @override
   Widget build(BuildContext context) {

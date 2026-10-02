@@ -456,7 +456,6 @@ class _WideDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
     return Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 860),

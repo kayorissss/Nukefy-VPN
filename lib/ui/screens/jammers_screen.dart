@@ -285,7 +285,7 @@ class _VerdictCard extends StatelessWidget {
                     Expanded(child: message),
                     if (trailing != null) ...[
                       const SizedBox(width: 16),
-                      trailing,
+                      trailing!,
                     ],
                   ],
                 ),
@@ -360,7 +360,7 @@ Uint8List? _bytes;
       final request = await client.getUrl(Uri.parse('https://www.google.com/s2/favicons?domain=${widget.host}&sz=64'));
       final response = await request.close().timeout(const Duration(seconds: 8));
       final builder = BytesBuilder(copy: false);
-      await for (final chunk in response.stream) {
+      await for (final chunk in response) {
         builder.add(chunk);
       }
       client.close(force: true);

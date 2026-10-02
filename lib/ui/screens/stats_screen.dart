@@ -1,5 +1,4 @@
 import '../widgets/nukefy_feedback.dart';
-import '../widgets/responsive_sections.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 

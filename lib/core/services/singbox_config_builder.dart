@@ -6,6 +6,17 @@ import '../models/app_settings.dart';
 import '../models/server_model.dart';
 import '../models/vpn_status.dart';
 
+/// Resolved local inbound ports. Windows reserves unpredictable port
+/// ranges (Hyper-V/NAT), so a configured 10808 can be unbindable; the
+/// provider probes and substitutes a free port per session.
+class LocalPorts {
+  const LocalPorts({required this.socks, required this.http, required this.clash});
+
+  final int socks;
+  final int http;
+  final int clash;
+}
+
 class SingboxConfigBuilder {
   /// Outbound types that are intentionally routed through sing-box.  Keeping
   /// this list next to the config builder prevents a parser-only "support"
@@ -35,17 +46,6 @@ class SingboxConfigBuilder {
     if (server.outbound == null) return 'CORE_OUTBOUND_MISSING';
     return null;
   }
-
-/// Resolved local inbound ports. Windows reserves unpredictable port
-/// ranges (Hyper-V/NAT), so a configured 10808 can be unbindable; the
-/// provider probes and substitutes a free port per session.
-class LocalPorts {
-  const LocalPorts({required this.socks, required this.http, required this.clash});
-
-  final int socks;
-  final int http;
-  final int clash;
-}
 
   static String buildJson({
     required ServerModel server,
