@@ -142,8 +142,8 @@ class _KaringScreenState extends State<KaringScreen> {
         await vpn.disconnect();
         return;
       }
-      if (connectedHere && activeSrv != null) {
-        await vpn.connect(activeSrv);
+      if (connectedHere) {
+        await vpn.connect(activeSrv!);
         return;
       }
       if (pool.isEmpty) {
@@ -168,8 +168,8 @@ class _KaringScreenState extends State<KaringScreen> {
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 240),
             child: Text(
-              connectedHere && activeSrv != null ? activeSrv.displayName : s.t('wlNotConnected'),
-              key: ValueKey(connectedHere ? activeSrv?.id ?? 'x' : 'none'),
+              connectedHere ? activeSrv!.displayName : s.t('wlNotConnected'),
+              key: ValueKey(connectedHere ? activeSrv!.id : 'none'),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

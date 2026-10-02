@@ -7,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/settings_provider.dart';
-import '../../core/providers/nav_provider.dart';
 import '../../core/providers/vpn_provider.dart';
 import '../../core/services/game_blocklist_service.dart';
 import '../../core/services/zapret_probe.dart';
@@ -324,7 +323,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
                 value: chosen?.id ?? '',
                 items: {for (final item in _strategies) item.id: '#${item.number.toString().padLeft(2, '0')} ${item.title}'},
                 onChanged: busy
-                    ? null
+                    ? (_) {}
                     : (id) => _run(() async {
                           final strategy = _strategies.where((e) => e.id == id).firstOrNull;
                           if (strategy == null) return;
@@ -850,7 +849,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
                                   // be replaceable, not "already installed".
                                   await _zapret.removeService();
                                 }
-                                await _zapret.installService(chosen!);
+                                await _zapret.installService(chosen);
                                 if (mounted) showNukefySnack(context, s.t('zServiceInstalled'));
                               } catch (error) {
                                 if (mounted) showNukefySnack(context, '$error');
