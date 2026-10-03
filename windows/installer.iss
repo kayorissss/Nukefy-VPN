@@ -39,7 +39,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; The WinDivert driver binaries stay locked by the kernel while the zapret
+; service (or a stray winws.exe) is alive. PrepareToInstall stops the stack
+; first; restartreplace is the last-resort fallback so an upgrade never dies
+; with "DeleteFile: code 5" again.
+Source: "{#SourceDir}\zapret\bin\WinDivert64.sys"; DestDir: "{app}\zapret\bin"; Flags: ignoreversion restartreplace skipifsourcedoesntexist
+Source: "{#SourceDir}\zapret\bin\WinDivert32.sys"; DestDir: "{app}\zapret\bin"; Flags: ignoreversion restartreplace skipifsourcedoesntexist
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "zapret\bin\WinDivert64.sys,zapret\bin\WinDivert32.sys"
 
 [Icons]
 Name: "{group}\Nukefy VPN"; Filename: "{app}\nukefy_vpn.exe"
@@ -48,6 +54,32 @@ Name: "{autodesktop}\Nukefy VPN"; Filename: "{app}\nukefy_vpn.exe"; Tasks: deskt
 
 [Run]
 Filename: "{app}\nukefy_vpn.exe"; Description: "{cm:LaunchProgram,Nukefy VPN}"; Flags: nowait postinstall skipifsilent shellexec
+
+[Code]
+// Stops the zapret service, kills winws and unloads the WinDivert kernel
+// driver so locked binaries (WinDivert64.sys) can be replaced or deleted.
+procedure StopZapretStack();
+var
+  Code: Integer;
+begin
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop zapret', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM winws.exe /T', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop WinDivert', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop WinDivert14', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop WinDivert2', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Sleep(2000);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  StopZapretStack();
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then StopZapretStack();
+end;
 
 [UninstallRun]
 Filename: "taskkill"; Parameters: "/F /IM winws.exe"; Flags: runhidden; RunOnceId: "killwinws"
