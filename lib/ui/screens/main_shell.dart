@@ -131,12 +131,17 @@ class MainShell extends StatelessWidget {
                               children: [
                                 _SideRail(tabs: tabs, index: activeTab, destination: destination),
                                 Expanded(
-                                  child: Align(
-                                    alignment: Alignment.topCenter,
-                                    child: ConstrainedBox(
-                                      constraints: const BoxConstraints(maxWidth: 2200),
-                                      child: SizedBox(width: double.infinity, child: body),
-                                    ),
+                                  child: Stack(
+                                    children: [
+                                      const Positioned.fill(child: _MascotBackdrop()),
+                                      Align(
+                                        alignment: Alignment.topCenter,
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(maxWidth: 2200),
+                                          child: SizedBox(width: double.infinity, child: body),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -1140,6 +1145,48 @@ class _WindowButtonState extends State<_WindowButton> {
           height: 40,
           color: bg,
           child: Icon(widget.icon, size: widget.iconSize, color: fg),
+        ),
+      ),
+    );
+  }
+}
+
+/// The mascot artwork pinned to the right edge of the page area. It fades
+/// into the background on the left/top, never captures pointer events and
+/// dims itself in the dark theme so cards stay readable.
+class _MascotBackdrop extends StatelessWidget {
+  const _MascotBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return IgnorePointer(
+      child: Align(
+        alignment: Alignment.bottomRight,
+        child: FractionallySizedBox(
+          heightFactor: 0.96,
+          child: Opacity(
+            opacity: dark ? 0.14 : 0.92,
+            child: ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (bounds) => LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: const [Colors.transparent, Colors.white],
+                stops: const [0.0, 0.22],
+              ).createShader(bounds),
+              child: ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (bounds) => LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: const [Colors.transparent, Colors.white],
+                  stops: const [0.04, 0.5],
+                ).createShader(bounds),
+                child: Image.asset('assets/rkntyan.png', fit: BoxFit.contain, alignment: Alignment.bottomRight, gaplessPlayback: true),
+              ),
+            ),
+          ),
         ),
       ),
     );

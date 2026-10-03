@@ -1,10 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/nav_provider.dart';
 import '../../core/services/game_blocklist_service.dart';
+import '../../core/services/game_icon_service.dart';
 import '../../core/services/zapret_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -142,15 +144,28 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
             )
           else
             const BackButton(),
-          Expanded(child: Text(s.t('zApps'), style: AppTextStyles.title)),
+          Text(s.t('zApps'), style: AppTextStyles.title),
+          const SizedBox(width: 14),
+          Expanded(
+            child: SizedBox(
+              height: 40,
+              child: TextField(
+                onChanged: (v) => setState(() => _query = v),
+                decoration: InputDecoration(
+                  isDense: true,
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  hintText: s.t('zFindGame'),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
           IconButton(tooltip: s.t('zRefresh'), onPressed: _loading || _zapret.busy ? null : _refresh, icon: const Icon(Icons.refresh)),
           IconButton(tooltip: s.t('zView'), onPressed: () => setState(() => _grid = !_grid), icon: Icon(_grid ? Icons.view_list_outlined : Icons.grid_view_rounded))]),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         Text(s.t('zCatalogHint'), style: p.secondaryStyle),
-        const SizedBox(height: 12),
+        const SizedBox(height: 6),
         Text('medvedeff-true/ru-gaming-blocklist • games/*.txt', style: p.captionStyle),
-        const SizedBox(height: 16),
-        TextField(onChanged: (v) => setState(() => _query = v), decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: s.t('zFindGame'))),
         SizedBox(height: 40, child: _loading ? const Center(child: LinearProgressIndicator()) : _error != null ? Text(_error!, maxLines: 2, style: TextStyle(color: p.error)) : _notice != null ? Text(_notice!, maxLines: 3, style: p.secondaryStyle) : _zapret.busy ? Text(s.t('zBusy')) : const SizedBox()),
         if (catalog.isEmpty && !_loading) Text(s.t('zNoGames')),
         LayoutBuilder(builder: (context, box) {
@@ -168,13 +183,60 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
     final s = context.read<SettingsProvider>().strings;
     final installed = _games.installed().where((g) => g.id == game.id).firstOrNull;
     final enabled = !_loading && !_zapret.busy;
-    final heading = Row(children: [Container(width: 44, height: 44, decoration: BoxDecoration(color: p.accent.withValues(alpha: .12), borderRadius: BorderRadius.circular(12)), child: Center(child: GameMark(id: game.id))),
+    final icon = _GameIcon(game: game, size: 44);
+    final heading = Row(children: [icon,
       const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(game.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
         Text(installed == null ? s.t('zNotAdded') : '${installed.count} ${s.t('zDomains')}', style: p.captionStyle)]))]);
-    final actions = Wrap(spacing: 8, children: installed == null
+    // In list mode every action sits at the right end of the row.
+    final actions = Row(mainAxisSize: MainAxisSize.min, children: installed == null
+      ? [FilledButton.icon(onPressed: enabled ? () => _install(game) : null, icon: const Icon(Icons.add, size: 18), label: Text(s.t('add')))]
+      : [TextButton(onPressed: enabled ? () => _view(game) : null, child: Text(s.t('zShowDomains'))), IconButton(tooltip: s.t('delete'), onPressed: enabled ? () => _removeGame(game) : null, icon: const Icon(Icons.delete_outline, size: 20))]);
+    if (!_grid) {
+      return Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), decoration: BoxDecoration(color: p.card, border: Border.all(color: p.border), borderRadius: BorderRadius.circular(16)),
+        child: Row(children: [Expanded(child: heading), const SizedBox(width: 10), actions]));
+    }
+    final tileActions = Wrap(spacing: 8, children: installed == null
       ? [FilledButton.icon(onPressed: enabled ? () => _install(game) : null, icon: const Icon(Icons.add, size: 18), label: Text(s.t('add')))]
       : [TextButton(onPressed: enabled ? () => _view(game) : null, child: Text(s.t('zShowDomains'))), IconButton(tooltip: s.t('delete'), onPressed: enabled ? () => _removeGame(game) : null, icon: const Icon(Icons.delete_outline, size: 20))]);
     return Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: p.card, border: Border.all(color: p.border), borderRadius: BorderRadius.circular(18)),
-      child: _grid ? SizedBox(height: 130 * MediaQuery.textScalerOf(context).scale(1), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const Spacer(), actions])) : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const SizedBox(height: 10), actions]));
+      child: SizedBox(height: 130 * MediaQuery.textScalerOf(context).scale(1), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const Spacer(), tileActions])));
+  }
+}
+
+/// Real desktop icon of the game: located through the uninstall registry and
+/// extracted from the installed `.exe`; falls back to the monochrome glyph.
+class _GameIcon extends StatefulWidget {
+  const _GameIcon({required this.game, required this.size});
+  final GameListInfo game;
+  final double size;
+  @override
+  State<_GameIcon> createState() => _GameIconState();
+}
+
+class _GameIconState extends State<_GameIcon> {
+  String? _path;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  Future<void> _resolve() async {
+    final path = await GameIconService.instance.iconFor(widget.game.id, widget.game.name);
+    if (mounted) setState(() => _path = path);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final radius = BorderRadius.circular(12);
+    final fallback = Container(width: widget.size, height: widget.size, decoration: BoxDecoration(color: p.accent.withValues(alpha: .12), borderRadius: radius), child: Center(child: GameMark(id: widget.game.id)));
+    if (_path == null) return fallback;
+    return ClipRRect(
+      borderRadius: radius,
+      child: Image.file(File(_path!), width: widget.size, height: widget.size, fit: BoxFit.cover,
+          gaplessPlayback: true, errorBuilder: (_, __, ___) => fallback),
+    );
   }
 }

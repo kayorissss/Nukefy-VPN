@@ -44,6 +44,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - assets/rkntyan.png
     - assets/icons/
     - assets/flags/
     - assets/brands/
