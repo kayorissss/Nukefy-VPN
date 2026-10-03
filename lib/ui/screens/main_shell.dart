@@ -770,7 +770,13 @@ class _RailMusicMini extends StatelessWidget {
     final total = music.duration.inMilliseconds <= 0 ? 1.0 : music.duration.inMilliseconds.toDouble();
     final position = music.position.inMilliseconds.clamp(0, total.toInt()).toDouble();
     final artwork = track.artworkPath;
-    return SafeArea(
+    // Bounded height: inside a Column the mini receives unbounded vertical
+    // constraints, and the blurred artwork would otherwise report its full
+    // pixel height, squeezing the navigation list out of the rail.
+    return SizedBox(
+      width: double.infinity,
+      height: 150,
+      child: SafeArea(
       top: false,
       bottom: false,
       child: Padding(
@@ -878,6 +884,7 @@ class _RailMusicMini extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }
