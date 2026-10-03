@@ -119,10 +119,12 @@ Get-ItemProperty $keys | Where-Object { $_.DisplayName } | Select-Object Display
       if (!out.parent.existsSync()) out.parent.createSync(recursive: true);
       final safeExe = exe.replaceAll("'", "''");
       final safeOut = out.path.replaceAll("'", "''");
-      final script = "Add-Type -AssemblyName System.Drawing; "
-          "\$i=[System.Drawing.Icon]::ExtractAssociatedIcon('$safeExe'); "
-          'if ($i) { $b=$i.ToBitmap(); $b.Save(\'$safeOut\',[System.Drawing.Imaging.ImageFormat]::Png); '
-          '$b.Dispose(); $i.Dispose() }';
+      final script = 'Add-Type -AssemblyName System.Drawing; '
+          r'$i=[System.Drawing.Icon]::ExtractAssociatedIcon('
+          "'$safeExe'"
+          r'); if ($i) { $b=$i.ToBitmap(); $b.Save('
+          "'$safeOut'"
+          r',[System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose(); $i.Dispose() }';
       final result = await Process.run(
         'powershell.exe',
         ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
