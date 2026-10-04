@@ -675,18 +675,47 @@ class VpnPlatform {
   /// Runs only the documented Windows Winsock reset. The caller must show a
   /// confirmation and the command output; no Defender or firewall changes are
   /// made here.
+  /// Runs the classic Windows network repair ladder elevated, exactly the
+  /// sequence that unbreaks Winsock/TCP-IP/proxy state after VPN experiments.
   Future<String> windowsNetworkReset() async {
     if (!Platform.isWindows) return 'unsupported';
-    final results = <String>[];
-    for (final command in [
-      ('netsh', ['winsock', 'reset']),
-      ('ipconfig', ['/flushdns']),
-    ]) {
-      final result = await Process.run(command.$1, command.$2);
-      results.add('${command.$1}: ${result.exitCode == 0 ? 'OK' : 'exit ${result.exitCode}'}');
-    }
-    results.add('reboot: recommended');
-    return results.join('\n');
+    const script = r"""
+netsh winsock reset
+netsh int ip reset
+netsh winhttp reset proxy
+ipconfig /release
+ipconfig /renew
+ipconfig /flushdns
+""";
+    return _elevatedScript(script, 'nukefy_net_reset.ps1');
+  }
+
+  /// Stops and disables every Cloudflare WARP service (warp-svc.exe) so it
+  /// can no longer resurrect itself from the service manager.
+  Future<String> disableWarp() async {
+    if (!Platform.isWindows) return 'unsupported';
+    const script = r"""
+$svcs = Get-Service | Where-Object { $_.Name -like '*WARP*' -or $_.Name -like '*warp*' }
+foreach ($s in $svcs) {
+  Stop-Service -Name $s.Name -Force -ErrorAction SilentlyContinue
+  Set-Service -Name $s.Name -StartupType Disabled -ErrorAction SilentlyContinue
+}
+Stop-Process -Name warp-svc -Force -ErrorAction SilentlyContinue
+Stop-Process -Name '1.1.1.1' -Force -ErrorAction SilentlyContinue
+""";
+    return _elevatedScript(script, 'nukefy_warp_off.ps1');
+  }
+
+  Future<String> _elevatedScript(String script, String fileName) async {
+    final ps1 = File(p.join(Directory.systemTemp.path, fileName));
+    await ps1.writeAsString(script);
+    final args = "-NoProfile -ExecutionPolicy Bypass -File \"${ps1.path}\"";
+    final result = await Process.run('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      "Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '$args'",
+    ]);
+    return result.exitCode == 0 ? 'ok-reboot' : 'error:${result.exitCode}';
   }
 
   Future<String> downloadCore({

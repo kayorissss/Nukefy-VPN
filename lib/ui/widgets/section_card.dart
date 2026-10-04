@@ -98,15 +98,31 @@ class SettingsTile extends StatelessWidget {
           ),
           child: Icon(icon, color: p.accent, size: 19),
         );
+        // Descriptions live behind a "?" hint so tiles stay one clean line;
+        // hovering the icon reveals the full explanation.
         final copy = Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+              Flexible(
+                child: Text(title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+              ),
               if (subtitle != null) ...[
-                const SizedBox(height: 2),
-                Text(subtitle!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: subtitle!,
+                  waitDuration: const Duration(milliseconds: 300),
+                  constraints: const BoxConstraints(minWidth: 280, maxWidth: 420),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: ShapeDecoration(
+                    color: p.card,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: p.border)),
+                  ),
+                  textStyle: AppTextStyles.bodySecondary.copyWith(color: p.text),
+                  child: Icon(Icons.help_outline_rounded, size: 15, color: p.textSecondary),
+                ),
               ],
             ],
           ),

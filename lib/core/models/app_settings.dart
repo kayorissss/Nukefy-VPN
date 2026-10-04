@@ -49,6 +49,8 @@ class AppSettings {
     this.zapretDebugLog = false,
     this.zapretAutoRestart = true,
     this.musicUnlocked = false,
+    this.warpDisabled = false,
+    this.probeHosts = const [],
     this.karingEnabled = false,
     this.karingBalancer = true,
     this.karingExcludeRu = true,
@@ -125,6 +127,8 @@ class AppSettings {
   bool zapretAutoRestart;
   /// Karing-style whitelist bypass profile.
   bool musicUnlocked;
+  bool warpDisabled;
+  List<String> probeHosts;
   bool karingEnabled;
   bool karingBalancer;
   bool karingExcludeRu;
@@ -200,6 +204,8 @@ class AppSettings {
         'zapretDebugLog': zapretDebugLog,
         'zapretAutoRestart': zapretAutoRestart,
         'musicUnlocked': musicUnlocked,
+        'warpDisabled': warpDisabled,
+        'probeHosts': probeHosts,
         'karingEnabled': karingEnabled,
         'karingBalancer': karingBalancer,
         'karingExcludeRu': karingExcludeRu,
@@ -271,6 +277,8 @@ class AppSettings {
       zapretDebugLog: json['zapretDebugLog'] == true,
       zapretAutoRestart: json['zapretAutoRestart'] != false,
       musicUnlocked: json['musicUnlocked'] == true,
+      warpDisabled: json['warpDisabled'] == true,
+      probeHosts: (json['probeHosts'] as List?)?.whereType<String>().toList() ?? const [],
       karingEnabled: json['karingEnabled'] == true,
       karingBalancer: json['karingBalancer'] != false,
       karingExcludeRu: json['karingExcludeRu'] != false,

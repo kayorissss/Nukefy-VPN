@@ -96,7 +96,55 @@ class _ZapretScreenState extends State<ZapretScreen> {
       final domains = await games.domains(game.id);
       if (domains.isNotEmpty) targets.add(ZapretProbeTarget(id: 'game:${game.id}', name: game.name, url: 'https://${domains.first}/', okCodes: const [200, 204, 301, 302, 307, 308]));
     }
+    for (final host in context.read<SettingsProvider>().settings.probeHosts) {
+      targets.add(ZapretProbeTarget(id: 'custom:$host', name: host, url: 'https://$host/', okCodes: const [200, 204, 301, 302]));
+    }
     if (mounted) setState(() => _targets = targets);
+  }
+
+  /// Editor for user-defined probe services: presets for the popular ones
+  /// plus a free-form host field.
+  Future<void> _addService() async {
+    final s = context.read<SettingsProvider>().strings;
+    final controller = TextEditingController();
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.t('zAddService')),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final entry in ZapretProbe.presets.entries)
+                    ActionChip(label: Text(entry.key), onPressed: () => Navigator.pop(ctx, entry.value)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextField(controller: controller, decoration: InputDecoration(hintText: 'my-service.tv')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.t('cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: Text(s.t('add'))),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (picked == null || picked.isEmpty || !mounted) return;
+    final host = picked.replaceFirst(RegExp(r'^https?://'), '').split('/').first;
+    if (host.isEmpty || !host.contains('.')) return;
+    await context.read<SettingsProvider>().update((a) {
+      if (!a.probeHosts.contains(host)) a.probeHosts = [...a.probeHosts, host];
+      if (!a.zapretCheckTargets.contains('custom:$host')) a.zapretCheckTargets = [...a.zapretCheckTargets, 'custom:$host'];
+    });
+    await _loadTargets();
   }
 
   Future<void> _start(ZapretStrategy strategy) async {
@@ -764,7 +812,19 @@ class _ZapretScreenState extends State<ZapretScreen> {
                                 a.zapretCheckTargets = [...a.zapretCheckTargets]..remove(target.id);
                                 if (v) a.zapretCheckTargets.add(target.id);
                               }),
+                      deleteIcon: target.id.startsWith('custom:') ? const Icon(Icons.close_rounded, size: 16) : null,
+                      onDeleted: !target.id.startsWith('custom:') || busy
+                          ? null
+                          : () => settings.update((a) {
+                                a.probeHosts = [...a.probeHosts]..remove(target.id.substring(7));
+                                a.zapretCheckTargets = [...a.zapretCheckTargets]..remove(target.id);
+                              }),
                     ),
+                  ActionChip(
+                    avatar: const Icon(Icons.add_rounded, size: 18),
+                    label: Text(s.t('zAddService')),
+                    onPressed: busy ? null : _addService,
+                  ),
                 ],
               ),
               SwitchListTile(

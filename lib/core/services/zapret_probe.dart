@@ -27,7 +27,18 @@ class ZapretProbe {
   static final instance = ZapretProbe._();
   static const youtube = ZapretProbeTarget(id: 'youtube', name: 'YouTube', url: 'https://www.youtube.com/generate_204', okCodes: [204]);
   static const discord = ZapretProbeTarget(id: 'discord', name: 'Discord', url: 'https://discord.com/api/v10/gateway', okCodes: [200]);
-  static const defaults = [youtube, discord];
+  static const twitch = ZapretProbeTarget(id: 'twitch', name: 'Twitch', url: 'https://www.twitch.tv/', okCodes: [200, 301, 302]);
+  static const defaults = [youtube, discord, twitch];
+
+  /// Quick-add templates for the "check my connection to ..." editor.
+  static const presets = <String, String>{
+    'Twitch': 'www.twitch.tv',
+    'Instagram': 'www.instagram.com',
+    'X (Twitter)': 'x.com',
+    'Steam': 'store.steampowered.com',
+    'Telegram': 'telegram.org',
+    'Reddit': 'www.reddit.com',
+  };
 
   static bool publicAddress(InternetAddress ip) {
     final b = ip.rawAddress;

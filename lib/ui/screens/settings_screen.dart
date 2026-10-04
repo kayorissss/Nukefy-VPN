@@ -80,6 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _CoreCard(vpn: vpn, strings: s),
             _XrayCard(vpn: vpn, strings: s),
           ],
+          if (_section == 0) _ToolsCard(strings: s),
           if (_section == 0) SectionCard(
             title: s.t('general'),
             icon: Icons.tune_rounded,
@@ -624,8 +625,12 @@ class _SettingsSubtabs extends StatelessWidget {
       (s.t('aboutTab'), Icons.info_outline_rounded),
     ];
     return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: p.card, borderRadius: BorderRadius.circular(18), border: Border.all(color: p.border)),
+      padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
+      decoration: BoxDecoration(
+        color: p.card,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+        border: Border.all(color: p.border),
+      ),
       child: Row(
         children: [
           for (var index = 0; index < items.length; index++)
@@ -641,8 +646,9 @@ class _SettingsSubtabs extends StatelessWidget {
                     duration: const Duration(milliseconds: 180),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                     decoration: BoxDecoration(
-                      color: selected == index ? p.accent.withValues(alpha: .15) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(14),
+                      color: selected == index ? p.background : Colors.transparent,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                      border: Border(top: BorderSide(color: selected == index ? p.accent : Colors.transparent, width: 2.5)),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -679,6 +685,7 @@ class _AppearanceCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              SettingsTile(icon: Icons.language_rounded, title: s.t('language'), trailing: NukefyDropdown<LanguagePreference>(value: value.language, items: {LanguagePreference.ru: s.t('russian'), LanguagePreference.en: s.t('english'), LanguagePreference.system: s.t('system')}, onChanged: (next) => settings.update((item) => item.language = next))),
               SettingsTile(
                 icon: Icons.dark_mode_outlined,
                 title: s.t('theme'),
@@ -707,20 +714,21 @@ class _AppearanceCard extends StatelessWidget {
                       spacing: gap,
                       runSpacing: gap,
                       children: [
-                        for (final entry in ThemePresets.all.entries)
+                        for (var i = 0; i < ThemePresets.all.entries.length; i++)
                           _ThemeChoice(
                             width: width,
-                            label: _themeLabel(s, entry.key),
-                            colors: Theme.of(context).brightness == Brightness.dark ? entry.value.dark : entry.value.light,
-                            selected: value.visualTheme == entry.key,
-                            onTap: () => settings.update((item) => item.visualTheme = entry.key),
+                            label: '${i + 1}. ${_themeLabel(s, ThemePresets.all.entries.elementAt(i).key)}',
+                            colors: Theme.of(context).brightness == Brightness.dark
+                                ? ThemePresets.all.entries.elementAt(i).value.dark
+                                : ThemePresets.all.entries.elementAt(i).value.light,
+                            selected: value.visualTheme == ThemePresets.all.entries.elementAt(i).key,
+                            onTap: () => settings.update((item) => item.visualTheme = ThemePresets.all.entries.elementAt(i).key),
                           ),
                       ],
                     ),
                   );
                 },
               ),
-              SettingsTile(icon: Icons.language_rounded, title: s.t('language'), trailing: NukefyDropdown<LanguagePreference>(value: value.language, items: {LanguagePreference.ru: s.t('russian'), LanguagePreference.en: s.t('english'), LanguagePreference.system: s.t('system')}, onChanged: (next) => settings.update((item) => item.language = next))),
             ],
           ),
         ),
@@ -1297,3 +1305,53 @@ class _ThemeChoice extends StatelessWidget {
 }
 
 String _themeLabel(S s, String name) => s.t('theme_$name');
+
+/// Windows repair corner: the full network-reset ladder the community uses
+/// (Winsock, TCP/IP, WinHTTP proxy, DHCP lease, DNS cache) and a permanent
+/// Cloudflare WARP kill switch.
+class _ToolsCard extends StatelessWidget {
+  const _ToolsCard({required this.strings});
+  final S strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    final value = settings.settings;
+    return SectionCard(
+      title: strings.t('netResetTitle'),
+      icon: Icons.build_circle_outlined,
+      child: Column(
+        children: [
+          SettingsTile(
+            icon: Icons.refresh_rounded,
+            title: strings.t('netResetRun'),
+            subtitle: strings.t('netResetHint'),
+            trailing: FilledButton.icon(
+              onPressed: () async {
+                final result = await VpnPlatform().windowsNetworkReset();
+                if (!context.mounted) return;
+                showNukefySnack(context, result == 'ok-reboot' ? '${strings.t('netResetTitle')}: OK — ${strings.t('restart')}' : result);
+              },
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(strings.t('netResetRun')),
+            ),
+          ),
+          SwitchTile(
+            icon: Icons.cloud_off_rounded,
+            title: strings.t('warpTitle'),
+            subtitle: strings.t('warpHint'),
+            value: !value.warpDisabled,
+            onChanged: (v) async {
+              if (!v) {
+                await VpnPlatform().disableWarp();
+                await settings.update((item) => item.warpDisabled = true);
+              } else {
+                await settings.update((item) => item.warpDisabled = false);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -13,7 +13,6 @@ import '../core/services/app_perf.dart';
 import '../core/providers/servers_provider.dart';
 import '../core/providers/settings_provider.dart';
 import '../core/providers/vpn_provider.dart';
-import '../core/services/music_service.dart';
 import '../core/services/tg_ws_proxy_service.dart';
 import '../core/services/vpn_platform.dart';
 import '../core/services/zapret_service.dart';
@@ -35,7 +34,6 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
     context.read<VpnProvider>().addListener(_queueMenu);
     context.read<ServersProvider>().addListener(_queueMenu);
-    context.read<MusicService>().addListener(_queueMenu);
     context.read<TgWsProxyService>().addListener(_queueMenu);
     ZapretService.instance.addListener(_queueMenu);
     windowManager.addListener(this);
@@ -44,7 +42,41 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   }
 
   void _queueMenu() {
-    if (mounted) unawaited(_menu());
+    if (mounted) {
+      unawaited(_menu());
+      unawaited(_syncTrayIcon());
+    }
+  }
+
+  /// The tray icon carries a status dot so the user sees at a glance whether
+  /// the tunnel is up, dialing or down, even with the window hidden.
+  Future<void> _syncTrayIcon() async {
+    if (!mounted) return;
+    final vpn = context.read<VpnProvider>();
+    final s = context.read<SettingsProvider>().strings;
+    final name = switch (vpn.status) {
+      VpnStatus.connected => 'tray_on',
+      VpnStatus.connecting => 'tray_connecting',
+      VpnStatus.error => 'tray_error',
+      VpnStatus.disconnected => 'tray_off',
+    };
+    final label = switch (vpn.status) {
+      VpnStatus.connected => s.t('connected'),
+      VpnStatus.connecting => s.t('connecting'),
+      VpnStatus.error => s.t('error'),
+      VpnStatus.disconnected => s.t('disconnected'),
+    };
+    try {
+      final ext = Platform.isWindows ? 'ico' : 'png';
+      final dir = await getApplicationSupportDirectory();
+      final icon = File('${dir.path}/tray_status_$name.$ext');
+      if (!icon.existsSync()) {
+        final data = await rootBundle.load('assets/icons/$name.$ext');
+        await icon.writeAsBytes(data.buffer.asUint8List(), flush: true);
+      }
+      await trayManager.setIcon(icon.path);
+      await trayManager.setToolTip('Nukefy VPN — $label');
+    } catch (_) {}
   }
 
   Future<void> _init() async {
@@ -61,6 +93,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
       if (!icon.existsSync()) return;
     }
     await trayManager.setIcon(icon.path);
+    await _syncTrayIcon();
     if (Platform.isWindows) {
       // window_manager applies the same ICO to the taskbar/window, not only
       // the tray. Linux and macOS keep their native bundle icon and use the
@@ -76,7 +109,6 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     final s = context.read<SettingsProvider>().strings;
     final vpn = context.read<VpnProvider>();
     final servers = context.read<ServersProvider>();
-    final music = context.read<MusicService>();
     final tg = context.read<TgWsProxyService>();
     final tgInstalled = await tg.binaryFile();
     final zapret = ZapretService.instance;
@@ -90,7 +122,6 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
           for (final server in connectable)
             MenuItem(key: 'connect:${server.id}', label: '  ${server.displayName} · ${server.protocol.toUpperCase()}'),
           MenuItem.separator(),
-          MenuItem(key: 'music', label: music.currentTrack == null ? s.t('trayMusicOff') : (music.isPlaying ? s.t('trayMusicPause') : s.t('trayMusicPlay'))),
           MenuItem(key: 'zapret', label: zapret.isRunning ? s.t('trayZapretOff') : s.t('trayZapretOn')),
           if (tg.supported && tgInstalled != null)
             MenuItem(key: 'tg', label: tg.running ? s.t('trayTgOff') : s.t('trayTgOn')),
@@ -235,10 +266,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
       }
       return;
     }
-    if (key == 'music') {
-      unawaited(context.read<MusicService>().toggle().then((_) => _menu()));
-      return;
-    }
+
     if (key == 'zapret') {
       unawaited(_toggleZapret());
       return;
