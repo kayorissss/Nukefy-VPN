@@ -119,6 +119,12 @@ class VpnProvider extends ChangeNotifier {
     }
   }
 
+  /// Home-page picker: switch the pending server without dialing yet.
+  void selectServer(String id) {
+    activeServerId = id;
+    notifyListeners();
+  }
+
   Future<void> connect(ServerModel? server) async {
     final settings = _settings;
     final servers = _servers;
@@ -148,7 +154,7 @@ class VpnProvider extends ChangeNotifier {
       // sing-box cannot speak XHTTP/SplitHTTP, but the bundled Xray core
       // can: prefer a working tunnel over a refusal message.
       final xray = await _platform.xrayCoreInfo();
-      if (xray?.available ?? false) {
+      if (xray.available) {
         await _connectViaXray(server, settings.settings);
         return;
       }

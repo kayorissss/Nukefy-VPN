@@ -73,7 +73,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
     final s = settings.strings;
     final p = context.palette;
     final bottom = MediaQuery.paddingOf(context).bottom;
-    final musicOn = settings.settings.musicUnlocked || context.watch<MusicService>().tracks.isNotEmpty;
     final progress = _addons.progress;
 
     return SafeArea(

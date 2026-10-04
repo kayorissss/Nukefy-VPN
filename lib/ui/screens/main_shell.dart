@@ -1,12 +1,10 @@
 import 'dart:io';
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../../core/constants/app_constants.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/nav_provider.dart';
 import '../../core/providers/settings_provider.dart';
@@ -16,7 +14,6 @@ import '../../core/services/zapret_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../widgets/nukefy_background.dart';
-import '../widgets/nukefy_logo.dart';
 import 'home_screen.dart';
 import 'jammers_screen.dart';
 import 'servers_screen.dart';
@@ -472,7 +469,7 @@ class _SideRailState extends State<_SideRail> {
         icon: Icon(icon, size: 21, color: selected ? p.accent : p.textSecondary),
         style: IconButton.styleFrom(
           backgroundColor: selected ? p.accent.withValues(alpha: .14) : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       );
     }

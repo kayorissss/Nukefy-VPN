@@ -484,8 +484,7 @@ class _QuickPicker extends StatelessWidget {
       final targetPool = servers.serversOf(targetSub).where((e) => !e.isInformational).toList();
       if (targetPool.isEmpty) return;
       final target = server ?? targetPool.first.id;
-      vpn.activeServerId = target;
-      vpn.notifyListeners();
+      vpn.selectServer(target);
       await settings.update((item) => item.selectedServerId = target);
     }
 

@@ -138,7 +138,6 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       context.read<VpnProvider>().removeListener(_queueMenu);
       context.read<ServersProvider>().removeListener(_queueMenu);
-      context.read<MusicService>().removeListener(_queueMenu);
       context.read<TgWsProxyService>().removeListener(_queueMenu);
       ZapretService.instance.removeListener(_queueMenu);
       windowManager.removeListener(this);
