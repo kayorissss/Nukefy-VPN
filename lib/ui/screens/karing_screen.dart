@@ -156,6 +156,30 @@ class _KaringScreenState extends State<KaringScreen> {
     final powerCard = SectionCard(
       title: s.t('karingTitle'),
       icon: Icons.route_rounded,
+      trailing: PopupMenuButton<String>(
+        tooltip: s.t('zSettings'),
+        icon: const Icon(Icons.more_vert_rounded),
+        onSelected: (id) async {
+          switch (id) {
+            case 'enable':
+              await _setEnabled(!value.karingEnabled);
+            case 'add':
+              final mirror = await _karing.firstReachable();
+              if (!mounted) return;
+              await _addSubscription(mirror?.url ?? WhitelistCatalog.mirrors.first.url);
+            case 'refresh':
+              if (subscription != null) await servers.refreshSubscription(subscription.id);
+            case 'ping':
+              if (subscription != null) await servers.pingSubscription(subscription.id);
+          }
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(value: 'enable', child: Text(value.karingEnabled ? s.t('wlModeOff') : s.t('wlModeOn'))),
+          PopupMenuItem(value: 'add', child: Text(s.t('karingAddSub'))),
+          PopupMenuItem(value: 'refresh', child: Text(s.t('refresh'))),
+          PopupMenuItem(value: 'ping', child: Text(s.t('checkPing'))),
+        ],
+      ),
       child: Column(
         children: [
           Center(
@@ -183,12 +207,45 @@ class _KaringScreenState extends State<KaringScreen> {
             style: p.captionStyle,
           ),
           const SizedBox(height: 14),
-          SwitchTile(
-            icon: Icons.route_rounded,
-            title: s.t('karingEnable'),
-            subtitle: s.t('karingEnableHint'),
-            value: value.karingEnabled,
-            onChanged: _setEnabled,
+          if (pool.isNotEmpty && subscription != null)
+            Row(
+              children: [
+                Expanded(
+                  child: NukefyDropdown<String>(
+                    value: connectedHere ? activeSrv.id : pool.first.id,
+                    items: {for (final e in pool) e.id: e.name},
+                    onChanged: (id) => vpn.selectServer(id),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                IconButton(
+                  tooltip: s.t('checkPing'),
+                  onPressed: servers.pinging ? null : () => servers.pingSubscription(subscription.id),
+                  icon: const Icon(Icons.speed_rounded, size: 19),
+                ),
+                IconButton(
+                  tooltip: s.t('refresh'),
+                  onPressed: servers.refreshing ? null : () => servers.refreshSubscription(subscription.id),
+                  icon: const Icon(Icons.refresh_rounded, size: 19),
+                ),
+              ],
+            ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _adding
+                  ? null
+                  : () async {
+                      final mirror = await _karing.firstReachable();
+                      if (!mounted) return;
+                      await _addSubscription(mirror?.url ?? WhitelistCatalog.mirrors.first.url);
+                    },
+              icon: _adding
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.add_rounded, size: 18),
+              label: Text(s.t('karingAddSub')),
+            ),
           ),
         ],
       ),

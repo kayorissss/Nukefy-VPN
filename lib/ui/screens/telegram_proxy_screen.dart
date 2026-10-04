@@ -81,10 +81,16 @@ class _PowerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final color = service.running ? p.success : p.accent;
+    final brand = const Color(0xFF229ED9);
+    final color = service.running ? brand : p.accent;
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(color: p.card, borderRadius: BorderRadius.circular(22), border: Border.all(color: p.border)),
+      decoration: BoxDecoration(
+        color: p.card.withValues(alpha: .82),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: service.running ? brand.withValues(alpha: .55) : p.border),
+        boxShadow: service.running ? [BoxShadow(color: brand.withValues(alpha: .25), blurRadius: 34, spreadRadius: 2)] : null,
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
