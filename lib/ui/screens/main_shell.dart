@@ -480,32 +480,6 @@ class _SideRailState extends State<_SideRail> {
           ),
         );
 
-    Widget _segment(NavDestination dest, IconData icon, String label) => Expanded(
-          child: InkWell(
-            onTap: () => nav.go(dest),
-            child: Container(
-              color: segSelected(dest) ? p.accent.withValues(alpha: .16) : Colors.transparent,
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 17, color: segSelected(dest) ? p.accent : p.textSecondary),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.bodyRegular.copyWith(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color: segSelected(dest) ? p.accent : p.textSecondary)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-
     Widget _segmentIcon(NavDestination dest, IconData icon, String label) => IconButton(
           tooltip: label,
           onPressed: () => nav.go(dest),
