@@ -54,12 +54,9 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     if (!mounted) return;
     final vpn = context.read<VpnProvider>();
     final s = context.read<SettingsProvider>().strings;
-    final name = switch (vpn.status) {
-      VpnStatus.connected => 'tray_on',
-      VpnStatus.connecting => 'tray_connecting',
-      VpnStatus.error => 'tray_error',
-      VpnStatus.disconnected => 'tray_off',
-    };
+    // One clean monochrome tray icon (the dotted variants read as noise at
+    // 16 px); the state travels in the tooltip and the tray menu instead.
+    const name = 'tray_icon';
     final label = switch (vpn.status) {
       VpnStatus.connected => s.t('connected'),
       VpnStatus.connecting => s.t('connecting'),
@@ -69,7 +66,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     try {
       final ext = Platform.isWindows ? 'ico' : 'png';
       final dir = await getApplicationSupportDirectory();
-      final icon = File('${dir.path}/tray_status_$name.$ext');
+      final icon = File('${dir.path}/tray_clean.$ext');
       if (!icon.existsSync()) {
         final data = await rootBundle.load('assets/icons/$name.$ext');
         await icon.writeAsBytes(data.buffer.asUint8List(), flush: true);
@@ -100,7 +97,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
       // PNG above for the tray.
       await windowManager.setIcon(icon.path);
     }
-    await trayManager.setToolTip('Nukefy VPN');
+    await trayManager.setToolTip('Nukefy Client');
     await _menu();
   }
 

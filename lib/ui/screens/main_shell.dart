@@ -63,8 +63,8 @@ class MainShell extends StatelessWidget {
       for (final tab in tabs) _pageFor(tab.destination, destination, desktop: desktop),
       if (zapret) ZapretGamesScreen(active: destination == NavDestination.zapretApps, embedded: true),
       if (zapret) ZapretScreen(active: destination == NavDestination.zapretSettings, settingsOnly: true),
-      if (desktop) SettingsScreen(initialSection: 1, showSubtabs: false),
-      if (desktop) SettingsScreen(initialSection: 2, showSubtabs: false),
+      if (desktop) SettingsScreen(initialSection: 1, showSubtabs: true),
+      if (desktop) SettingsScreen(initialSection: 2, showSubtabs: true),
     ];
     final pageIndex = switch (destination) {
       NavDestination.zapretApps => tabs.length,
@@ -163,7 +163,7 @@ class MainShell extends StatelessWidget {
         NavDestination.telegramProxy => const TelegramProxyScreen(),
         NavDestination.jammers => const JammersScreen(),
         NavDestination.stats => const StatsScreen(),
-        NavDestination.settings => SettingsScreen(showSubtabs: !desktop),
+        NavDestination.settings => const SettingsScreen(showSubtabs: true),
         _ => const SizedBox.shrink(),
       };
 }
@@ -515,14 +515,8 @@ class _SideRailState extends State<_SideRail> {
           SizedBox(
             height: 38,
             child: Row(
-              mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+              mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.end,
               children: [
-                if (!collapsed) ...[
-                  Expanded(
-                    child: Text('NUKEFY CLIENT',
-                        style: AppTextStyles.headline.copyWith(fontSize: 13, letterSpacing: 1.2)),
-                  ),
-                ],
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints.tightFor(width: 38, height: 38),
@@ -685,13 +679,15 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                   }
                 },
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 20),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'NUKEFY VPN',
-                      style: AppTextStyles.tab.copyWith(fontSize: 10, color: p.textDisabled, letterSpacing: 2),
-                    ),
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const NukefyLogo(size: 18),
+                      const SizedBox(width: 8),
+                      Text('Nukefy Client',
+                          style: AppTextStyles.headline.copyWith(fontSize: 12, letterSpacing: .8, color: p.textSecondary)),
+                    ],
                   ),
                 ),
               ),

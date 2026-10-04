@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
@@ -31,12 +32,42 @@ import 'ui/screens/settings_screen.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
+/// The exe identity changed (kayorisan/Nukefy VPN -> KAYORI-SAN/Nukefy
+/// Client), which moves the Windows roaming support directory. Carry the
+/// old subscriptions, settings and caches over on first launch.
+void _migrateLegacyData() {
+  if (!Platform.isWindows) return;
+  try {
+    final root = Platform.environment['APPDATA'];
+    if (root == null) return;
+    final fresh = Directory(p.join(root, 'KAYORI-SAN', 'Nukefy Client'));
+    if (fresh.existsSync() && fresh.listSync().isNotEmpty) return;
+    for (final old in [
+      Directory(p.join(root, 'kayorisan', 'Nukefy VPN')),
+      Directory(p.join(root, 'kayorisan', 'Nukefy Client')),
+      Directory(p.join(root, 'KAYORI-SAN', 'Nukefy VPN')),
+    ]) {
+      if (!old.existsSync()) continue;
+      for (final entity in old.listSync(recursive: true)) {
+        if (entity is! File) continue;
+        final rel = p.relative(entity.path, from: old.path);
+        final target = File(p.join(fresh.path, rel));
+        if (target.existsSync()) continue;
+        target.parent.createSync(recursive: true);
+        entity.copySync(target.path);
+      }
+      return;
+    }
+  } catch (_) {}
+}
+
 Future<void> main() async {
   runZonedGuarded(_main, (error, stack) => AppLog.log('uncaught: $error\n$stack'));
 }
 
 Future<void> _main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _migrateLegacyData();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     AppLog.log('flutter: ${details.exceptionAsString()}');
