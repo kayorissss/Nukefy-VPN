@@ -14,6 +14,7 @@ import '../../core/providers/vpn_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
+import '../widgets/section_card.dart';
 import '../../l10n/strings.dart';
 import '../widgets/connect_button.dart';
 import '../widgets/country_badge.dart';
@@ -58,7 +59,9 @@ class HomeScreen extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         metrics,
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
+        const _QuickPicker(),
+        const SizedBox(height: 20),
         ConnectButton(
           status: vpn.status,
           onPressed: () {
@@ -453,6 +456,57 @@ class _RoundIcon extends StatelessWidget {
         ),
         child: Icon(icon, size: 20, color: p.textSecondary),
       ),
+    );
+  }
+}
+
+/// Subscription → server cascade right on the home page: pick another
+/// subscription and its server without opening the Servers tab.
+class _QuickPicker extends StatelessWidget {
+  const _QuickPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    final servers = context.watch<ServersProvider>();
+    final vpn = context.watch<VpnProvider>();
+    final settings = context.watch<SettingsProvider>();
+    final subs = servers.subscriptions.where((s) => s.enabled).toList();
+    if (subs.isEmpty) return const SizedBox.shrink();
+    final current = vpn.activeServer;
+    final subId = subs.any((s) => s.id == current?.subscriptionId)
+        ? current!.subscriptionId!
+        : subs.first.id;
+    final pool = servers.serversOf(subId).where((e) => !e.isInformational).toList();
+    final serverId = pool.any((e) => e.id == current?.id) ? current!.id : (pool.isEmpty ? '' : pool.first.id);
+
+    Future<void> pick(String? sub, String? server) async {
+      final targetSub = sub ?? subId;
+      final targetPool = servers.serversOf(targetSub).where((e) => !e.isInformational).toList();
+      if (targetPool.isEmpty) return;
+      final target = server ?? targetPool.first.id;
+      vpn.activeServerId = target;
+      vpn.notifyListeners();
+      await settings.update((item) => item.selectedServerId = target);
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: NukefyDropdown<String>(
+            value: subId,
+            items: {for (final s in subs) s.id: s.name},
+            onChanged: (id) => pick(id, null),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: NukefyDropdown<String>(
+            value: serverId,
+            items: {for (final e in pool) e.id: e.name},
+            onChanged: pool.isEmpty ? (_) {} : (id) => pick(null, id),
+          ),
+        ),
+      ],
     );
   }
 }
