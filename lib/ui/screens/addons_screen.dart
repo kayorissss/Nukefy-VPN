@@ -4,7 +4,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/providers/settings_provider.dart';
 import '../../core/services/addons_service.dart';
-import '../../core/services/music_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../l10n/strings.dart';
@@ -82,51 +81,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
       child: ResponsiveSections(
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
         children: [
-          SectionCard(
-            title: s.t('musicAddonTitle'),
-            icon: Icons.library_music_rounded,
-            description: s.t('musicAddonHint'),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    musicOn ? s.t('addonsInstalledOk') : s.t('musicAddonHint'),
-                    style: p.secondaryStyle,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                if (musicOn)
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final music = context.read<MusicService>();
-                      if (music.tracks.isNotEmpty) {
-                        final ok = await confirmDialog(
-                          context,
-                          title: s.t('musicAddonTitle'),
-                          body: s.t('musicAddonHasTracks'),
-                          confirm: s.t('confirm'),
-                          cancel: s.t('cancel'),
-                        );
-                        if (!ok || !mounted) return;
-                      }
-                      await settings.update((v) => v.musicUnlocked = false);
-                      if (mounted) setState(() {});
-                    },
-                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                    label: Text(s.t('delete')),
-                  )
-                else
-                  FilledButton.icon(
-                    onPressed: () async {
-                      await settings.update((v) => v.musicUnlocked = true);
-                      if (mounted) showNukefySnack(context, s.t('addonsInstalledOk'));
-                    },
-                    icon: const Icon(Icons.download_rounded, size: 18),
-                    label: Text(s.t('tgProxyDownload')),
-                  ),
-              ],
-            ),
-          ),
           SectionCard(
             title: s.t('addonsTitle'),
             icon: Icons.extension_rounded,

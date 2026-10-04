@@ -95,6 +95,7 @@ Future<void> _main() async {
           await windowManager.center();
         } catch (_) {}
       }
+      windowManager.addListener(_MaximizeGuard());
       await windowManager.show();
       await windowManager.focus();
       AppLog.log('window shown at normal size');
@@ -269,5 +270,19 @@ class _ResumeActions extends WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     AppPerf.visible = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.resumed) onResume();
+  }
+}
+
+/// The desktop app exists only maximized: restoring or dragging the window
+/// back to a floating state immediately re-maximizes it.
+class _MaximizeGuard extends WindowListener {
+  @override
+  void onWindowRestore() {
+    windowManager.maximize();
+  }
+
+  @override
+  void onWindowResized() async {
+    if (!await windowManager.isMaximized()) await windowManager.maximize();
   }
 }

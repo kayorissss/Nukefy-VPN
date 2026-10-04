@@ -8,7 +8,6 @@ enum NavDestination {
   zapret,
   karing,
   speedTest,
-  music,
   telegramProxy,
   jammers,
   stats,

@@ -144,6 +144,15 @@ class VpnProvider extends ChangeNotifier {
       return;
     }
     final validation = SingboxConfigBuilder.validationError(server);
+    if (validation == 'XRAY_TRANSPORT_REQUIRED') {
+      // sing-box cannot speak XHTTP/SplitHTTP, but the bundled Xray core
+      // can: prefer a working tunnel over a refusal message.
+      final xray = await _platform.xrayCoreInfo();
+      if (xray?.available ?? false) {
+        await _connectViaXray(server, settings.settings);
+        return;
+      }
+    }
     if (validation != null) {
       status = VpnStatus.error;
       mode = 'unsupported';
