@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
+import 'package:nukefy_vpn/ui/widgets/nukefy_logo.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/models/vpn_status.dart';
