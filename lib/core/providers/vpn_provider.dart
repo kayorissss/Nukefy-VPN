@@ -12,6 +12,7 @@ import '../models/vpn_status.dart';
 import '../services/app_perf.dart';
 import '../services/karing_service.dart';
 import '../services/singbox_config_builder.dart';
+import '../services/zapret_service.dart';
 import '../services/vpn_platform.dart';
 import '../services/xray_config_builder.dart';
 import 'servers_provider.dart';

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' show Canvas, Paint, Rect, FilterQuality;
-import 'package:flutter/foundation.dart' show Uint8List;
+import 'dart:typed_data' show BytesBuilder, Uint8List;
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
