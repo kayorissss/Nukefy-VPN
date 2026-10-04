@@ -96,6 +96,7 @@ Future<void> _main() async {
         } catch (_) {}
       }
       windowManager.addListener(_MaximizeGuard());
+      _MaximizeGuard.start();
       await windowManager.show();
       await windowManager.focus();
       AppLog.log('window shown at normal size');
@@ -276,10 +277,28 @@ class _ResumeActions extends WidgetsBindingObserver {
 /// The desktop app exists only maximized: restoring or dragging the window
 /// back to a floating state immediately re-maximizes it.
 class _MaximizeGuard extends WindowListener {
+  static Timer? _enforcer;
+
+  /// Belt and braces: a periodic check re-maximizes the window on setups
+  /// where the event callbacks never fire (DPI-scaled multi-monitor shells).
+  static void start() {
+    _enforcer?.cancel();
+    _enforcer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      try {
+        if (!await windowManager.isMaximized() && !await windowManager.isMinimized()) {
+          await windowManager.maximize();
+        }
+      } catch (_) {}
+    });
+  }
+
   @override
   void onWindowRestore() {
     windowManager.maximize();
   }
+
+  @override
+  void onWindowMaximize() {}
 
   @override
   void onWindowResized() async {

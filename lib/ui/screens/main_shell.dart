@@ -461,6 +461,43 @@ class _SideRailState extends State<_SideRail> {
     bool openOf(_RailGroup g) =>
         _open[g.key] ?? (g.destination == destination || g.leaves.any((l) => l.destination == destination));
 
+    bool segSelected(NavDestination dest) =>
+        dest == destination ||
+        (dest == NavDestination.settingsGeneral &&
+            (destination == NavDestination.settingsAppearance || destination == NavDestination.settingsAbout));
+
+    Widget _segment(NavDestination dest, IconData icon, String label) => Expanded(
+          child: InkWell(
+            onTap: () => nav.go(dest),
+            child: Container(
+              color: segSelected(dest) ? p.accent.withValues(alpha: .16) : Colors.transparent,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 17, color: segSelected(dest) ? p.accent : p.textSecondary),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodyRegular.copyWith(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: segSelected(dest) ? p.accent : p.textSecondary)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+    Widget _segmentIcon(NavDestination dest, IconData icon, String label) => IconButton(
+          tooltip: label,
+          onPressed: () => nav.go(dest),
+          icon: Icon(icon, size: 20, color: segSelected(dest) ? p.accent : p.textSecondary),
+        );
+
     Widget iconButton(NavDestination dest, IconData icon, String label) {
       final selected = dest == destination;
       return IconButton(
@@ -477,11 +514,11 @@ class _SideRailState extends State<_SideRail> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
-      width: collapsed ? 76 : 252,
+      width: collapsed ? 82 : 272,
       margin: const EdgeInsets.fromLTRB(12, 0, 0, 12),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
-        color: p.card,
+        color: p.card.withValues(alpha: .82),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: p.border),
       ),
@@ -570,39 +607,42 @@ class _SideRailState extends State<_SideRail> {
               ),
             ),
           ),
+          // One wide pill, three independent segments: auto-tune, add-ons
+          // and settings. Collapsed rail stacks them vertically.
           if (collapsed)
-            Column(
-              children: [
-                iconButton(NavDestination.autotune, Icons.auto_awesome_rounded, s.t('tabAuto')),
-                iconButton(NavDestination.addons, Icons.extension_rounded, s.t('tabAddons')),
-                iconButton(NavDestination.settingsGeneral, Icons.settings_rounded, s.t('settings')),
-              ],
+            Container(
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: p.border)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _segmentIcon(NavDestination.autotune, Icons.auto_awesome_rounded, s.t('tabAuto')),
+                  Container(height: 1, color: p.border),
+                  _segmentIcon(NavDestination.addons, Icons.extension_rounded, s.t('tabAddons')),
+                  Container(height: 1, color: p.border),
+                  _segmentIcon(NavDestination.settingsGeneral, Icons.settings_rounded, s.t('settings')),
+                ],
+              ),
             )
-          else ...[
-            Row(
-              children: [
-                Expanded(child: iconButton(NavDestination.autotune, Icons.auto_awesome_rounded, s.t('tabAuto'))),
-                const SizedBox(width: 6),
-                Expanded(child: iconButton(NavDestination.addons, Icons.extension_rounded, s.t('tabAddons'))),
-              ],
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => nav.go(NavDestination.settingsGeneral),
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: destination == NavDestination.settingsGeneral ||
-                          destination == NavDestination.settingsAppearance ||
-                          destination == NavDestination.settingsAbout
-                      ? p.accent.withValues(alpha: .12)
-                      : null,
+          else
+            Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: p.accent.withValues(alpha: .07),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: p.border),
+              ),
+              child: IntrinsicHeight(
+                child: Row(
+                  children: [
+                    _segment(NavDestination.autotune, Icons.auto_awesome_rounded, s.t('tabAuto')),
+                    VerticalDivider(width: 1, thickness: 1, color: p.border),
+                    _segment(NavDestination.addons, Icons.extension_rounded, s.t('tabAddons')),
+                    VerticalDivider(width: 1, thickness: 1, color: p.border),
+                    _segment(NavDestination.settingsGeneral, Icons.settings_rounded, s.t('settings')),
+                  ],
                 ),
-                icon: const Icon(Icons.settings_rounded, size: 18),
-                label: Text(s.t('settings')),
               ),
             ),
-          ],
         ],
       ),
     );

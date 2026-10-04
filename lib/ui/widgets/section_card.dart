@@ -27,7 +27,7 @@ class SectionCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
       decoration: BoxDecoration(
-        color: p.card,
+        color: p.card.withValues(alpha: .82),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: p.border),
       ),

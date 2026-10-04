@@ -125,6 +125,31 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set when foreign tunnel processes (another zapret/winws, a leftover
+  /// sing-box) are visible right before we dial: they steal the driver and
+  /// the connection degrades until they are gone.
+  String? conflictNotice;
+
+  void dismissConflict() {
+    conflictNotice = null;
+    notifyListeners();
+  }
+
+  Future<void> checkConflicts() async {
+    if (!Platform.isWindows) return;
+    try {
+      final result = await Process.run('tasklist', ['/FO', 'CSV', '/NH']);
+      final names = ((result.stdout as String?) ?? '').toLowerCase();
+      final hits = <String>[
+        if (names.contains('winws.exe') && !ZapretService.instance.isRunning) 'winws.exe (zapret)',
+        if (names.contains('sing-box.exe') && status == VpnStatus.disconnected) 'sing-box.exe',
+        if (names.contains('xray.exe') && status == VpnStatus.disconnected) 'xray.exe',
+      ];
+      conflictNotice = hits.isEmpty ? null : hits.join(', ');
+      notifyListeners();
+    } catch (_) {}
+  }
+
   Future<void> connect(ServerModel? server) async {
     final settings = _settings;
     final servers = _servers;
@@ -141,6 +166,7 @@ class VpnProvider extends ChangeNotifier {
     }
     activeServerId = server.id;
     await settings.update((s) => s.selectedServerId = server.id);
+    await checkConflicts();
     status = VpnStatus.connecting;
     errorMessage = null;
     notifyListeners();

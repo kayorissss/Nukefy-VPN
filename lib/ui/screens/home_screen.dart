@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/server_model.dart';
@@ -14,6 +15,7 @@ import '../../core/providers/vpn_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
+import '../widgets/nukefy_feedback.dart';
 import '../widgets/section_card.dart';
 import '../../l10n/strings.dart';
 import '../widgets/connect_button.dart';
@@ -59,9 +61,7 @@ class HomeScreen extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         metrics,
-        const SizedBox(height: 18),
-        const _QuickPicker(),
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
         ConnectButton(
           status: vpn.status,
           onPressed: () {
@@ -93,6 +93,42 @@ class HomeScreen extends StatelessWidget {
             color: vpn.status == VpnStatus.connected ? p.text : p.textDisabled,
           ),
         ),
+        if (vpn.conflictNotice != null) ...[
+          const SizedBox(height: 14),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+              decoration: BoxDecoration(
+                color: p.accent.withValues(alpha: .10),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: p.accent.withValues(alpha: .35)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, size: 18, color: p.accent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('${s.t('conflictWarn')}: ${vpn.conflictNotice}',
+                        style: AppTextStyles.bodySecondary.copyWith(color: p.text)),
+                  ),
+                  IconButton(
+                    tooltip: s.t('zCopyReport'),
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: vpn.conflictNotice ?? ''));
+                      if (context.mounted) showNukefySnack(context, s.t('copied'));
+                    },
+                    icon: Icon(Icons.copy_rounded, size: 15, color: p.accent),
+                  ),
+                  IconButton(
+                    onPressed: vpn.dismissConflict,
+                    icon: Icon(Icons.close_rounded, size: 15, color: p.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         if (vpn.errorMessage != null) ...[
           const SizedBox(height: 14),
           _ErrorCard(message: _friendlyError(s, vpn.errorMessage!)),
@@ -211,8 +247,15 @@ Future<void> showServerPicker(BuildContext context) async {
   }
 }
 
-class _ServerPickerSheet extends StatelessWidget {
+class _ServerPickerSheet extends StatefulWidget {
   const _ServerPickerSheet();
+
+  @override
+  State<_ServerPickerSheet> createState() => _ServerPickerSheetState();
+}
+
+class _ServerPickerSheetState extends State<_ServerPickerSheet> {
+  String? _subId;
 
   @override
   Widget build(BuildContext context) {
@@ -220,7 +263,12 @@ class _ServerPickerSheet extends StatelessWidget {
     final vpn = context.watch<VpnProvider>();
     final s = context.watch<SettingsProvider>().strings;
     final p = context.palette;
-    final list = servers.servers.where((server) => !server.isInformational).toList()
+    final subs = servers.subscriptions.where((e) => e.enabled).toList();
+    _subId ??= vpn.activeServer?.subscriptionId ?? (subs.isEmpty ? null : subs.first.id);
+    if (_subId != null && !subs.any((e) => e.id == _subId)) _subId = subs.isEmpty ? null : subs.first.id;
+    final list = servers.servers
+        .where((server) => !server.isInformational && (_subId == null || server.subscriptionId == _subId))
+        .toList()
       ..sort((a, b) {
         int rank(ServerModel m) => m.pingMs == null ? 1 : (m.pingMs! < 0 ? 2 : 0);
         final r = rank(a).compareTo(rank(b));
@@ -257,6 +305,15 @@ class _ServerPickerSheet extends StatelessWidget {
               ],
             ),
           ),
+          if (subs.length > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: NukefyDropdown<String>(
+                value: _subId ?? '',
+                items: {for (final e in subs) e.id: e.name},
+                onChanged: (id) => setState(() => _subId = id),
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               controller: controller,
@@ -346,6 +403,7 @@ class _ErrorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 520),
       child: Container(
@@ -365,6 +423,17 @@ class _ErrorCard extends StatelessWidget {
                 message,
                 style: AppTextStyles.bodySecondary.copyWith(color: p.error, fontSize: 12.5),
               ),
+            ),
+            const SizedBox(width: 6),
+            IconButton(
+              tooltip: s.t('zCopyReport'),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: message));
+                if (context.mounted) showNukefySnack(context, s.t('copied'));
+              },
+              icon: Icon(Icons.copy_rounded, size: 15, color: p.error),
             ),
           ],
         ),
@@ -456,56 +525,6 @@ class _RoundIcon extends StatelessWidget {
         ),
         child: Icon(icon, size: 20, color: p.textSecondary),
       ),
-    );
-  }
-}
-
-/// Subscription → server cascade right on the home page: pick another
-/// subscription and its server without opening the Servers tab.
-class _QuickPicker extends StatelessWidget {
-  const _QuickPicker();
-
-  @override
-  Widget build(BuildContext context) {
-    final servers = context.watch<ServersProvider>();
-    final vpn = context.watch<VpnProvider>();
-    final settings = context.watch<SettingsProvider>();
-    final subs = servers.subscriptions.where((s) => s.enabled).toList();
-    if (subs.isEmpty) return const SizedBox.shrink();
-    final current = vpn.activeServer;
-    final subId = subs.any((s) => s.id == current?.subscriptionId)
-        ? current!.subscriptionId!
-        : subs.first.id;
-    final pool = servers.serversOf(subId).where((e) => !e.isInformational).toList();
-    final serverId = pool.any((e) => e.id == current?.id) ? current!.id : (pool.isEmpty ? '' : pool.first.id);
-
-    Future<void> pick(String? sub, String? server) async {
-      final targetSub = sub ?? subId;
-      final targetPool = servers.serversOf(targetSub).where((e) => !e.isInformational).toList();
-      if (targetPool.isEmpty) return;
-      final target = server ?? targetPool.first.id;
-      vpn.selectServer(target);
-      await settings.update((item) => item.selectedServerId = target);
-    }
-
-    return Row(
-      children: [
-        Expanded(
-          child: NukefyDropdown<String>(
-            value: subId,
-            items: {for (final s in subs) s.id: s.name},
-            onChanged: (id) => pick(id, null),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: NukefyDropdown<String>(
-            value: serverId,
-            items: {for (final e in pool) e.id: e.name},
-            onChanged: pool.isEmpty ? (_) {} : (id) => pick(null, id),
-          ),
-        ),
-      ],
     );
   }
 }
