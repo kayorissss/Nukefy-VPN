@@ -75,7 +75,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
         await icon.writeAsBytes(data.buffer.asUint8List(), flush: true);
       }
       await trayManager.setIcon(icon.path);
-      await trayManager.setToolTip('Nukefy VPN — $label');
+      await trayManager.setToolTip('Nukefy Client — $label');
     } catch (_) {}
   }
 

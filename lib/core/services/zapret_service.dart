@@ -549,7 +549,7 @@ class ZapretService extends ChangeNotifier {
     _writeUserList(loadDomains());
     await refreshGameLists();
     if (await serviceInstalled()) throw StateError('Service already installed');
-    await _sc(['create', 'zapret', 'binPath=', _serviceCommand(strategy), 'start=', 'auto', 'DisplayName=', 'zapret (Nukefy VPN)']);
+    await _sc(['create', 'zapret', 'binPath=', _serviceCommand(strategy), 'start=', 'auto', 'DisplayName=', 'zapret (Nukefy Client)']);
     servicePresent = true;
     await _startService();
     _runningStrategyId = strategy.id;
@@ -703,7 +703,7 @@ class ZapretService extends ChangeNotifier {
     final path = _userListPath;
     if (path == null) return;
     final file = File(path);
-    final body = StringBuffer('# Nukefy VPN — your domains (one per line)\n');
+    final body = StringBuffer('# Nukefy Client — your domains (one per line)\n');
     if (domains.isEmpty) {
       body.writeln(_placeholder);
     } else {

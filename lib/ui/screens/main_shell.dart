@@ -466,6 +466,20 @@ class _SideRailState extends State<_SideRail> {
         (dest == NavDestination.settingsGeneral &&
             (destination == NavDestination.settingsAppearance || destination == NavDestination.settingsAbout));
 
+    Widget _wideButton(NavDestination dest, IconData icon, String label) => SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => nav.go(dest),
+            style: OutlinedButton.styleFrom(
+              backgroundColor: segSelected(dest) ? p.accent.withValues(alpha: .12) : null,
+              foregroundColor: segSelected(dest) ? p.accent : p.textSecondary,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+            icon: Icon(icon, size: 17),
+            label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        );
+
     Widget _segment(NavDestination dest, IconData icon, String label) => Expanded(
           child: InkWell(
             onTap: () => nav.go(dest),
@@ -524,14 +538,25 @@ class _SideRailState extends State<_SideRail> {
       ),
       child: Column(
         children: [
-          Align(
-            alignment: collapsed ? Alignment.center : Alignment.centerRight,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 38, height: 38),
-              tooltip: s.t(collapsed ? 'zExpandMenu' : 'zCollapseMenu'),
-              onPressed: nav.toggleRail,
-              icon: Icon(collapsed ? Icons.menu_rounded : Icons.menu_open_rounded, size: 20),
+          SizedBox(
+            height: 38,
+            child: Row(
+              mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+              children: [
+                if (!collapsed) ...[
+                  Expanded(
+                    child: Text('NUKEFY CLIENT',
+                        style: AppTextStyles.headline.copyWith(fontSize: 13, letterSpacing: 1.2)),
+                  ),
+                ],
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 38, height: 38),
+                  tooltip: s.t(collapsed ? 'zExpandMenu' : 'zCollapseMenu'),
+                  onPressed: nav.toggleRail,
+                  icon: Icon(collapsed ? Icons.menu_rounded : Icons.menu_open_rounded, size: 20),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 2),
@@ -623,26 +648,13 @@ class _SideRailState extends State<_SideRail> {
                 ],
               ),
             )
-          else
-            Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: p.accent.withValues(alpha: .07),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: p.border),
-              ),
-              child: IntrinsicHeight(
-                child: Row(
-                  children: [
-                    _segment(NavDestination.autotune, Icons.auto_awesome_rounded, s.t('tabAuto')),
-                    VerticalDivider(width: 1, thickness: 1, color: p.border),
-                    _segment(NavDestination.addons, Icons.extension_rounded, s.t('tabAddons')),
-                    VerticalDivider(width: 1, thickness: 1, color: p.border),
-                    _segment(NavDestination.settingsGeneral, Icons.settings_rounded, s.t('settings')),
-                  ],
-                ),
-              ),
-            ),
+          else ...[
+            _wideButton(NavDestination.autotune, Icons.auto_awesome_rounded, s.t('tabAuto')),
+            const SizedBox(height: 6),
+            _wideButton(NavDestination.addons, Icons.extension_rounded, s.t('tabAddons')),
+            const SizedBox(height: 6),
+            _wideButton(NavDestination.settingsGeneral, Icons.settings_rounded, s.t('settings')),
+          ],
         ],
       ),
     );

@@ -8,9 +8,9 @@
 
 [Setup]
 AppId={{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}
-AppName=Nukefy VPN
+AppName=Nukefy Client
 AppVersion={#AppVersion}
-AppVerName=Nukefy VPN {#AppVersion}
+AppVerName=Nukefy Client {#AppVersion}
 AppPublisher=@kayorisan
 AppPublisherURL=https://github.com/kayorissss/Nukefy-VPN
 DefaultDirName={autopf}\Nukefy VPN

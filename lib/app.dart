@@ -28,7 +28,7 @@ class NukefyApp extends StatelessWidget {
       value: AppTheme.overlay(brightness),
       child: MaterialApp(
       navigatorKey: navigatorKey,
-      title: 'Nukefy VPN',
+      title: 'Nukefy Client',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(settings.settings.accent, settings.settings.visualTheme),
       darkTheme: AppTheme.dark(settings.settings.accent, settings.settings.visualTheme),

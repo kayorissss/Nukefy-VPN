@@ -1,5 +1,5 @@
 class AppConstants {
-  static const String appName = 'Nukefy VPN';
+  static const String appName = 'Nukefy Client';
   static const String version = '2.5.8';
   static const int buildNumber = 23;
   static const String packageName = 'com.nukefy.vpn';

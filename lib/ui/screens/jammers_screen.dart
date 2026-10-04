@@ -198,20 +198,55 @@ class _BigCheckButton extends StatelessWidget {
   }
 }
 
-class _CheckAgainButton extends StatelessWidget {
+/// Tactile "check again" action: dips on press, spins the icon while the
+/// probe runs instead of swapping to a bare progress ring.
+class _CheckAgainButton extends StatefulWidget {
   const _CheckAgainButton({required this.busy, required this.onTap, required this.label});
   final bool busy;
   final VoidCallback onTap;
   final String label;
 
   @override
+  State<_CheckAgainButton> createState() => _CheckAgainButtonState();
+}
+
+class _CheckAgainButtonState extends State<_CheckAgainButton> {
+  bool _down = false;
+
+  @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return FilledButton.tonalIcon(
-      style: FilledButton.styleFrom(backgroundColor: p.accent.withValues(alpha: .12), foregroundColor: p.accent, minimumSize: const Size(0, 42), padding: const EdgeInsets.symmetric(horizontal: 12)),
-      onPressed: busy ? null : onTap,
-      icon: busy ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh_rounded, size: 17),
-      label: Text(label),
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _down = true),
+      onTapUp: (_) => setState(() => _down = false),
+      onTapCancel: () => setState(() => _down = false),
+      child: AnimatedScale(
+        scale: _down ? 0.94 : 1,
+        duration: const Duration(milliseconds: 90),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          child: FilledButton.tonalIcon(
+            style: FilledButton.styleFrom(
+              backgroundColor: p.accent.withValues(alpha: _down ? .2 : .12),
+              foregroundColor: p.accent,
+              minimumSize: const Size(0, 42),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              elevation: 0,
+            ),
+            onPressed: widget.busy ? null : widget.onTap,
+            icon: widget.busy
+                ? const Icon(Icons.refresh_rounded, size: 17)
+                    .animate(onPlay: (controller) => controller.repeat())
+                    .rotate(duration: const Duration(milliseconds: 900))
+                : const Icon(Icons.refresh_rounded, size: 17),
+            label: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: Text(widget.label, key: ValueKey(widget.label)),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -357,7 +392,7 @@ Uint8List? _bytes;
     _memory[widget.host] = null;
     try {
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
-      final request = await client.getUrl(Uri.parse('https://www.google.com/s2/favicons?domain=${widget.host}&sz=64'));
+      final request = await client.getUrl(Uri.parse('https://www.google.com/s2/favicons?domain=${widget.host}&sz=128'));
       final response = await request.close().timeout(const Duration(seconds: 8));
       final builder = BytesBuilder(copy: false);
       await for (final chunk in response) {

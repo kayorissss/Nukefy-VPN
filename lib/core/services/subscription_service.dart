@@ -206,7 +206,7 @@ class DeviceIdentity {
                     ? 'macOS'
                     : 'Linux';
     final version = Platform.operatingSystemVersion.replaceAll(RegExp(r'[^\x20-\x7E]'), '').trim();
-    final identity = DeviceIdentity._(hwid, os, version.isEmpty ? os : version, 'Nukefy VPN ${AppConstants.version}');
+    final identity = DeviceIdentity._(hwid, os, version.isEmpty ? os : version, 'Nukefy Client ${AppConstants.version}');
     _cached = identity;
     return identity;
   }
