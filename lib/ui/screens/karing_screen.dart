@@ -212,7 +212,7 @@ class _KaringScreenState extends State<KaringScreen> {
               children: [
                 Expanded(
                   child: NukefyDropdown<String>(
-                    value: connectedHere ? activeSrv.id : pool.first.id,
+                    value: connectedHere ? activeSrv!.id : pool.first.id,
                     items: {for (final e in pool) e.id: e.name},
                     onChanged: (id) => vpn.selectServer(id),
                   ),

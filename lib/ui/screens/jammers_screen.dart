@@ -177,7 +177,7 @@ class _BigCheckButton extends StatelessWidget {
             ),
             child: Center(
               child: busy
-                  ? const Icon(Icons.radar_rounded, size: 60, color: p.accent)
+                  ? Icon(Icons.radar_rounded, size: 60, color: p.accent)
                       .animate(onPlay: (c) => c.repeat())
                       .rotate(duration: const Duration(milliseconds: 1500), curve: Curves.easeInOutCubic)
                   : Icon(Icons.radar_rounded, size: 60, color: p.accent),
