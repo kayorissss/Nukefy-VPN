@@ -706,6 +706,38 @@ Stop-Process -Name '1.1.1.1' -Force -ErrorAction SilentlyContinue
     return _elevatedScript(script, 'nukefy_warp_off.ps1');
   }
 
+  /// Re-enables and starts every Cloudflare WARP service so the 1.1.1.1
+  /// client can initialize again after [disableWarp].
+  Future<String> enableWarp() async {
+    if (!Platform.isWindows) return 'unsupported';
+    const script = r"""
+$svcs = Get-Service | Where-Object { $_.Name -like '*WARP*' }
+foreach ($s in $svcs) {
+  Set-Service -Name $s.Name -StartupType Automatic -ErrorAction SilentlyContinue
+  Start-Service -Name $s.Name -ErrorAction SilentlyContinue
+}
+""";
+    return _elevatedScript(script, 'nukefy_warp_on.ps1');
+  }
+
+  /// Live snapshot of WARP services: one 'Name|Status|StartType' line each.
+  Future<List<String>> warpStatus() async {
+    if (!Platform.isWindows) return const [];
+    try {
+      final r = await Process.run('powershell', [
+        '-NoProfile',
+        '-Command',
+        r'''Get-Service | Where-Object { $_.Name -like '*WARP*' } | ForEach-Object { "$($_.Name)|$($_.Status)|$($_.StartType)" }''',
+      ]);
+      return (r.stdout as String)
+          .split(RegExp(r'\r?\n'))
+          .where((l) => l.contains('|'))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<String> _elevatedScript(String script, String fileName) async {
     final ps1 = File(p.join(Directory.systemTemp.path, fileName));
     await ps1.writeAsString(script);

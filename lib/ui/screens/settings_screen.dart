@@ -1309,14 +1309,68 @@ String _themeLabel(S s, String name) => s.t('theme_$name');
 /// Windows repair corner: the full network-reset ladder the community uses
 /// (Winsock, TCP/IP, WinHTTP proxy, DHCP lease, DNS cache) and a permanent
 /// Cloudflare WARP kill switch.
-class _ToolsCard extends StatelessWidget {
+class _ToolsCard extends StatefulWidget {
   const _ToolsCard({required this.strings});
   final S strings;
 
   @override
+  State<_ToolsCard> createState() => _ToolsCardState();
+}
+
+class _ToolsCardState extends State<_ToolsCard> {
+  List<String> _services = [];
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _loading = true);
+    final lines = await VpnPlatform().warpStatus();
+    if (!mounted) return;
+    setState(() {
+      _services = lines;
+      _loading = false;
+    });
+  }
+
+  Future<void> _act(bool disable) async {
+    setState(() => _busy = true);
+    final platform = VpnPlatform();
+    final result = disable ? await platform.disableWarp() : await platform.enableWarp();
+    if (!mounted) return;
+    await context.read<SettingsProvider>().update((item) => item.warpDisabled = disable);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    await _refresh();
+    if (!mounted) return;
+    showNukefySnack(context, widget.strings.t(disable ? 'warpOffDone' : 'warpOnDone'));
+  }
+
+  String _warpSubtitle(S s) {
+    if (_busy) return s.t('warpWorking');
+    if (_loading) return s.t('warpLoading');
+    if (_services.isEmpty) return s.t('warpNotFound');
+    return _services.map((line) {
+      final parts = line.split('|');
+      if (parts.length < 3) return line;
+      final status = parts[1] == 'Running' ? s.t('warpStateRunning') : s.t('warpStateStopped');
+      final start = parts[2] == 'Disabled'
+          ? s.t('warpStartDisabled')
+          : parts[2] == 'Automatic'
+              ? s.t('warpStartAuto')
+              : s.t('warpStartManual');
+      return '${parts[0]}: $status, $start';
+    }).join('\n');
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
-    final value = settings.settings;
+    final strings = widget.strings;
     return SectionCard(
       title: strings.t('netResetTitle'),
       icon: Icons.build_circle_outlined,
@@ -1336,19 +1390,30 @@ class _ToolsCard extends StatelessWidget {
               label: Text(strings.t('netResetRun')),
             ),
           ),
-          SwitchTile(
-            icon: Icons.cloud_off_rounded,
+          SettingsTile(
+            icon: Icons.cloud_outlined,
             title: strings.t('warpTitle'),
-            subtitle: strings.t('warpHint'),
-            value: !value.warpDisabled,
-            onChanged: (v) async {
-              if (!v) {
-                await VpnPlatform().disableWarp();
-                await settings.update((item) => item.warpDisabled = true);
-              } else {
-                await settings.update((item) => item.warpDisabled = false);
-              }
-            },
+            subtitle: _warpSubtitle(strings),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: strings.t('refresh'),
+                  onPressed: _loading || _busy ? null : _refresh,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                ),
+                const SizedBox(width: 4),
+                OutlinedButton(
+                  onPressed: _busy || _loading ? null : () => _act(true),
+                  child: Text(strings.t('warpOffBtn')),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _busy || _loading ? null : () => _act(false),
+                  child: Text(strings.t('warpOnBtn')),
+                ),
+              ],
+            ),
           ),
         ],
       ),
