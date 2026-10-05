@@ -1350,7 +1350,7 @@ class _ToolsCardState extends State<_ToolsCard> {
     if (!mounted) return;
     showNukefySnack(
       context,
-      result == 'ok' || result.isEmpty
+      result.startsWith('ok') || result.isEmpty
           ? widget.strings.t(disable ? 'warpOffDone' : 'warpOnDone')
           : result,
     );
