@@ -72,6 +72,7 @@ class SettingsTile extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.onTap,
+    this.below,
   });
 
   final IconData icon;
@@ -79,6 +80,11 @@ class SettingsTile extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
+
+  /// Extra content rendered under the row, indented to the title column, so
+  /// dropdowns and choosers line up with every other card instead of being
+  /// hand-padded at random offsets.
+  final Widget? below;
 
   @override
   Widget build(BuildContext context) {
@@ -88,7 +94,9 @@ class SettingsTile extends StatelessWidget {
         // A dropdown or a long action label must not steal the title's width
         // on a phone. The old ListTile left a 40–60 px text column, which is
         // why Russian words were rendered one character per line.
-        final stacked = constraints.maxWidth < 360 && trailing != null;
+        // Wide trailing controls (button pairs, dropdowns) move under the title
+        // when the card is narrow, so nothing ever clips on a phone.
+        final stacked = constraints.maxWidth < 400 && trailing != null;
         final lead = Container(
           width: 36,
           height: 36,
@@ -111,18 +119,7 @@ class SettingsTile extends StatelessWidget {
               ),
               if (subtitle != null) ...[
                 const SizedBox(width: 6),
-                Tooltip(
-                  message: subtitle!,
-                  waitDuration: const Duration(milliseconds: 300),
-                  constraints: const BoxConstraints(minWidth: 280, maxWidth: 420),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                  decoration: ShapeDecoration(
-                    color: p.card,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: p.border)),
-                  ),
-                  textStyle: AppTextStyles.bodySecondary.copyWith(color: p.text),
-                  child: Icon(Icons.help_outline_rounded, size: 15, color: p.textSecondary),
-                ),
+                HintBadge(message: subtitle!),
               ],
             ],
           ),
@@ -146,16 +143,22 @@ class SettingsTile extends StatelessWidget {
             onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 7),
-              child: stacked
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        row,
-                        const SizedBox(height: 8),
-                        Align(alignment: AlignmentDirectional.centerEnd, child: trailing),
-                      ],
-                    )
-                  : row,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (stacked) ...[
+                    row,
+                    const SizedBox(height: 8),
+                    Align(alignment: AlignmentDirectional.centerEnd, child: trailing),
+                  ] else
+                    row,
+                  if (below != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(50, 6, 0, 2),
+                      child: below!,
+                    ),
+                ],
+              ),
             ),
           ),
         );
@@ -173,6 +176,7 @@ class SwitchTile extends StatelessWidget {
     required this.onChanged,
     this.subtitle,
     this.icon,
+    this.subtitleAsHint = true,
   });
 
   final String title;
@@ -180,6 +184,11 @@ class SwitchTile extends StatelessWidget {
   final IconData? icon;
   final bool value;
   final ValueChanged<bool> onChanged;
+
+  /// Static explanations go behind the "?" badge so every switch row is one
+  /// clean line. Set to false when the subtitle is live state the user must
+  /// see at a glance (ports, addresses, counters).
+  final bool subtitleAsHint;
 
   @override
   Widget build(BuildContext context) {
@@ -198,17 +207,30 @@ class SwitchTile extends StatelessWidget {
                 child: Icon(icon, color: p.accent, size: 19),
               );
         final text = Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
-              if (subtitle != null) ...[
-                const SizedBox(height: 2),
-                Text(subtitle!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
-              ],
-            ],
-          ),
+          child: subtitle != null && subtitleAsHint
+              ? Row(
+                  children: [
+                    Flexible(
+                      child: Text(title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 6),
+                    HintBadge(message: subtitle!),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(subtitle!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+                    ],
+                  ],
+                ),
         );
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
@@ -296,6 +318,103 @@ class NukefyDropdown<T> extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Small "?" badge that hides a full description behind a tooltip so tiles
+/// stay one clean line. Shared by [SettingsTile] and [SwitchTile].
+class HintBadge extends StatelessWidget {
+  const HintBadge({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Tooltip(
+      message: message,
+      waitDuration: const Duration(milliseconds: 300),
+      constraints: const BoxConstraints(minWidth: 280, maxWidth: 420),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: ShapeDecoration(
+        color: p.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: p.border)),
+      ),
+      textStyle: AppTextStyles.bodySecondary.copyWith(color: p.text),
+      child: Icon(Icons.help_outline_rounded, size: 15, color: p.textSecondary),
+    );
+  }
+}
+
+/// Mini caption that splits a long card into named groups, so a pile of
+/// switches and sliders stops looking like an endless wall of toggles.
+class SettingsGroupLabel extends StatelessWidget {
+  const SettingsGroupLabel({super.key, required this.label, this.first = false});
+
+  final String label;
+  final bool first;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(2, first ? 4 : 14, 2, 4),
+      child: Row(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: AppTextStyles.section.copyWith(color: p.accent.withValues(alpha: .85), fontSize: 10.5, letterSpacing: .9),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Container(height: 1, color: p.border)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Uniform action button for card rows: one geometry, two weights, so the
+/// right edge of every card reads as a single column of controls.
+class NukefyActionButton extends StatelessWidget {
+  const NukefyActionButton({
+    super.key,
+    required this.label,
+    this.onPressed,
+    this.icon,
+    this.filled = true,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final child = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null) ...[Icon(icon, size: 16), const SizedBox(width: 6)],
+        Text(label, style: AppTextStyles.bodyRegular.copyWith(fontSize: 13, fontWeight: FontWeight.w600)),
+      ],
+    );
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: filled ? Colors.transparent : p.border));
+    final padding = const EdgeInsets.symmetric(horizontal: 14);
+    return SizedBox(
+      height: 36,
+      child: filled
+          ? FilledButton(
+              onPressed: onPressed,
+              style: FilledButton.styleFrom(padding: padding, shape: shape, visualDensity: VisualDensity.compact),
+              child: child,
+            )
+          : OutlinedButton(
+              onPressed: onPressed,
+              style: OutlinedButton.styleFrom(padding: padding, shape: shape, visualDensity: VisualDensity.compact),
+              child: child,
+            ),
     );
   }
 }

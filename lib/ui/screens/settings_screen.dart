@@ -71,16 +71,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         maxColumns: 2,
         fullWidthCount: (widget.showSubtabs ? 1 : 0) + (_section == 0 ? 1 : 0),
         children: [
-          // Desktop downloads sing-box as a separate binary; Android ships
-          // the core inside the APK (libbox), so there is nothing to install.
           if (widget.showSubtabs)
             _SettingsSubtabs(selected: _section, onChanged: (value) => setState(() => _section = value)),
           if (_section == 0) const _UpdateBanner(),
-          if (_section == 0 && !Platform.isAndroid) ...[
-            _CoreCard(vpn: vpn, strings: s),
-            _XrayCard(vpn: vpn, strings: s),
-          ],
-          if (_section == 0) _ToolsCard(strings: s),
           if (_section == 0) SectionCard(
             title: s.t('general'),
             icon: Icons.tune_rounded,
@@ -136,54 +129,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
-          if (_section == 1) _AppearanceCard(settings: settings),
-          if (_section == 0) SectionCard(
-            title: s.t('subscriptionsSection'),
-            icon: Icons.rss_feed_rounded,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SwitchTile(
-                  icon: Icons.fingerprint_rounded,
-                  title: s.t('sendHwid'),
-                  subtitle: s.t('sendHwidHint'),
-                  value: value.sendHwid,
-                  onChanged: (next) => settings.update((item) => item.sendHwid = next),
-                ),
-                SettingsTile(
-                  icon: Icons.badge_outlined,
-                  title: s.t('clientIdentity'),
-                  subtitle: s.t('clientIdentityHint'),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(52, 0, 2, 10),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: NukefyDropdown<String>(
-                      value: SubscriptionService.clientUserAgents.containsKey(value.clientIdentity) ? value.clientIdentity : 'nukefy',
-                      items: const {
-                        'nukefy': 'Nukefy VPN',
-                        'happ': 'Happ',
-                        'v2rayng': 'v2rayNG',
-                        'hiddify': 'Hiddify',
-                        'streisand': 'Streisand',
-                      },
-                      onChanged: (next) => settings.update((item) => item.clientIdentity = next),
-                    ),
-                  ),
-                ),
-                SettingsTile(
-                  icon: Icons.copy_rounded,
-                  title: s.t('copyHwid'),
-                  onTap: () async {
-                    final id = await DeviceIdentity.load();
-                    await Clipboard.setData(ClipboardData(text: id.hwid));
-                    if (context.mounted) showNukefySnack(context, s.t('copied'));
-                  },
-                ),
-              ],
-            ),
-          ),
           if (_section == 0) SectionCard(
             title: s.t('vpn'),
             icon: Icons.vpn_key_outlined,
@@ -215,31 +160,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     }
                   },
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(2, 8, 2, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(s.t('connectionMode'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 4),
-                      Text(s.t('connectionModeHint'), style: context.palette.secondaryStyle),
-                      const SizedBox(height: 10),
-                      _ConnectionModeChoice(
-                        tunEnabled: value.tunEnabled,
-                        proxyLabel: s.t('proxyMode'),
-                        tunLabel: s.t('tunMode'),
-                        onChanged: (tun) => settings.update((item) {
-                          item.tunEnabled = tun;
-                          if (!tun) item.localProxyEnabled = true;
-                        }),
-                      ),
-                    ],
+                SettingsTile(
+                  icon: Icons.swap_horiz_rounded,
+                  title: s.t('connectionMode'),
+                  subtitle: s.t('connectionModeHint'),
+                  below: _ConnectionModeChoice(
+                    tunEnabled: value.tunEnabled,
+                    proxyLabel: s.t('proxyMode'),
+                    tunLabel: s.t('tunMode'),
+                    onChanged: (tun) => settings.update((item) {
+                      item.tunEnabled = tun;
+                      if (!tun) item.localProxyEnabled = true;
+                    }),
                   ),
                 ),
                 SwitchTile(
                   icon: Icons.lan_outlined,
                   title: s.t('localProxy'),
                   subtitle: 'SOCKS ${value.socksPort} · HTTP ${value.httpPort}',
+                  subtitleAsHint: false,
                   value: value.localProxyEnabled,
                   onChanged: (next) => settings.update((item) => item.localProxyEnabled = next),
                 ),
@@ -249,6 +188,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: s.t('blockQuicHint'),
                   value: value.blockQuic,
                   onChanged: (next) => settings.update((item) => item.blockQuic = next),
+                ),
+              ],
+            ),
+          ),
+          if (_section == 0) SectionCard(
+            title: s.t('subscriptionsSection'),
+            icon: Icons.rss_feed_rounded,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchTile(
+                  icon: Icons.fingerprint_rounded,
+                  title: s.t('sendHwid'),
+                  subtitle: s.t('sendHwidHint'),
+                  value: value.sendHwid,
+                  onChanged: (next) => settings.update((item) => item.sendHwid = next),
+                ),
+                SettingsTile(
+                  icon: Icons.badge_outlined,
+                  title: s.t('clientIdentity'),
+                  subtitle: s.t('clientIdentityHint'),
+                  below: NukefyDropdown<String>(
+                    value: SubscriptionService.clientUserAgents.containsKey(value.clientIdentity) ? value.clientIdentity : 'nukefy',
+                    items: const {
+                      'nukefy': 'Nukefy VPN',
+                      'happ': 'Happ',
+                      'v2rayng': 'v2rayNG',
+                      'hiddify': 'Hiddify',
+                      'streisand': 'Streisand',
+                    },
+                    onChanged: (next) => settings.update((item) => item.clientIdentity = next),
+                  ),
+                ),
+                SettingsTile(
+                  icon: Icons.copy_rounded,
+                  title: s.t('copyHwid'),
+                  onTap: () async {
+                    final id = await DeviceIdentity.load();
+                    await Clipboard.setData(ClipboardData(text: id.hwid));
+                    if (context.mounted) showNukefySnack(context, s.t('copied'));
+                  },
                 ),
               ],
             ),
@@ -292,11 +272,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           // Everything below is for people who know what they are doing.
+          if (_section == 0 && !Platform.isAndroid) ...[
+            _CoreCard(vpn: vpn, strings: s),
+            _XrayCard(vpn: vpn, strings: s),
+          ],
+          if (_section == 0) _ToolsCard(strings: s),
           if (_section == 0) _MoreCard(
             title: s.t('more'),
             description: s.t('moreHint'),
             child: Column(
               children: [
+                SettingsGroupLabel(label: s.t('grpNetwork'), first: true),
                 SwitchTile(
                   title: s.t('allowLan'),
                   value: value.allowLan,
@@ -317,9 +303,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onChanged: (next) => settings.update((item) => item.tunStack = next),
                     ),
                   ),
-                const SizedBox(height: 8),
-                const SizedBox(height: 12),
-                const Divider(height: 1),
+                SettingsGroupLabel(label: s.t('grpFragment')),
                 _SliderTile(
                   title: '${s.t('mtu')}: ${value.mtu}',
                   value: value.mtu.clamp(1280, 9000).toDouble(),
@@ -346,7 +330,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   divisions: 49,
                   onChanged: (next) => settings.update((item) => item.fragmentFallbackMs = next.round()),
                 ),
-                const Divider(height: 1),
+                SettingsGroupLabel(label: s.t('grpMux')),
                 SwitchTile(
                   title: s.t('mux'),
                   value: value.muxEnabled,
@@ -374,7 +358,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   value: value.muxPadding,
                   onChanged: (next) => settings.update((item) => item.muxPadding = next),
                 ),
-                const Divider(height: 1),
+                SettingsGroupLabel(label: s.t('grpLogs')),
                 SettingsTile(
                   icon: Icons.article_outlined,
                   title: s.t('showLog'),
@@ -419,6 +403,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
+          if (_section == 1) _AppearanceCard(settings: settings),
           if (_section == 2) SectionCard(
             title: s.t('about'),
             icon: Icons.info_outline_rounded,
@@ -625,10 +610,11 @@ class _SettingsSubtabs extends StatelessWidget {
       (s.t('aboutTab'), Icons.info_outline_rounded),
     ];
     return Container(
-      padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        color: p.card,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+        color: p.card.withValues(alpha: .82),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: p.border),
       ),
       child: Row(
@@ -644,11 +630,12 @@ class _SettingsSubtabs extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
                     decoration: BoxDecoration(
                       color: selected == index ? p.background : Colors.transparent,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-                      border: Border(top: BorderSide(color: selected == index ? p.accent : Colors.transparent, width: 2.5)),
+                      borderRadius: BorderRadius.circular(13),
+                      border: Border.all(color: selected == index ? p.accent.withValues(alpha: .65) : Colors.transparent, width: 1.2),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1075,11 +1062,13 @@ class _MoreCardState extends State<_MoreCard> {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    // Same geometry and header rhythm as SectionCard: a collapsed "More" card
+    // must not look like a different species of card next to the others.
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: p.card,
+        color: p.card.withValues(alpha: .82),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: p.border),
       ),
@@ -1089,31 +1078,28 @@ class _MoreCardState extends State<_MoreCard> {
           InkWell(
             onTap: () => setState(() => _open = !_open),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(16, 14, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(color: p.accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-                    child: Icon(Icons.science_outlined, size: 18, color: p.accent),
+                  Row(
+                    children: [
+                      Icon(Icons.science_outlined, size: 16, color: p.accent),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(widget.title.toUpperCase(), style: AppTextStyles.section.copyWith(color: p.textSecondary)),
+                      ),
+                      AnimatedRotation(
+                        duration: const Duration(milliseconds: 220),
+                        turns: _open ? 0.5 : 0,
+                        child: Icon(Icons.expand_more_rounded, size: 20, color: p.textSecondary),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(widget.title.toUpperCase(), style: context.palette.sectionStyle),
-                        if (widget.description != null)
-                          Text(widget.description!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  AnimatedRotation(
-                    duration: const Duration(milliseconds: 220),
-                    turns: _open ? 0.5 : 0,
-                    child: Icon(Icons.expand_more_rounded, size: 22, color: p.textSecondary),
-                  ),
+                  if (widget.description != null) ...[
+                    const SizedBox(height: 8),
+                    Text(widget.description!, style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+                  ],
                 ],
               ),
             ),
@@ -1123,7 +1109,7 @@ class _MoreCardState extends State<_MoreCard> {
             curve: Curves.easeOutCubic,
             alignment: Alignment.topCenter,
             child: _open
-                ? Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 10), child: widget.child)
+                ? Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10), child: widget.child)
                 : const SizedBox(width: double.infinity),
           ),
         ],
@@ -1367,72 +1353,141 @@ class _ToolsCardState extends State<_ToolsCard> {
     );
   }
 
-  String _warpSubtitle(S s) {
-    if (_busy) return s.t('warpWorking');
-    if (_loading) return s.t('warpLoading');
-    if (_services.isEmpty) return s.t('warpNotFound');
-    return _services.map((line) {
-      final parts = line.split('|');
-      if (parts.length < 3) return line;
-      final status = parts[1] == 'Running' ? s.t('warpStateRunning') : s.t('warpStateStopped');
-      final start = parts[2] == 'Disabled'
-          ? s.t('warpStartDisabled')
-          : parts[2] == 'Automatic'
-              ? s.t('warpStartAuto')
-              : s.t('warpStartManual');
-      return '${parts[0]}: $status, $start';
-    }).join('\n');
-  }
-
   @override
   Widget build(BuildContext context) {
     final strings = widget.strings;
     return SectionCard(
-      title: strings.t('netResetTitle'),
+      title: strings.t('netToolsTitle'),
       icon: Icons.build_circle_outlined,
+      trailing: IconButton(
+        tooltip: strings.t('refresh'),
+        onPressed: _loading || _busy ? null : _refresh,
+        icon: const Icon(Icons.refresh_rounded, size: 18),
+        visualDensity: VisualDensity.compact,
+      ),
       child: Column(
         children: [
           SettingsTile(
-            icon: Icons.refresh_rounded,
+            icon: Icons.wifi_tethering_rounded,
             title: strings.t('netResetRun'),
             subtitle: strings.t('netResetHint'),
-            trailing: FilledButton.icon(
+            trailing: NukefyActionButton(
+              label: strings.t('apply'),
+              icon: Icons.play_arrow_rounded,
               onPressed: () async {
                 final result = await VpnPlatform().windowsNetworkReset();
                 if (!context.mounted) return;
-                showNukefySnack(context, result == 'ok-reboot' ? '${strings.t('netResetTitle')}: OK — ${strings.t('restart')}' : result);
+                showNukefySnack(context, result == 'ok-reboot' ? '${strings.t('netToolsTitle')}: OK — ${strings.t('restart')}' : result);
               },
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: Text(strings.t('netResetRun')),
             ),
           ),
           SettingsTile(
             icon: Icons.cloud_outlined,
             title: strings.t('warpTitle'),
-            subtitle: _warpSubtitle(strings),
+            subtitle: strings.t('warpHint'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  tooltip: strings.t('refresh'),
-                  onPressed: _loading || _busy ? null : _refresh,
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                ),
-                const SizedBox(width: 4),
-                OutlinedButton(
+                NukefyActionButton(
+                  label: strings.t('warpOffBtn'),
+                  filled: false,
                   onPressed: _busy || _loading ? null : () => _act(true),
-                  child: Text(strings.t('warpOffBtn')),
                 ),
                 const SizedBox(width: 8),
-                FilledButton(
+                NukefyActionButton(
+                  label: strings.t('warpOnBtn'),
                   onPressed: _busy || _loading ? null : () => _act(false),
-                  child: Text(strings.t('warpOnBtn')),
                 ),
               ],
             ),
+            below: _WarpStatusBox(lines: _services, loading: _loading, busy: _busy, strings: strings),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Live WARP service table shown under the control row: one line per service
+/// with its state and start type, so the card explains itself instead of
+/// hiding everything behind a bare switch.
+class _WarpStatusBox extends StatelessWidget {
+  const _WarpStatusBox({required this.lines, required this.loading, required this.busy, required this.strings});
+
+  final List<String> lines;
+  final bool loading;
+  final bool busy;
+  final S strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final List<(String, String, String)> rows = [];
+    for (final line in lines) {
+      final parts = line.split('|');
+      if (parts.length < 3) continue;
+      final running = parts[1] == 'Running';
+      final status = running ? strings.t('warpStateRunning') : strings.t('warpStateStopped');
+      final start = parts[2] == 'Disabled'
+          ? strings.t('warpStartDisabled')
+          : parts[2] == 'Automatic'
+              ? strings.t('warpStartAuto')
+              : strings.t('warpStartManual');
+      rows.add((parts[0], status, start));
+    }
+    final Object? message = busy
+        ? strings.t('warpWorking')
+        : loading
+            ? strings.t('warpLoading')
+            : rows.isEmpty
+                ? strings.t('warpNotFound')
+                : null;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: p.surface.withValues(alpha: .7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: p.border),
+      ),
+      child: message != null
+          ? Row(
+              children: [
+                if (loading || busy) ...[
+                  const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(child: Text('$message', style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary))),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final row in rows)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: row.$2 == strings.t('warpStateRunning') ? p.success : p.error,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(row.$1, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.bodySecondary.copyWith(color: p.text, fontWeight: FontWeight.w600)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('${row.$2} · ${row.$3}', style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 11.5)),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }
