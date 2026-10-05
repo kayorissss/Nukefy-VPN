@@ -1348,7 +1348,12 @@ class _ToolsCardState extends State<_ToolsCard> {
     setState(() => _busy = false);
     await _refresh();
     if (!mounted) return;
-    showNukefySnack(context, widget.strings.t(disable ? 'warpOffDone' : 'warpOnDone'));
+    showNukefySnack(
+      context,
+      result == 'ok' || result.isEmpty
+          ? widget.strings.t(disable ? 'warpOffDone' : 'warpOnDone')
+          : result,
+    );
   }
 
   String _warpSubtitle(S s) {
