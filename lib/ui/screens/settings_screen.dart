@@ -1339,6 +1339,17 @@ class _ToolsCardState extends State<_ToolsCard> {
   }
 
   Future<void> _act(bool disable) async {
+    if (disable) {
+      final ok = await confirmDialog(
+        context,
+        title: widget.strings.t('warpTitle'),
+        body: widget.strings.t('warpOffWarn'),
+        confirm: widget.strings.t('warpOffBtn'),
+        cancel: widget.strings.t('cancel'),
+      );
+      if (!ok) return;
+    }
+    if (!mounted) return;
     setState(() => _busy = true);
     final platform = VpnPlatform();
     final result = disable ? await platform.disableWarp() : await platform.enableWarp();
