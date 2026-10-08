@@ -581,9 +581,8 @@ Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
       if (!desktop && shortcut.existsSync()) {
         shortcut.deleteSync();
       }
-      AppLog.log('installer choices applied: autostart=$autostart desktop=$desktop');
-    } catch (error) {
-      AppLog.log('installer choices failed: $error');
+    } catch (_) {
+      // A missing options file is the normal case after the first start.
     }
   }
 

@@ -1,5 +1,5 @@
-# Fast syntax check for the C# installer/launcher: a full release build takes
-# minutes before it ever reaches csc, and a typo there used to cost a whole
+# Fast syntax check for the C# installer/launcher. A full release build takes
+# minutes before it ever reaches csc, so a typo there used to cost a whole
 # release cycle.
 name: Installer check
 on:
@@ -23,10 +23,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path dummy | Out-Null
           Set-Content -Path dummy/readme.txt -Value 'payload placeholder'
           Compress-Archive -Path dummy/* -DestinationPath payload.zip -Force
-      - name: Compile
+      - name: Compile both executables
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $ErrorActionPreference = 'Stop'
+          $ErrorActionPreference = 'Continue'
           $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
           $lines = @(
             'using System.Reflection;',
@@ -40,8 +42,16 @@ jobs:
           $common = @('/nologo','/target:winexe','/platform:anycpu','/optimize+','/resource:payload.zip,payload.zip',
                       '/reference:System.IO.Compression.dll','/reference:System.IO.Compression.FileSystem.dll',
                       '/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Core.dll')
-          & $csc @common /out:setup-test.exe /win32manifest:windows/installer/setup.manifest windows/installer/NukefyInstaller.cs AssemblyInfo.cs
-          if ($LASTEXITCODE -ne 0) { throw "installer csc exit $LASTEXITCODE" }
-          & $csc @common /out:portable-test.exe /win32manifest:windows/portable/launcher.manifest windows/portable/Launcher.cs AssemblyInfo.cs
-          if ($LASTEXITCODE -ne 0) { throw "launcher csc exit $LASTEXITCODE" }
+          $setup = & $csc @common /out:setup-test.exe /win32manifest:windows/installer/setup.manifest windows/installer/NukefyInstaller.cs AssemblyInfo.cs 2>&1
+          $setupCode = $LASTEXITCODE
+          $portable = & $csc @common /out:portable-test.exe /win32manifest:windows/portable/launcher.manifest windows/portable/Launcher.cs AssemblyInfo.cs 2>&1
+          $portableCode = $LASTEXITCODE
+          ($setup + $portable) | ForEach-Object { Write-Host $_ }
+          if ($setupCode -ne 0 -or $portableCode -ne 0) {
+            $fence = '```'
+            $body = "installer-check failed (setup $setupCode, portable $portableCode):`n`n$fence`n" +
+                    ((($setup + $portable) | Select-Object -Last 40) -join "`n") + "`n$fence"
+            gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" | Out-Null
+            throw "csc failed: setup=$setupCode portable=$portableCode"
+          }
           Write-Host 'both compiled'

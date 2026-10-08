@@ -1,4 +1,4 @@
-// Nukefy Client — собственный установщик.
+﻿// Nukefy Client — собственный установщик.
 //
 // Окно полностью своё: тёмная карточка в стиле приложения, выбор языка,
 // галочки, прогресс и финальная страница. Никакого системного мастера Inno:
@@ -256,7 +256,7 @@ namespace NukefySetup
             for (int i = 0; i < 3; i++)
                 DrawCheck(g, rows[i], i == 0 ? _desktop : i == 1 ? _autostart : _launch, L.T(3 + i));
 
-            DrawText(g, L.T(24), new Rectangle(40, ClientSize.Height - 110, ClientSize.Width - 300, 20), 9f, Muted, FontStyle.Regular, 0f);
+            DrawText(g, L.T(23), new Rectangle(40, ClientSize.Height - 110, ClientSize.Width - 300, 20), 9f, Muted, FontStyle.Regular, 0f);
             DrawButton(g, PrimaryButton, L.T(6), true);
             DrawButton(g, SecondaryButton, L.T(7), false);
         }
@@ -300,8 +300,8 @@ namespace NukefySetup
 
         void PaintFailed(Graphics g)
         {
-            DrawText(g, L.T(21), new Rectangle(40, 100, ClientSize.Width - 80, 40), 20f, Danger, FontStyle.Bold, 0f);
-            DrawText(g, L.T(22), new Rectangle(40, 150, ClientSize.Width - 80, 24), 10f, Muted, FontStyle.Regular, 0f);
+            DrawText(g, L.T(19), new Rectangle(40, 100, ClientSize.Width - 80, 40), 20f, Danger, FontStyle.Bold, 0f);
+            DrawText(g, L.T(20), new Rectangle(40, 150, ClientSize.Width - 80, 24), 10f, Muted, FontStyle.Regular, 0f);
             var box = new Rectangle(40, 180, ClientSize.Width - 80, 150);
             using (var path = Round(box, 14))
             {
@@ -309,7 +309,7 @@ namespace NukefySetup
                 using (var pen = new Pen(Border)) g.DrawPath(pen, path);
             }
             DrawText(g, Trim(_error, 420), new Rectangle(box.X + 14, box.Y + 12, box.Width - 28, box.Height - 24), 9f, Muted, FontStyle.Regular, 0f);
-            DrawButton(g, PrimaryButton, L.T(23), true);
+            DrawButton(g, PrimaryButton, L.T(21), true);
         }
 
         static string Trim(string text, int max)
@@ -466,7 +466,7 @@ namespace NukefySetup
         {
             _page = Page.Progress;
             _progress = 0.02;
-            _status = L.T(9);
+            _status = L.T(8);
             Invalidate();
             var worker = new Thread(Install);
             worker.IsBackground = true;
@@ -498,15 +498,16 @@ namespace NukefySetup
         {
             try
             {
+                Report(0.05, L.T(17));
                 StopOwnStack();
-                Report(0.12, L.T(14));
+                Report(0.15, L.T(14));
                 ExtractPayload();
                 Report(0.55, L.T(15));
                 CreateShortcuts();
                 Report(0.75, L.T(16));
                 WriteUninstallEntry();
                 WriteInstallOptions();
-                Report(0.9, L.T(17));
+                Report(0.9, L.T(18));
                 ApplyAutostart();
                 Report(1.0, L.T(9));
                 BeginInvoke((Action)(() =>
@@ -624,7 +625,7 @@ namespace NukefySetup
                 key.SetValue("QuietUninstallString", command);
                 key.SetValue("NoModify", 1, RegistryValueKind.DWord);
                 key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
-                key.SetValue("EstimatedSize", EstimateSize() / 1024, RegistryValueKind.DWord);
+                key.SetValue("EstimatedSize", (int)Math.Min(int.MaxValue, EstimateSize() / 1024), RegistryValueKind.DWord);
             }
         }
 
