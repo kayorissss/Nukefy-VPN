@@ -115,7 +115,9 @@ namespace NukefySetup
         static readonly Color Bg = Color.FromArgb(0x0B, 0x0E, 0x13);
         static readonly Color Card = Color.FromArgb(0x16, 0x1B, 0x24);
         static readonly Color Border = Color.FromArgb(0x24, 0x2B, 0x36);
-        static readonly Color Text = Color.FromArgb(0xF3, 0xF6, 0xFA);
+        // Named Fg, not Text: Form already owns a Text property and the
+        // clash used to break the compile (CS0198/CS0029).
+        static readonly Color Fg = Color.FromArgb(0xF3, 0xF6, 0xFA);
         static readonly Color Muted = Color.FromArgb(0x8B, 0x95, 0xA5);
         static readonly Color Accent = Color.FromArgb(0x2E, 0xE5, 0x9D);
         static readonly Color Danger = Color.FromArgb(0xFF, 0x4D, 0x6D);
@@ -242,7 +244,7 @@ namespace NukefySetup
 
         void PaintOptions(Graphics g)
         {
-            DrawText(g, L.T(1), new Rectangle(40, 74, ClientSize.Width - 80, 40), 24f, Text, FontStyle.Bold, 0f);
+            DrawText(g, L.T(1), new Rectangle(40, 74, ClientSize.Width - 80, 40), 24f, Fg, FontStyle.Bold, 0f);
             DrawText(g, L.T(2), new Rectangle(40, 124, ClientSize.Width - 80, 40), 10f, Muted, FontStyle.Regular, 0f);
             DrawText(g, L.T(13) + " " + AppDir, new Rectangle(40, 158, ClientSize.Width - 80, 20), 9f, Color.FromArgb(0x4F, 0x58, 0x66), FontStyle.Regular, 0f);
 
@@ -263,7 +265,7 @@ namespace NukefySetup
 
         void PaintProgress(Graphics g)
         {
-            DrawText(g, L.T(1), new Rectangle(40, 74, ClientSize.Width - 80, 40), 24f, Text, FontStyle.Bold, 0f);
+            DrawText(g, L.T(1), new Rectangle(40, 74, ClientSize.Width - 80, 40), 24f, Fg, FontStyle.Bold, 0f);
             DrawText(g, _status, new Rectangle(40, 150, ClientSize.Width - 80, 24), 11f, Muted, FontStyle.Regular, 0f);
             var track = new Rectangle(40, 196, ClientSize.Width - 80, 10);
             using (var path = Round(track, 5))
@@ -276,7 +278,7 @@ namespace NukefySetup
                 using (var fill = new LinearGradientBrush(new Rectangle(track.X, track.Y, w, track.Height), Accent, Color.FromArgb(0x00, 0xE5, 0xFF), 0f))
                     g.FillPath(fill, path);
             }
-            DrawText(g, (int)(_progress * 100) + "%", new Rectangle(40, 216, ClientSize.Width - 80, 22), 10f, Text, FontStyle.Bold, 0f);
+            DrawText(g, (int)(_progress * 100) + "%", new Rectangle(40, 216, ClientSize.Width - 80, 22), 10f, Fg, FontStyle.Bold, 0f);
         }
 
         void PaintDone(Graphics g)
@@ -292,7 +294,7 @@ namespace NukefySetup
                     new Point(circle.X + 51, circle.Y + 22),
                 });
             }
-            DrawText(g, L.T(9), new Rectangle(40, 180, ClientSize.Width - 80, 40), 22f, Text, FontStyle.Bold, 0f, false, true);
+            DrawText(g, L.T(9), new Rectangle(40, 180, ClientSize.Width - 80, 40), 22f, Fg, FontStyle.Bold, 0f, false, true);
             DrawText(g, L.T(10), new Rectangle(40, 226, ClientSize.Width - 80, 40), 10.5f, Muted, FontStyle.Regular, 0f, false, true);
             DrawButton(g, PrimaryButton, L.T(11), true);
             DrawButton(g, SecondaryButton, L.T(12), false);
@@ -369,7 +371,7 @@ namespace NukefySetup
                     using (var pen = new Pen(Border)) g.DrawPath(pen, path);
                 }
             }
-            DrawText(g, label, r, 11f, primary ? Color.FromArgb(0x0B, 0x0E, 0x13) : Text, FontStyle.Bold, 0f, true, true);
+            DrawText(g, label, r, 11f, primary ? Color.FromArgb(0x0B, 0x0E, 0x13) : Fg, FontStyle.Bold, 0f, true, true);
         }
 
         void DrawCheck(Graphics g, Rectangle row, bool value, string label)
@@ -396,7 +398,7 @@ namespace NukefySetup
                     });
                 }
             }
-            DrawText(g, label, new Rectangle(row.X + 46, row.Y + 8, row.Width - 60, 22), 10.5f, Text, FontStyle.Regular, 0f);
+            DrawText(g, label, new Rectangle(row.X + 46, row.Y + 8, row.Width - 60, 22), 10.5f, Fg, FontStyle.Regular, 0f);
         }
 
         // ---------------------------------------------------------------- input
