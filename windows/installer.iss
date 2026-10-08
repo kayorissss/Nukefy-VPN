@@ -118,7 +118,8 @@ begin
 end;
 
 [UninstallRun]
-; Our winws only (path filter): a foreign zapret's processes stay alive.
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object {{ $_.Name -eq 'winws.exe' -and $_.ExecutablePath -like '*nukefy*' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}""""; Flags: runhidden; RunOnceId: "killwinws"
+; The zapret stack (service, our winws) is stopped from CurUninstallStepChanged
+; in [Code], where no parameter quoting games are needed. A foreign zapret's
+; processes and drivers are never touched.
 Filename: "taskkill"; Parameters: "/F /IM nukefy_vpn.exe"; Flags: runhidden; RunOnceId: "killapp"
 Filename: "schtasks"; Parameters: "/Delete /TN NukefyVPN /F"; Flags: runhidden; RunOnceId: "deltask"
