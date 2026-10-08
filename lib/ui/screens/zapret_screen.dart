@@ -1123,6 +1123,10 @@ class _ZapretScreenState extends State<ZapretScreen> {
                         ),
                 ),
               ),
+              // A failed capture must not be a one-line mystery: the same
+              // report the log holds (strategy, command line, last winws
+              // lines) is shown and can be copied in one tap.
+              if (_error != null) _ZapretFailureReport(zapret: _zapret, error: _error!),
               if (_update != null && settings.settings.zapretSkippedVersion != _update!.version)
                 SectionCard(
                   title: '${s.t('zUpdateAvailable')} ${_update!.version}',
@@ -1367,4 +1371,62 @@ class ZapretTargetIcon extends StatelessWidget {
   Widget build(BuildContext context) => id == 'youtube' || id == 'discord'
       ? Image.asset('assets/brands/$id.png', width: 20, height: 20)
       : GameMark(id: id.replaceFirst('game:', ''), size: 20);
+}
+
+/// Copyable block with everything needed to explain a failed start: the exact
+/// winws command line, the exit reason and the tail of winws output.
+class _ZapretFailureReport extends StatelessWidget {
+  const _ZapretFailureReport({required this.zapret, required this.error});
+
+  final ZapretService zapret;
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.read<SettingsProvider>().strings;
+    final p = context.palette;
+    final lines = zapret.log.length <= 12 ? zapret.log : zapret.log.sublist(zapret.log.length - 12);
+    final report = [
+      'Nukefy Client — zapret start report',
+      'error: $error',
+      'strategy: ${zapret.runningStrategyId ?? '-'}',
+      'command: ${zapret.lastCommandLine ?? '-'}',
+      'service: ${zapret.servicePresent ? 'installed' : 'none'}${zapret.serviceRunning ? ' (running)' : ''}',
+      '--- winws output ---',
+      ...lines,
+    ].join('\n');
+    return SectionCard(
+      title: s.t('zFailReport'),
+      icon: Icons.report_gmailerrorred_rounded,
+      trailing: IconButton(
+        tooltip: s.t('copy'),
+        onPressed: () async {
+          await Clipboard.setData(ClipboardData(text: report));
+          if (context.mounted) showNukefySnack(context, s.t('copied'));
+        },
+        icon: const Icon(Icons.copy_rounded, size: 18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(error, style: TextStyle(color: AppColors.error, fontSize: 12.5)),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: p.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: p.border),
+            ),
+            child: SelectableText(
+              report,
+              maxLines: 14,
+              style: const TextStyle(fontFamily: 'JetBrainsMono', fontSize: 11, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

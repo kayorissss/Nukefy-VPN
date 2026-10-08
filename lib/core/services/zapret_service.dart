@@ -144,6 +144,11 @@ class ZapretService extends ChangeNotifier {
   });
 
   String? get runningStrategyId => _runningStrategyId;
+
+  /// The exact winws command line of the last start attempt — the first thing
+  /// needed to explain a failure next to the log.
+  String? get lastCommandLine => _lastCommandLine;
+  String? _lastCommandLine;
   List<String> get log => List.unmodifiable(_log);
 
   /// `<exe dir>/zapret` when the bundle is present.
@@ -888,7 +893,8 @@ class ZapretService extends ChangeNotifier {
       await refreshGameLists();
       if (_closing) return false;
       if (servicePresent) {
-        await _sc(['config', serviceName, 'binPath=', _serviceCommand(strategy)]);
+        _lastCommandLine = _serviceCommand(strategy);
+        await _sc(['config', serviceName, 'binPath=', _lastCommandLine!]);
         await _startService();
         _runningStrategyId = strategy.id;
         await StorageService.instance.write('zapret_service_strategy', strategy.id);
@@ -898,6 +904,8 @@ class ZapretService extends ChangeNotifier {
       if (args.isEmpty) throw Exception('strategy has no winws arguments');
       await _openLogSink();
       final exe = p.join(root!.path, 'bin', 'winws.exe');
+      _lastCommandLine = '"$exe" ${args.map((a) => a.contains(' ') ? '"$a"' : a).join(' ')}';
+      _append('> $_lastCommandLine');
       final process = await Process.start(exe, args, workingDirectory: p.join(root!.path, 'bin'));
       if (_closing) { process.kill(); await process.exitCode; return false; }
       _process = process;
