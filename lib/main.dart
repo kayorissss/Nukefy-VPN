@@ -69,6 +69,22 @@ Future<void> main() async {
   runZonedGuarded(_main, (error, stack) => AppLog.log('uncaught: $error\n$stack'));
 }
 
+/// Clean exit requested over the single-instance socket (the Windows
+/// "Remove" entry uses it): stop our tunnel first so nothing keeps the files
+/// locked, then quit. The uninstall window opens in the *other* process.
+Future<void> _quitFromAnotherProcess() async {
+  try {
+    final platform = VpnPlatform();
+    await platform.stop().timeout(const Duration(seconds: 6));
+    await ZapretService.instance.shutdown(keepService: false).timeout(const Duration(seconds: 6));
+  } catch (error) {
+    AppLog.log('quit request cleanup failed: $error');
+  }
+  await windowManager.setPreventClose(false).catchError((_) {});
+  await windowManager.destroy().catchError((_) {});
+  exit(0);
+}
+
 Future<void> _main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Dark native chrome (tray menu, common dialogs) before any window appears.
@@ -96,22 +112,39 @@ Future<void> _main() async {
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
     desktopGuard = DesktopInstanceGuard();
-    // A replacement process spawned by an in-app restart waits for the dying
-    // parent to release the single-instance listener instead of racing it:
-    // binding too early used to open a second, half-dead window.
-    final restarting = Platform.executableArguments.contains('--nukefy-restart');
-    final primary = await desktopGuard.acquire(
-      retry: restarting ? const Duration(seconds: 8) : Duration.zero,
-      onShow: () async {
-        // A second taskbar/tray launch talks to the existing process instead
-        // of creating a second Flutter engine and losing the entered server.
-        await windowManager.show();
-        await windowManager.focus();
-      },
-    );
-    if (!primary) {
-      AppLog.log('second desktop launch forwarded to the existing window');
-      exit(0);
+    // "Remove" in the Windows settings starts this process while the app is
+    // often still running. Asking the guard for the instance used to end in
+    // "forwarded, exit(0)" — the uninstall window never appeared and the app
+    // simply vanished. So the uninstall request first asks a running copy to
+    // quit and then continues on its own, without claiming the instance.
+    if (uninstallRequested) {
+      final asked = await desktopGuard.requestQuit();
+      if (asked) {
+        AppLog.log('uninstall: asked the running instance to quit');
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+      }
+    } else {
+      // A replacement process spawned by an in-app restart waits for the dying
+      // parent to release the single-instance listener instead of racing it:
+      // binding too early used to open a second, half-dead window.
+      final restarting = Platform.executableArguments.contains('--nukefy-restart');
+      final primary = await desktopGuard.acquire(
+        retry: restarting ? const Duration(seconds: 8) : Duration.zero,
+        onShow: () async {
+          // A second taskbar/tray launch talks to the existing process instead
+          // of creating a second Flutter engine and losing the entered server.
+          await windowManager.show();
+          await windowManager.focus();
+        },
+      );
+      if (!primary) {
+        AppLog.log('second desktop launch forwarded to the existing window');
+        exit(0);
+      }
+      desktopGuard.onQuit = () async {
+        AppLog.log('quit requested by another process');
+        await _quitFromAnotherProcess();
+      };
     }
     const options = WindowOptions(
       // Give the desktop layout enough horizontal room for the rail and two

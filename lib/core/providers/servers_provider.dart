@@ -379,6 +379,20 @@ class ServersProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Records that a real connection to this server just failed. The row then
+  /// stops advertising a latency as if the server were usable: -1 renders the
+  /// "no answer" state everywhere pings are shown.
+  Future<void> markUnreachable(String id) async {
+    final server = byId(id);
+    if (server == null) return;
+    server
+      ..pingMs = -1
+      ..lastPingAt = DateTime.now()
+      ..isNew = false;
+    notifyListeners();
+    await _persist();
+  }
+
   Future<void> setPing(String id, int ms) async {
     final server = byId(id);
     if (server == null) return;

@@ -314,6 +314,9 @@ class VpnProvider extends ChangeNotifier {
       errorMessage = RegExp(r'xhttp|splithttp', caseSensitive: true).hasMatch(raw) ? 'XHTTP_UNSUPPORTED' : raw;
       mode = result.mode;
       await _stats?.addLog(server.name, 'error', message: errorMessage);
+      // The server just failed for real: stop showing a healthy latency for
+      // it in the lists.
+      await _servers?.markUnreachable(server.id);
       notifyListeners();
       return;
     }

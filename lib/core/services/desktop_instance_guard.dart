@@ -21,6 +21,11 @@ class DesktopInstanceGuard {
   ServerSocket? _server;
   Future<void> Function()? _onShow;
 
+  /// Invoked when another process (the Windows "Remove" entry, which starts a
+  /// second copy with --uninstall) asks this instance to shut down so its
+  /// files are not locked during removal.
+  Future<void> Function()? onQuit;
+
   /// Returns true when this process owns the instance. Returns false only
   /// after a running instance positively acknowledges the show request.
   ///
@@ -86,6 +91,11 @@ class DesktopInstanceGuard {
       (chunk) {
         if (handled) return;
         buffer += chunk;
+        if (buffer.contains('NUKEFY_QUIT')) {
+          handled = true;
+          unawaited(_quitExisting(socket));
+          return;
+        }
         if (!buffer.contains('NUKEFY_SHOW')) return;
         handled = true;
         unawaited(_showExisting(socket));
@@ -111,6 +121,41 @@ class DesktopInstanceGuard {
     } finally {
       try {
         await socket.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _quitExisting(Socket socket) async {
+    try {
+      socket.write('NUKEFY_OK\n');
+      await socket.flush();
+    } catch (_) {}
+    try {
+      await socket.close();
+    } catch (_) {}
+    try {
+      await onQuit?.call();
+    } catch (_) {}
+  }
+
+  /// Asks a running instance to exit. Returns true when it acknowledged.
+  Future<bool> requestQuit() async {
+    Socket? socket;
+    try {
+      socket = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        port,
+        timeout: const Duration(milliseconds: 450),
+      );
+      socket.write('NUKEFY_QUIT\n');
+      await socket.flush();
+      final response = await utf8.decoder.bind(socket.cast<List<int>>()).join().timeout(const Duration(milliseconds: 900));
+      return response.contains('NUKEFY_OK');
+    } catch (_) {
+      return false;
+    } finally {
+      try {
+        await socket?.close();
       } catch (_) {}
     }
   }
