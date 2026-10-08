@@ -561,12 +561,17 @@ class VpnProvider extends ChangeNotifier {
     if (status != VpnStatus.connected || activeServerId != serverId) return;
     final ports = _ports;
     // Probe through the core's local HTTP ingress, not the app process's
-    // default route: sing-box deliberately sends app-owned requests direct on
-    // desktop. When the visible proxy is disabled, a private probe ingress is
-    // bound only on loopback while TUN is active.
-    final proxyPort = settings.settings.localProxyEnabled
-        ? ports?.http
-        : ports?.probe;
+    // default route: sing-box deliberately sends app-owned TUN requests direct
+    // on desktop. When the visible proxy is disabled, a private probe ingress
+    // is bound only on loopback.
+    final proxyPort = settings.settings.localProxyEnabled ? ports?.http : ports?.probe;
+    if (proxyPort == null) {
+      trafficOk = null;
+      trafficTargets = const {};
+      errorMessage = 'TRAFFIC_PROBE_UNAVAILABLE';
+      notifyListeners();
+      return;
+    }
     final control = await ConnectivityProbe.http(
       'http://cp.cloudflare.com/generate_204',
       httpProxyPort: proxyPort,

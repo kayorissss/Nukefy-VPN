@@ -224,6 +224,7 @@ class HomeScreen extends StatelessWidget {
     if (raw == 'CORE_MIERU_UNSUPPORTED') return s.t('coreMieruUnsupported');
     if (raw == 'CORE_OUTBOUND_MISSING') return s.t('coreOutboundMissing');
     if (raw == 'CORE_ENDPOINT_MISSING') return s.t('coreEndpointMissing');
+    if (raw == 'NO_TRAFFIC_MODE') return s.t('noTrafficMode');
     if (raw == 'XRAY_TRANSPORT_REQUIRED') return s.t('xrayTransportRequired');
     if (raw == 'XRAY_CORE_MISSING') return s.t('xrayNotInstalled');
     if (raw == 'XRAY_PLATFORM_UNSUPPORTED') return s.t('xrayPlatformUnsupported');
@@ -233,6 +234,7 @@ class HomeScreen extends StatelessWidget {
     if (raw.startsWith('XRAY_')) return '${s.t('xrayCore')}: $raw';
     if (raw.startsWith('NO_TRAFFIC:')) return '${s.t('noTraffic')}\n${raw.substring(11)}';
     if (raw == 'NO_TRAFFIC_TARGETS') return s.t('noTrafficTargets');
+    if (raw == 'TRAFFIC_PROBE_UNAVAILABLE') return s.t('trafficProbeUnavailable');
     if (raw.contains('Permission denied') && raw.contains('sing-box')) return s.t('libboxMissing');
     if (raw.contains('legacy inbound fields')) return s.t('coreOutdatedConfig');
     // Strip ANSI colour codes and the timestamp prefix from core logs.

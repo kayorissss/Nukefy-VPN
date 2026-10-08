@@ -38,7 +38,23 @@ jobs:
           } > body.md
           gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" -F body=@body.md || true
           exit 1
-      - run: flutter test
+      - name: Test
+        id: test
+        continue-on-error: true
+        shell: bash
+        run: flutter test 2>&1 | tee test.txt
+      - name: Publish test output
+        if: steps.test.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '```'
+            tail -n 160 test.txt
+            echo '```'
+          } > body.md
+          gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" -F body=@body.md || true
+          exit 1
 
   android:
     name: Android release build

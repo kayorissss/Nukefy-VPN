@@ -43,7 +43,7 @@ class _UninstallScreenState extends State<UninstallScreen> {
       final zapret = ZapretService.instance;
       await zapret.serviceInstalled();
       if ((zapret.servicePresent || zapret.serviceRunning) && mounted) {
-        showNukefySnack(context, s.t('uninstallZapretDependency'), error: true);
+        setState(() => _failure = s.t('uninstallZapretDependency'));
         return;
       }
     }

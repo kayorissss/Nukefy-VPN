@@ -66,9 +66,11 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     final vpn = context.read<VpnProvider>();
     final ports = vpn.activePorts;
     final connected = vpn.status == VpnStatus.connected;
-    // In proxy mode the app talks to the tunnel through its local HTTP
-    // inbound; in TUN mode a plain request already goes through the tunnel.
-    final proxyPort = connected && !settings.tunEnabled && ports != null ? ports.http : null;
+    // Always use a local ingress for connected checks. The app's own desktop
+    // process is deliberately routed direct by sing-box, so a plain HTTP probe
+    // would otherwise measure the wrong network path.
+    final probePort = settings.localProxyEnabled ? ports?.http : ports?.probe;
+    final proxyPort = connected ? probePort : null;
 
     Future<void> add(Future<AnalyzerCheck> Function() run) async {
       final check = await run();
@@ -85,21 +87,36 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     await add(ConnectionAnalyzer.checkDns);
     final (directCheck, directIp) = await ConnectionAnalyzer.checkDirectInternet();
     if (mounted) setState(() => _checks.add(directCheck));
-    if (connected && (proxyPort ?? ports?.http) != null) {
-      await add(() => ConnectionAnalyzer.checkTunnelExit(httpProxyPort: proxyPort ?? ports!.http, directIp: directIp));
+    if (connected && proxyPort != null) {
+      await add(() => ConnectionAnalyzer.checkTunnelExit(httpProxyPort: proxyPort, directIp: directIp));
     } else {
       if (mounted) {
         setState(() => _checks.add(AnalyzerCheck(
               id: 'tunnel',
               level: CheckLevel.info,
               title: 'Трафик через VPN',
-              detail: 'VPN не подключён — проверка туннеля пропущена',
-              hint: 'Нажмите «Запустить» на главной, дождитесь состояния «Подключено» и повторите проверку.',
+              detail: connected
+                  ? 'VPN подключён, но локальный порт проверки недоступен'
+                  : 'VPN не подключён — проверка туннеля пропущена',
+              hint: connected
+                  ? 'Переподключитесь через Nukefy, чтобы приложение могло провести запрос через туннель.'
+                  : 'Нажмите «Запустить» на главной, дождитесь состояния «Подключено» и повторите проверку.',
             )));
       }
     }
-    final (targetChecks, _) = await ConnectionAnalyzer.checkTargets(httpProxyPort: connected ? proxyPort : null);
-    if (mounted) setState(() => _checks.addAll(targetChecks));
+    if (connected && proxyPort == null) {
+      if (mounted) {
+        setState(() => _checks.add(AnalyzerCheck(
+              id: 'targets',
+              level: CheckLevel.info,
+              title: 'Доступность YouTube, Discord и Telegram',
+              detail: 'Нельзя проверить через VPN: нет локального порта проверки. Переподключитесь из приложения.',
+            )));
+      }
+    } else {
+      final (targetChecks, _) = await ConnectionAnalyzer.checkTargets(httpProxyPort: connected ? proxyPort : null);
+      if (mounted) setState(() => _checks.addAll(targetChecks));
+    }
     if (!mounted) return;
     setState(() => _running = false);
     // Refresh the banner state on the home screen with these results.
