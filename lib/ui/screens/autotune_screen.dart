@@ -320,7 +320,7 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
             else
               for (final finding in _findings)
                 Container(
-                  margin: const EdgeInsets.only(bottom: 10),
+                  margin: const EdgeInsets.only(bottom: 14),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: p.surface.withValues(alpha: .5),
@@ -460,7 +460,7 @@ class _ChoiceTile extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          margin: const EdgeInsets.only(bottom: 10),
+          margin: const EdgeInsets.only(bottom: 14),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: selected ? p.accent.withValues(alpha: .12) : p.card,

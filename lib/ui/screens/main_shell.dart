@@ -631,7 +631,7 @@ class _SideRailState extends State<_SideRail> {
                           if (g.destination != null) nav.go(g.destination!);
                         }),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                           decoration: BoxDecoration(
                             color: g.destination == destination ? p.accent.withValues(alpha: .14) : Colors.transparent,
                             borderRadius: BorderRadius.circular(14),
@@ -657,7 +657,7 @@ class _SideRailState extends State<_SideRail> {
                             onTap: () => nav.go(l.destination),
                             child: Container(
                               margin: const EdgeInsets.only(left: 14, top: 2, bottom: 2),
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                               decoration: BoxDecoration(
                                 color: l.destination == destination ? p.accent.withValues(alpha: .14) : Colors.transparent,
                                 borderRadius: BorderRadius.circular(12),

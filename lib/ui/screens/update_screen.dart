@@ -211,7 +211,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
                         ).animate().fadeIn(delay: 120.ms).slideY(begin: 0.06),
                       if (_phase == _Phase.offer && info.hasAsset) ...[
                         Container(
-                          margin: const EdgeInsets.only(bottom: 12),
+                          margin: const EdgeInsets.only(bottom: 14),
                           padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                           decoration: BoxDecoration(
                             color: p.card.withValues(alpha: .75),

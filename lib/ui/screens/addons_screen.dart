@@ -191,7 +191,7 @@ class _AddonCard extends StatelessWidget {
     final progress = this.progress;
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: p.surface.withValues(alpha: .45),

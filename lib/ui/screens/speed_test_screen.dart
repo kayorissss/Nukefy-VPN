@@ -529,7 +529,7 @@ class _HistoryRow extends StatelessWidget {
     final download = SpeedTestService.mbps(item.downloadBps).toStringAsFixed(1);
     final delta = previous == null ? null : item.downloadBps - previous!.downloadBps;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: p.surface.withValues(alpha: .5),

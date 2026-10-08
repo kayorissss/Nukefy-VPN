@@ -249,7 +249,7 @@ class _AppRow extends StatelessWidget {
         onTap: enabled ? onTap : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
             color: on ? p.accent.withValues(alpha: 0.10) : p.card.withValues(alpha: p.isDark ? 0.85 : 0.96),
             borderRadius: BorderRadius.circular(14),

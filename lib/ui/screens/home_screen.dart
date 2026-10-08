@@ -343,7 +343,7 @@ class _ServerPickerSheetState extends State<_ServerPickerSheet> {
                       borderRadius: BorderRadius.circular(16),
                       onTap: () => Navigator.pop(context, server),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                         child: Row(
                           children: [
                             CountryBadge(code: server.countryCode, size: 38),
