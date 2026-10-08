@@ -1010,7 +1010,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
             height: 42,
             decoration: BoxDecoration(
               color: p.accent.withValues(alpha: .12),
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(Icons.alt_route_rounded, color: p.accent),
           ),

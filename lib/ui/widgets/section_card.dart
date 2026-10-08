@@ -25,7 +25,7 @@ class SectionCard extends StatelessWidget {
     final p = context.palette;
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       decoration: BoxDecoration(
         color: p.card.withValues(alpha: .82),
         borderRadius: BorderRadius.circular(22),
@@ -36,10 +36,14 @@ class SectionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              if (icon != null) ...[
-                Icon(icon, size: 16, color: p.accent),
-                const SizedBox(width: 8),
-              ],
+              // Reserved even without an icon: section titles used to jump
+              // 24 px left and right between cards, which read as crooked.
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: icon == null ? null : Icon(icon, size: 16, color: p.accent),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   title.toUpperCase(),
@@ -63,6 +67,15 @@ class SectionCard extends StatelessWidget {
     );
   }
 }
+
+/// Row metrics shared by every settings row. Titles, switches and chevrons all
+/// sit on these columns, so a card built from mixed row types still looks
+/// evenly ruled instead of "left higher, right lower".
+const double kRowLead = 40;
+const double kRowGap = 12;
+const double kRowIndent = 2 + kRowLead + kRowGap; // 54
+const double kRowVPad = 6;
+const BorderRadius kRowLeadRadius = BorderRadius.all(Radius.circular(12));
 
 class SettingsTile extends StatelessWidget {
   const SettingsTile({
@@ -98,13 +111,13 @@ class SettingsTile extends StatelessWidget {
         // when the card is narrow, so nothing ever clips on a phone.
         final stacked = constraints.maxWidth < 400 && trailing != null;
         final lead = Container(
-          width: 36,
-          height: 36,
+          width: kRowLead,
+          height: kRowLead,
           decoration: BoxDecoration(
             color: p.accent.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: kRowLeadRadius,
           ),
-          child: Icon(icon, color: p.accent, size: 19),
+          child: Icon(icon, color: p.accent, size: 20),
         );
         // Descriptions live behind a "?" hint so tiles stay one clean line;
         // hovering the icon reveals the full explanation.
@@ -128,7 +141,7 @@ class SettingsTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             lead,
-            const SizedBox(width: 12),
+            const SizedBox(width: kRowGap),
             copy,
             if (!stacked) ...[
               const SizedBox(width: 8),
@@ -142,7 +155,7 @@ class SettingsTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: kRowVPad),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -154,7 +167,7 @@ class SettingsTile extends StatelessWidget {
                     row,
                   if (below != null)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(50, 6, 0, 2),
+                      padding: const EdgeInsets.fromLTRB(kRowIndent, 6, 0, 2),
                       child: below!,
                     ),
                 ],
@@ -195,16 +208,18 @@ class SwitchTile extends StatelessWidget {
     final p = context.palette;
     return LayoutBuilder(
       builder: (context, _) {
+        // The column is reserved even for icon-less switches: otherwise their
+        // labels started 48 px left of the neighbouring tile labels.
         final lead = icon == null
-            ? null
+            ? const SizedBox(width: kRowLead, height: kRowLead)
             : Container(
-                width: 36,
-                height: 36,
+                width: kRowLead,
+                height: kRowLead,
                 decoration: BoxDecoration(
                   color: p.accent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: kRowLeadRadius,
                 ),
-                child: Icon(icon, color: p.accent, size: 19),
+                child: Icon(icon, color: p.accent, size: 20),
               );
         final text = Expanded(
           child: subtitle != null && subtitleAsHint
@@ -233,11 +248,12 @@ class SwitchTile extends StatelessWidget {
                 ),
         );
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: kRowVPad),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              if (lead != null) ...[lead, const SizedBox(width: 12)],
+              lead,
+              const SizedBox(width: kRowGap),
               text,
               const SizedBox(width: 8),
               Switch(value: value, onChanged: onChanged),
@@ -274,7 +290,7 @@ class NukefyDropdown<T> extends StatelessWidget {
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         elevation: const WidgetStatePropertyAll(10),
         padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 5)),
-        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: BorderSide(color: p.border))),
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: p.border))),
       ),
       menuChildren: [
         for (final entry in items.entries)

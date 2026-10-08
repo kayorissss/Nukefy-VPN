@@ -188,7 +188,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: p.card,
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(22),
                               border: Border.all(color: p.border),
                             ),
                             child: Column(

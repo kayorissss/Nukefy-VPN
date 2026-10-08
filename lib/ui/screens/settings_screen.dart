@@ -551,7 +551,7 @@ class _UpdateBannerState extends State<_UpdateBanner> {
       ),
       child: Row(
         children: [
-          Container(width: 44, height: 44, decoration: BoxDecoration(color: p.accent.withValues(alpha: .14), borderRadius: BorderRadius.circular(14)), child: Icon(info == null ? Icons.system_update_alt_rounded : Icons.download_rounded, color: p.accent)),
+          Container(width: 44, height: 44, decoration: BoxDecoration(color: p.accent.withValues(alpha: .14), borderRadius: BorderRadius.circular(12)), child: Icon(info == null ? Icons.system_update_alt_rounded : Icons.download_rounded, color: p.accent)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -622,7 +622,7 @@ class _SettingsSubtabs extends StatelessWidget {
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
         color: p.card.withValues(alpha: .82),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: p.border),
       ),
       child: Row(
@@ -635,14 +635,14 @@ class _SettingsSubtabs extends StatelessWidget {
                 label: items[index].$1,
                 child: InkWell(
                   onTap: () => onChanged(index),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     curve: Curves.easeOutCubic,
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
                     decoration: BoxDecoration(
                       color: selected == index ? p.background : Colors.transparent,
-                      borderRadius: BorderRadius.circular(13),
+                      borderRadius: BorderRadius.circular(17),
                       border: Border.all(color: selected == index ? p.accent.withValues(alpha: .65) : Colors.transparent, width: 1.2),
                     ),
                     child: Row(
@@ -795,14 +795,14 @@ class _ModeOption extends StatelessWidget {
       selected: selected,
       label: label,
       child: InkWell(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
             color: selected ? p.accent.withValues(alpha: .16) : Colors.transparent,
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: selected ? p.accent.withValues(alpha: .55) : Colors.transparent),
           ),
           child: Row(
@@ -943,7 +943,7 @@ class _CoreCard extends StatelessWidget {
                 height: 34,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.13),
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   checking
@@ -1086,7 +1086,7 @@ class _MoreCardState extends State<_MoreCard> {
           InkWell(
             onTap: () => setState(() => _open = !_open),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 10, 10),
+              padding: const EdgeInsets.fromLTRB(16, 14, 10, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1277,7 +1277,7 @@ class _ThemeChoice extends StatelessWidget {
             padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
               color: colors.card,
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: selected ? colors.accent : p.border, width: selected ? 2 : 1),
               boxShadow: selected ? [BoxShadow(color: colors.accent.withValues(alpha: .25), blurRadius: 13)] : null,
             ),

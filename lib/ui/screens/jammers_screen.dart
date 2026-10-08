@@ -280,7 +280,7 @@ class _VerdictCard extends StatelessWidget {
         final iconBox = Container(
           width: 56,
           height: 56,
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(18)),
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(16)),
           child: Icon(icon, color: color, size: 30),
         );
         final lead = Row(
@@ -295,7 +295,7 @@ class _VerdictCard extends StatelessWidget {
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: p.card,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(22),
             border: Border.all(color: color.withValues(alpha: 0.4)),
             boxShadow: [BoxShadow(color: color.withValues(alpha: 0.12), blurRadius: 30)],
           ),

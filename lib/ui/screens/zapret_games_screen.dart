@@ -192,13 +192,13 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
       ? [FilledButton.icon(onPressed: enabled ? () => _install(game) : null, icon: const Icon(Icons.add, size: 18), label: Text(s.t('add')))]
       : [TextButton(onPressed: enabled ? () => _view(game) : null, child: Text(s.t('zShowDomains'))), IconButton(tooltip: s.t('delete'), onPressed: enabled ? () => _removeGame(game) : null, icon: const Icon(Icons.delete_outline, size: 20))]);
     if (!_grid) {
-      return Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), decoration: BoxDecoration(color: p.card, border: Border.all(color: p.border), borderRadius: BorderRadius.circular(16)),
+      return Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), decoration: BoxDecoration(color: p.card, border: Border.all(color: p.border), borderRadius: BorderRadius.circular(22)),
         child: Row(children: [Expanded(child: heading), const SizedBox(width: 10), actions]));
     }
     final tileActions = Wrap(spacing: 8, children: installed == null
       ? [FilledButton.icon(onPressed: enabled ? () => _install(game) : null, icon: const Icon(Icons.add, size: 18), label: Text(s.t('add')))]
       : [TextButton(onPressed: enabled ? () => _view(game) : null, child: Text(s.t('zShowDomains'))), IconButton(tooltip: s.t('delete'), onPressed: enabled ? () => _removeGame(game) : null, icon: const Icon(Icons.delete_outline, size: 20))]);
-    return Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: p.card, border: Border.all(color: p.border), borderRadius: BorderRadius.circular(18)),
+    return Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: p.card, border: Border.all(color: p.border), borderRadius: BorderRadius.circular(22)),
       child: SizedBox(height: 130 * MediaQuery.textScalerOf(context).scale(1), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [heading, const Spacer(), tileActions])));
   }
 }

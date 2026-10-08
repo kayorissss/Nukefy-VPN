@@ -262,7 +262,7 @@ class _BottomBar extends StatelessWidget {
         height: 62,
         decoration: BoxDecoration(
           color: p.card.withValues(alpha: p.isDark ? 0.92 : 0.96),
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(22),
           border: Border.all(color: p.border),
           boxShadow: [
             BoxShadow(
@@ -367,7 +367,7 @@ class _Tab extends StatelessWidget {
               height: 40,
               decoration: BoxDecoration(
                 color: selected ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Stack(
                 clipBehavior: Clip.none,
@@ -510,7 +510,7 @@ class _SideRailState extends State<_SideRail> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       decoration: BoxDecoration(
         color: p.card.withValues(alpha: .82),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: p.border),
       ),
       child: Column(

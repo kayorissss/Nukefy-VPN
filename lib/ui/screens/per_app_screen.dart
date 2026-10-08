@@ -297,7 +297,7 @@ class _AppIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.palette;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(11),
+      borderRadius: BorderRadius.circular(12),
       child: SizedBox(
         width: 40,
         height: 40,
