@@ -233,6 +233,13 @@ class VpnProvider extends ChangeNotifier {
     // Both platforms expose the same choice. Android uses VpnService for TUN;
     // proxy mode keeps the local SOCKS/HTTP inbound instead.
     final useTun = settings.settings.tunEnabled && (Platform.isAndroid ? info.libbox : true);
+    if (!useTun && !settings.settings.localProxyEnabled) {
+      status = VpnStatus.error;
+      mode = 'no-traffic-mode';
+      errorMessage = 'NO_TRAFFIC_MODE';
+      notifyListeners();
+      return;
+    }
     if (Platform.isAndroid && useTun) {
       final ready = await _platform.prepareVpn();
       if (!ready) {
@@ -351,11 +358,24 @@ class VpnProvider extends ChangeNotifier {
       await socket.close();
       return port;
     }
-    return LocalPorts(
-      socks: await probe(settings.socksPort),
-      http: await probe(settings.httpPort),
-      clash: await probe(AppConstants.clashApiPort),
-    );
+    final socks = await probe(settings.socksPort);
+    final http = await probe(settings.httpPort);
+    final clash = await probe(AppConstants.clashApiPort);
+    int? health;
+    if (settings.tunEnabled && !settings.localProxyEnabled) {
+      final used = {socks, http, clash};
+      for (var attempt = 0; attempt < 8; attempt++) {
+        final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        final candidate = socket.port;
+        await socket.close();
+        if (!used.contains(candidate)) {
+          health = candidate;
+          break;
+        }
+      }
+      health ??= await probe(0);
+    }
+    return LocalPorts(socks: socks, http: http, clash: clash, probe: health);
   }
 
   static int _xrayInboundPort(int socksPort, int httpPort) {
@@ -540,8 +560,13 @@ class VpnProvider extends ChangeNotifier {
     await Future.delayed(const Duration(seconds: 4));
     if (status != VpnStatus.connected || activeServerId != serverId) return;
     final ports = _ports;
-    final tun = settings.settings.tunEnabled;
-    final proxyPort = (!Platform.isAndroid && !tun) ? ports?.http : null;
+    // Probe through the core's local HTTP ingress, not the app process's
+    // default route: sing-box deliberately sends app-owned requests direct on
+    // desktop. When the visible proxy is disabled, a private probe ingress is
+    // bound only on loopback while TUN is active.
+    final proxyPort = settings.settings.localProxyEnabled
+        ? ports?.http
+        : ports?.probe;
     final control = await ConnectivityProbe.http(
       'http://cp.cloudflare.com/generate_204',
       httpProxyPort: proxyPort,

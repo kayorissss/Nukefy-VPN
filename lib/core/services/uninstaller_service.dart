@@ -41,9 +41,9 @@ class UninstallerService {
   static String _psQuote(String value) => "'${value.replaceAll("'", "''")}'";
 
   static String _killAtPath(String exeName, String path) =>
-      'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq ${_psQuote(exeName)} -and '
-      '[string]::Equals($_.ExecutablePath, ${_psQuote(path)}, [System.StringComparison]::OrdinalIgnoreCase) } '
-      '| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }';
+      'Get-CimInstance Win32_Process | Where-Object { \$_.Name -eq ${_psQuote(exeName)} -and '
+      '[string]::Equals(\$_.ExecutablePath, ${_psQuote(path)}, [System.StringComparison]::OrdinalIgnoreCase) } '
+      '| ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }';
 
   /// Writes the cleanup script and starts it detached. The caller should quit
   /// the app right after: the script waits for this process to disappear.

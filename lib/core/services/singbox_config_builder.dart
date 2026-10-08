@@ -10,11 +10,14 @@ import '../models/vpn_status.dart';
 /// ranges (Hyper-V/NAT), so a configured 10808 can be unbindable; the
 /// provider probes and substitutes a free port per session.
 class LocalPorts {
-  const LocalPorts({required this.socks, required this.http, required this.clash});
+  const LocalPorts({required this.socks, required this.http, required this.clash, this.probe});
 
   final int socks;
   final int http;
   final int clash;
+  /// Loopback-only HTTP inbound used by the app's real-through-tunnel probes
+  /// when the user has disabled the public/local proxy feature.
+  final int? probe;
 }
 
 class SingboxConfigBuilder {
@@ -170,6 +173,15 @@ class SingboxConfigBuilder {
         'listen': listen,
         'listen_port': httpPort,
       });
+    } else if (useTun) {
+      // A private, loopback-only health-check inbound lets the app verify
+      // packets through the tunnel even when the user-facing proxy is off.
+      inbounds.add({
+        'type': 'http',
+        'tag': 'probe-in',
+        'listen': '127.0.0.1',
+        'listen_port': ports?.probe ?? httpPort,
+      });
     }
 
     final ruleSets = <Map<String, dynamic>>[];
@@ -186,6 +198,7 @@ class SingboxConfigBuilder {
       if (!Platform.isAndroid)
         {
           'process_path': [Platform.resolvedExecutable],
+          'inbound': ['tun-in'],
           'action': 'route',
           'outbound': 'direct',
         },

@@ -109,6 +109,15 @@ class XrayConfigBuilder {
         {'type': 'socks', 'tag': 'socks-in', 'listen': listen, 'listen_port': ports?.socks ?? settings.socksPort},
         {'type': 'http', 'tag': 'http-in', 'listen': listen, 'listen_port': httpPort},
       ]);
+    } else if (useTun) {
+      // Hidden loopback-only HTTP ingress for actual health probes; this does
+      // not turn on the user-facing SOCKS/HTTP proxy setting.
+      inbounds.add({
+        'type': 'http',
+        'tag': 'probe-in',
+        'listen': '127.0.0.1',
+        'listen_port': ports?.probe ?? httpPort,
+      });
     }
     final config = <String, dynamic>{
       'log': {'level': settings.logLevel, 'timestamp': true, 'output': logPath},
@@ -122,7 +131,12 @@ class XrayConfigBuilder {
         'rules': [
           {'action': 'sniff'},
           {'ip_is_private': true, 'action': 'route', 'outbound': 'direct'},
-          if (!Platform.isAndroid) {'process_path': [Platform.resolvedExecutable], 'action': 'route', 'outbound': 'direct'},
+          if (!Platform.isAndroid) {
+            'process_path': [Platform.resolvedExecutable],
+            'inbound': ['tun-in'],
+            'action': 'route',
+            'outbound': 'direct',
+          },
         ],
         'final': 'xray',
         'auto_detect_interface': useTun,

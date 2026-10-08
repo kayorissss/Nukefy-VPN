@@ -7,12 +7,27 @@ import 'package:nukefy_vpn/core/services/singbox_config_builder.dart';
 import 'package:nukefy_vpn/core/services/xray_config_builder.dart';
 import 'package:nukefy_vpn/core/utils/link_parser.dart';
 
+ServerModel _serverFromLink(String link) {
+  final draft = LinkParser.parseInput(link).servers.single;
+  return ServerModel(
+    id: 'test-server',
+    name: draft.name,
+    address: draft.address,
+    port: draft.port,
+    protocol: draft.protocol,
+    countryCode: draft.countryCode,
+    tags: draft.tags,
+    rawLink: draft.rawLink,
+    outbound: draft.outbound,
+    endpoint: draft.endpoint,
+  );
+}
+
 void main() {
   test('XHTTP links stay XHTTP and build an Xray Reality outbound', () {
     const link =
         'vless://11111111-1111-1111-1111-111111111111@edge.example:443?type=xhttp&path=%2Fsplit&host=cdn.example&mode=packet-up&security=reality&sni=cover.example&pbk=public-key&sid=01&fp=chrome#XHTTP';
-    final parsed = LinkParser.parseInput(link);
-    final server = parsed.servers.single;
+    final server = _serverFromLink(link);
 
     expect(server.usesXhttp, isTrue);
     expect(SingboxConfigBuilder.validationError(server), 'XRAY_TRANSPORT_REQUIRED');
@@ -58,6 +73,48 @@ void main() {
     expect(config['route']['final'], 'xray');
     expect(xray['server'], '127.0.0.1');
     expect(xray['server_port'], 20808);
+  });
+
+  test('TUN mode keeps a loopback-only probe when the user proxy is off', () {
+    final server = _serverFromLink(
+      'vless://11111111-1111-1111-1111-111111111111@edge.example:443#VPN',
+    );
+    final config = SingboxConfigBuilder.build(
+      server: server,
+      settings: AppSettings(localProxyEnabled: false),
+      logPath: '/tmp/sing-box.log',
+      cachePath: '/tmp/cache.db',
+      desktopTun: true,
+      forceProxyOnly: false,
+      ports: const LocalPorts(socks: 10808, http: 10809, clash: 9090, probe: 49123),
+    );
+    final inbounds = (config['inbounds'] as List).cast<Map<String, dynamic>>();
+    final probe = inbounds.singleWhere((item) => item['tag'] == 'probe-in');
+    final rules = ((config['route'] as Map<String, dynamic>)['rules'] as List).cast<Map<String, dynamic>>();
+    final directAppRule = rules.singleWhere((rule) => rule['process_path'] != null);
+
+    expect(probe['listen'], '127.0.0.1');
+    expect(probe['listen_port'], 49123);
+    expect(directAppRule['inbound'], ['tun-in']);
+  });
+
+  test('XHTTP TUN frontend uses a private health probe when proxy is disabled', () {
+    final config = jsonDecode(XrayConfigBuilder.buildSingboxFrontendJson(
+      settings: AppSettings(localProxyEnabled: false),
+      xrayPort: 20808,
+      logPath: '/tmp/xray-frontend.log',
+      cachePath: '/tmp/xray-cache.db',
+      useTun: true,
+      ports: const LocalPorts(socks: 10808, http: 10809, clash: 9090, probe: 49124),
+    )) as Map<String, dynamic>;
+    final inbounds = (config['inbounds'] as List).cast<Map<String, dynamic>>();
+    final probe = inbounds.singleWhere((item) => item['tag'] == 'probe-in');
+    final rules = ((config['route'] as Map<String, dynamic>)['rules'] as List).cast<Map<String, dynamic>>();
+    final directAppRule = rules.singleWhere((rule) => rule['process_path'] != null);
+
+    expect(probe['listen'], '127.0.0.1');
+    expect(probe['listen_port'], 49124);
+    expect(directAppRule['inbound'], ['tun-in']);
   });
 
   test('Xray converter refuses protocols it cannot translate', () {
