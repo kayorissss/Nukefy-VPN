@@ -777,7 +777,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
                                     await settings.update((a) => a.zapretExtraArgs = _extraArgs.text.trim());
                                     _zapret.configure(settings.settings);
                                     await _restart();
-                                    if (mounted) showNukefySnack(context, s.t('zapretApplied'));
+                                    if (mounted) showNukefySnack(context, s.t('applied'));
                                   }),
                         ),
                       ],
@@ -1184,7 +1184,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
           _zapret.configure(settings.settings);
           if (!await _zapret.start(strategy)) throw StateError(_zapret.lastError ?? 'winws failed');
           await settings.update((a) => a.zapretStrategy = strategy.id);
-          if (mounted) showNukefySnack(context, '${s.t('zapretApplied')}: ${strategy.id}');
+          if (mounted) showNukefySnack(context, '${s.t('applied')}: ${strategy.id}');
         }),
         child: Padding(
           padding: const EdgeInsets.all(12),

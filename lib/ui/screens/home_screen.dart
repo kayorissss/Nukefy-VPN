@@ -548,12 +548,17 @@ class _WarpHintCardState extends State<_WarpHintCard> {
     final s = context.read<SettingsProvider>().strings;
     setState(() => _busy = true);
     final platform = VpnPlatform();
-    final result = _running ? await platform.disableWarp() : await platform.enableWarp();
+    final wasRunning = _running;
+    final result = wasRunning ? await platform.disableWarp() : await platform.enableWarp();
     if (!mounted) return;
     await _check();
     if (!mounted) return;
     setState(() => _busy = false);
-    showNukefySnack(context, s.t(_running ? 'warpOffDone' : 'warpOnDone'));
+    showNukefySnack(
+      context,
+      result.startsWith('ok') || result.isEmpty ? s.t(wasRunning ? 'warpOffDone' : 'warpOnDone') : result,
+      error: !(result.startsWith('ok') || result.isEmpty),
+    );
   }
 
   @override

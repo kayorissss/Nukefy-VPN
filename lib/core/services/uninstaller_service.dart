@@ -97,7 +97,7 @@ class UninstallerService {
         // Only OUR service and OUR capture: other zapret installs stay intact.
         ..writeln(r'sc.exe stop nukefy-zapret | Out-Null')
         ..writeln(r'sc.exe delete nukefy-zapret | Out-Null')
-        ..writeln(r'Get-CimInstance Win32_Process -Filter "Name = ''winws.exe''" | Where-Object { $_.ExecutablePath -like "*Nukefy*" -or $_.ExecutablePath -like "*nukefy*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }')
+        ..writeln(r'''Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "winws.exe" -and $_.ExecutablePath -like "*nukefy*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }''')
         ..writeln(r'taskkill /F /IM sing-box.exe /T | Out-Null')
         ..writeln(r'taskkill /F /IM xray.exe /T | Out-Null')
         ..writeln(r'sc.exe stop WinDivert | Out-Null')
