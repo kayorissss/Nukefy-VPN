@@ -510,6 +510,29 @@ class VpnPlatform {
     }
   }
 
+  /// Points the Windows "Apps & features" entry at our own uninstall window.
+  /// Only touches the key the installer created for this AppId (a portable
+  /// copy has none, so nothing happens there).
+  Future<void> ensureBrandedUninstallEntry() async {
+    if (!Platform.isWindows) return;
+    try {
+      final exe = Platform.resolvedExecutable;
+      final command = '"$exe" --uninstall';
+      final quote = String.fromCharCode(39);
+      final script = '\$cmd = ' + quote + command + quote + '; '
+          "\$keys = @('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1', "
+          "'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1', "
+          "'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1'); "
+          'foreach (\$key in \$keys) { if (Test-Path \$key) { '
+          'Set-ItemProperty -Path \$key -Name UninstallString -Value \$cmd -ErrorAction SilentlyContinue; '
+          'Set-ItemProperty -Path \$key -Name QuietUninstallString -Value \$cmd -ErrorAction SilentlyContinue } }';
+      await Process.run('powershell.exe', ['-NoProfile', '-Command', script])
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      // The installer's own entry is a perfectly working fallback.
+    }
+  }
+
   /// Kills `sing-box.exe` processes that were started from *our* folders only
   /// (the per-user core directory or the bundled copy). Other tools keep
   /// running untouched.

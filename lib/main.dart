@@ -197,6 +197,11 @@ Future<void> _main() async {
     if (seeded.isNotEmpty) AppLog.log('bundle cores installed: ${seeded.join(', ')}');
   }, seconds: 15);
   await guard('core', vpn.refreshCore, seconds: 5);
+  // "Remove" in the Windows settings must open our branded window. The
+  // installer writes that command at the end of setup; this also repairs
+  // installs made by older builds, where the entry still pointed at the bare
+  // Inno uninstaller.
+  await guard('uninstall-entry', () => VpnPlatform().ensureBrandedUninstallEntry(), seconds: 12);
 
   if (uninstallRequested) {
     runApp(

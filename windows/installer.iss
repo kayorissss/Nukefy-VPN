@@ -70,26 +70,24 @@ Name: "{autodesktop}\Nukefy VPN"; Filename: "{app}\nukefy_vpn.exe"; Tasks: deskt
 [Run]
 Filename: "{app}\nukefy_vpn.exe"; Description: "{cm:LaunchProgram,Nukefy VPN}"; Flags: nowait postinstall skipifsilent shellexec
 
-; Uninstall points at the app's own window: "Remove" in the Windows settings
-; opens the branded screen with the checkboxes, and the app then deletes its
-; own files with an elevated helper.
-[Registry]
-Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1"; ValueType: string; ValueName: "UninstallString"; ValueData: """{app}\nukefy_vpn.exe"" --uninstall"
-Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1"; ValueType: string; ValueName: "QuietUninstallString"; ValueData: """{app}\nukefy_vpn.exe"" --uninstall"
-
 [Code]
-// Stops the zapret service, kills winws and unloads the WinDivert kernel
-// driver so locked binaries (WinDivert64.sys) can be replaced or deleted.
+const
+  // The key Inno itself creates for this AppId.
+  UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1';
+
+// Stops OUR stack only: the service is "nukefy-zapret", winws is killed only
+// when its path points into our folder, and a zapret the user installed
+// themselves (or their WinDivert driver) is never touched.
 procedure StopZapretStack();
 var
   Code: Integer;
 begin
-  Exec(ExpandConstant('{sys}\sc.exe'), 'stop zapret', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM winws.exe /T', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Exec(ExpandConstant('{sys}\sc.exe'), 'stop WinDivert', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Exec(ExpandConstant('{sys}\sc.exe'), 'stop WinDivert14', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Exec(ExpandConstant('{sys}\sc.exe'), 'stop WinDivert2', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Sleep(2000);
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop nukefy-zapret', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM nukefy_vpn.exe /T', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec('powershell.exe',
+    '-NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq ''winws.exe'' -and $_.ExecutablePath -like ''*nukefy*'' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"',
+    '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Sleep(1500);
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -98,12 +96,29 @@ begin
   StopZapretStack();
 end;
 
+// "Remove" in the Windows settings must open the app's own branded uninstall
+// window, not a bare silent dialog. Inno writes its uninstall entry as the very
+// last installation step, so the values have to be corrected here - a
+// [Registry] entry would be wiped by the engine right after.
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Command: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    Command := '"' + ExpandConstant('{app}') + '\nukefy_vpn.exe" --uninstall';
+    RegWriteStringValue(HKLM, UninstallKey, 'UninstallString', Command);
+    RegWriteStringValue(HKLM, UninstallKey, 'QuietUninstallString', Command);
+  end;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then StopZapretStack();
 end;
 
 [UninstallRun]
-Filename: "taskkill"; Parameters: "/F /IM winws.exe"; Flags: runhidden; RunOnceId: "killwinws"
+; Our winws only (path filter): a foreign zapret's processes stay alive.
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'winws.exe' -and $_.ExecutablePath -like '*nukefy*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"""; Flags: runhidden; RunOnceId: "killwinws"
 Filename: "taskkill"; Parameters: "/F /IM nukefy_vpn.exe"; Flags: runhidden; RunOnceId: "killapp"
 Filename: "schtasks"; Parameters: "/Delete /TN NukefyVPN /F"; Flags: runhidden; RunOnceId: "deltask"

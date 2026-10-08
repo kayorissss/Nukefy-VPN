@@ -34,6 +34,13 @@ class UninstallerService {
 
   static final UninstallerService instance = UninstallerService._();
 
+  /// Kill only the copies of [exeName] that live under a path containing
+  /// "nukefy": someone else's sing-box or xray keeps running.
+  static String _killOwned(String exeName) =>
+      r'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "' +
+      exeName +
+      r'" -and $_.ExecutablePath -like "*nukefy*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }';
+
   /// Writes the cleanup script and starts it detached. The caller should quit
   /// the app right after: the script waits for this process to disappear.
   Future<void> start(UninstallOptions options) async {
@@ -98,9 +105,10 @@ class UninstallerService {
         ..writeln(r'sc.exe stop nukefy-zapret | Out-Null')
         ..writeln(r'sc.exe delete nukefy-zapret | Out-Null')
         ..writeln(r'''Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "winws.exe" -and $_.ExecutablePath -like "*nukefy*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }''')
-        ..writeln(r'taskkill /F /IM sing-box.exe /T | Out-Null')
-        ..writeln(r'taskkill /F /IM xray.exe /T | Out-Null')
-        ..writeln(r'sc.exe stop WinDivert | Out-Null')
+        ..writeln(_killOwned('sing-box.exe'))
+        ..writeln(_killOwned('xray.exe'))
+        // The WinDivert driver is shared: stopping it would disable a zapret
+        // the user installed themselves, so it is left alone here.
         ..writeln(r'"zapret stack stopped" | Out-File -Append -Encoding utf8 $log');
     }
 
@@ -125,14 +133,14 @@ class UninstallerService {
 
     if (options.removeAppFiles) {
       buffer
-        // Prefer the installer's own silent uninstall (it also removes
-        // shortcuts and registry entries), and fall back to deleting the
-        // folder for portable copies.
-        ..writeln(r'$entry = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" | Where-Object { $_.DisplayName -like "*Nukefy*" } | Select-Object -First 1')
-        ..writeln(r'if ($entry -and $entry.UninstallString) {')
-        ..writeln(r'  $cmd = $entry.UninstallString')
-        ..writeln(r'  $cmd = $cmd -replace "\\?$", ""')
-        ..writeln(r'  Start-Process -FilePath $cmd -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait')
+        // The installer's own uninstaller is preferred: it deletes shortcuts,
+        // the registry key and the logged uninstall data. UninstallString must
+        // NOT be used as the source, because it points back at our own
+        // branded window (running it would just reopen this screen). A
+        // portable copy has no unins000.exe, so the folder is deleted instead.
+        ..writeln(r'$unins = Get-ChildItem -Path $exeDir -Filter "unins*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1')
+        ..writeln(r'if ($unins) {')
+        ..writeln(r'  Start-Process -FilePath $unins.FullName -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait')
         ..writeln(r'  "installer uninstall done" | Out-File -Append -Encoding utf8 $log')
         ..writeln('  } else {')
         ..writeln('  Start-Sleep -Milliseconds 500')
