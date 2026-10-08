@@ -42,7 +42,7 @@ class _UninstallScreenState extends State<UninstallScreen> {
     if (Platform.isWindows && _appFiles && !_zapret) {
       final zapret = ZapretService.instance;
       await zapret.serviceInstalled();
-      if ((zapret.servicePresent || zapret.serviceRunning) && mounted) {
+      if ((zapret.servicePresent || zapret.serviceRunning || zapret.isRunning) && mounted) {
         setState(() => _failure = s.t('uninstallZapretDependency'));
         return;
       }

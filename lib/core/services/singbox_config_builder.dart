@@ -44,7 +44,11 @@ class SingboxConfigBuilder {
     // outbound in that core. Keep parsing/import support, but stop before a
     // misleading "connected" state and explain the limitation in the UI.
     if (type == 'mieru') return 'CORE_MIERU_UNSUPPORTED';
-    if (type == 'xhttp' || type == 'splithttp') return 'XRAY_TRANSPORT_REQUIRED';
+    // XHTTP is encoded in the transport map for VLESS/VMess/Trojan, not as
+    // the outbound protocol name. Keep a builder-level guard as well as the
+    // provider's Xray core selection so it cannot silently fall through to
+    // sing-box from another call site.
+    if (type == 'xhttp' || type == 'splithttp' || server.usesXhttp) return 'XRAY_TRANSPORT_REQUIRED';
     if (!supportedTypes.contains(type)) return 'CORE_PROTOCOL_UNSUPPORTED';
     if (server.outbound == null) return 'CORE_OUTBOUND_MISSING';
     return null;
