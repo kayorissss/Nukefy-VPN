@@ -31,6 +31,10 @@ class _UninstallScreenState extends State<UninstallScreen> {
   bool _appFiles = true;
   bool _busy = false;
 
+  /// The cleanup helper is running: the screen shows a live progress note
+  /// instead of an apparently frozen button.
+  bool _waiting = false;
+
   Future<void> _run() async {
     final s = context.read<SettingsProvider>().strings;
     final ok = await confirmDialog(
@@ -60,8 +64,19 @@ class _UninstallScreenState extends State<UninstallScreen> {
       return;
     }
     if (!mounted) return;
+    setState(() => _waiting = true);
     showNukefySnack(context, s.t('uninstallRunning'));
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    // Wait for the marker the cleanup script drops, not for a stopwatch: the
+    // window used to sit "frozen" and then close while the script was still
+    // working. 90 s is the script's own upper bound (it waits for this process
+    // to exit first), the hard stop keeps a broken helper from hanging the UI.
+    final flag = File(UninstallerService.doneFlagPath);
+    final clock = Stopwatch()..start();
+    while (mounted && clock.elapsed < const Duration(seconds: 95)) {
+      if (flag.existsSync()) break;
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
+    if (!mounted) return;
     // Kill the whole process tree: a stray core or winws must not keep the
     // folder locked while the cleanup script is deleting it.
     exit(0);
@@ -147,7 +162,17 @@ class _UninstallScreenState extends State<UninstallScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(s.t('uninstallHowBody'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+              Text(
+                _waiting ? s.t('uninstallRunning') : s.t('uninstallHowBody'),
+                style: AppTextStyles.bodySecondary.copyWith(color: _waiting ? p.accent : p.textSecondary),
+              ),
+              if (_waiting) ...[
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: const LinearProgressIndicator(minHeight: 5),
+                ),
+              ],
               const SizedBox(height: 12),
               NukefyActionButton(
                 label: s.t('uninstallConfirm'),

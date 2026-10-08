@@ -793,11 +793,10 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> {
 }
 
 class _WindowButton extends StatefulWidget {
-  const _WindowButton({required this.icon, required this.onTap, this.danger = false, this.iconSize = 16});
+  const _WindowButton({required this.icon, required this.onTap, this.danger = false});
   final IconData icon;
   final Future<void> Function() onTap;
   final bool danger;
-  final double iconSize;
 
   @override
   State<_WindowButton> createState() => _WindowButtonState();
@@ -826,7 +825,7 @@ class _WindowButtonState extends State<_WindowButton> {
           width: 46,
           height: 40,
           color: bg,
-          child: Icon(widget.icon, size: widget.iconSize, color: fg),
+          child: Icon(widget.icon, size: 16, color: fg),
         ),
       ),
     );

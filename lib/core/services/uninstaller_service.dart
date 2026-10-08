@@ -60,6 +60,20 @@ class UninstallerService {
     );
     final file = File(p.join(Directory.systemTemp.path, 'nukefy_uninstall.ps1'));
     await file.writeAsString(script);
+    final done = File(doneFlagPath);
+    if (done.existsSync()) done.deleteSync();
+    if (await _isElevated()) {
+      // The client itself runs elevated (TUN + WinDivert need it), so the
+      // helper can start directly. The old code always asked for RunAs, which
+      // produced a UAC window behind the app: the screen looked frozen and
+      // "nothing happened" until it was dismissed.
+      await Process.start(
+        'powershell.exe',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', file.path],
+        mode: ProcessStartMode.detached,
+      );
+      return;
+    }
     await Process.start(
       'powershell.exe',
       [
@@ -67,10 +81,29 @@ class UninstallerService {
         '-ExecutionPolicy',
         'Bypass',
         '-Command',
-        'Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -File "${file.path}"\'',
+        'Start-Process powershell -Verb RunAs -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -File "${file.path}"\'',
       ],
       mode: ProcessStartMode.detached,
     );
+  }
+
+  /// Marker the cleanup script drops when it is finished, so the UI can wait
+  /// for real completion instead of guessing with a timer.
+  static String get doneFlagPath =>
+      p.join(Directory.systemTemp.path, 'nukefy_uninstall.done');
+
+  /// True when this process already runs with an administrator token.
+  Future<bool> _isElevated() async {
+    try {
+      final result = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        r'([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)',
+      ]).timeout(const Duration(seconds: 10));
+      return '${result.stdout}'.toLowerCase().contains('true');
+    } catch (_) {
+      return true;
+    }
   }
 
   /// Removes what a non-Windows build can remove honestly (its own data).
@@ -93,6 +126,7 @@ class UninstallerService {
     final buffer = StringBuffer()
       ..writeln(r'$ErrorActionPreference = "SilentlyContinue"')
       ..writeln(r'$log = Join-Path $env:TEMP "nukefy_uninstall.log"')
+      ..writeln(r'$done = Join-Path $env:TEMP "nukefy_uninstall.done"')
       ..writeln(r'"Nukefy uninstall start $(Get-Date -Format o)" | Out-File -Encoding utf8 $log')
       // Wait for the app to close so nothing is locked while we work.
       ..writeln('Wait-Process -Id $pid -Timeout 90 -ErrorAction SilentlyContinue')
@@ -157,6 +191,8 @@ class UninstallerService {
     }
 
     buffer.writeln(r'"Nukefy uninstall finished" | Out-File -Append -Encoding utf8 $log');
+    // The window stays open until this marker appears.
+    buffer.writeln(r'"done" | Out-File -Encoding utf8 $done');
     return buffer.toString();
   }
 }

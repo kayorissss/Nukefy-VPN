@@ -26,6 +26,12 @@ void forceDarkWin32Chrome() {
     final setPreferredAppMode = Pointer<NativeFunction<Int32 Function(Int32)>>.fromAddress(ordinal.address)
         .asFunction<int Function(int)>();
     setPreferredAppMode(2); // 0 = default, 1 = allow dark, 2 = force dark
+    // Ordinal 136: re-creates the theme handles that were already cached, so
+    // the dark colours apply to popups opened right after startup too.
+    final flush = getProcAddress(uxtheme.handle, Pointer<Void>.fromAddress(136));
+    if (flush.address != 0) {
+      Pointer<NativeFunction<Void Function()>>.fromAddress(flush.address).asFunction<void Function()>()();
+    }
   } catch (_) {
     // Older Windows: the native menu simply keeps its default colours.
   }
