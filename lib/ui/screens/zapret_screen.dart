@@ -54,6 +54,10 @@ class _ZapretScreenState extends State<ZapretScreen> {
     super.initState();
     _strategies = _zapret.strategies();
     _zapret.addListener(_changed);
+    // Whatever else does DPI bypass on this machine has to be known before the
+    // user presses anything: two captures at once is the usual reason "zapret
+    // does not work" while another client works fine.
+    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _refreshConflicts(); });
     if (widget.active) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _enter(); });
   }
 
@@ -150,8 +154,18 @@ class _ZapretScreenState extends State<ZapretScreen> {
     await _loadTargets();
   }
 
+  List<String> _conflicts = const [];
+
+  /// Asks the service what else on this machine is doing DPI bypass. The app
+  /// never closes someone else's program, so the answer is shown to the user.
+  Future<void> _refreshConflicts() async {
+    final found = await _zapret.detectConflicts();
+    if (mounted) setState(() => _conflicts = found);
+  }
+
   Future<void> _start(ZapretStrategy strategy) async {
     _zapret.configure(context.read<SettingsProvider>().settings);
+    await _refreshConflicts();
     if (!await _zapret.start(strategy)) throw StateError(_zapret.lastError ?? 'winws failed');
   }
 
@@ -335,6 +349,42 @@ class _ZapretScreenState extends State<ZapretScreen> {
     final domains = _zapret.loadDomains();
     final running = _zapret.isRunning;
     final statusColor = running ? p.success : p.textSecondary;
+
+    final conflictCard = _conflicts.isEmpty
+        ? const SizedBox.shrink()
+        : Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            decoration: BoxDecoration(
+              color: p.accent.withValues(alpha: .10),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: p.accent.withValues(alpha: .38)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.warning_amber_rounded, color: p.accent, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.t('zConflictTitle'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      NukefySelectableText(
+                        '${s.t('zConflictBody')}\n${_conflicts.join('\n')}',
+                        style: p.secondaryStyle,
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: _refreshConflicts,
+                  child: Text(s.t('zConflictRecheck')),
+                ),
+              ],
+            ),
+          );
 
     final activation = SectionCard(
       title: s.t('zapretActivation'),
@@ -1122,7 +1172,10 @@ class _ZapretScreenState extends State<ZapretScreen> {
                   alignment: Alignment.center,
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1200),
-                    child: activation,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [conflictCard, activation],
+                    ),
                   ),
                 ),
                 strategySummary,

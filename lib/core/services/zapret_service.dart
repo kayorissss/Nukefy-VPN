@@ -517,6 +517,41 @@ class ZapretService extends ChangeNotifier {
     return int.parse(match.group(1)!);
   }
 
+  /// Anything that would fight our capture: another zapret's winws process or
+  /// the Flowseal `zapret` service. Returned as human-readable lines so the UI
+  /// can ask the user to close it — the app must never kill it silently.
+  Future<List<String>> detectConflicts() async {
+    if (!Platform.isWindows) return const [];
+    final found = <String>[];
+    try {
+      if (await _serviceState(name: 'zapret') != null) {
+        found.add('zapret (service)');
+      }
+    } catch (_) {}
+    final dir = root;
+    final ours = dir == null ? '' : p.join(dir.path, 'bin', 'winws.exe').toLowerCase();
+    try {
+      final result = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        r'''Get-CimInstance Win32_Process -Filter "Name = 'winws.exe'" | ForEach-Object { "$($_.ProcessId)|$($_.ExecutablePath)" }''',
+      ]).timeout(const Duration(seconds: 8));
+      for (final line in '${result.stdout}'.split(RegExp(r'\r?\n'))) {
+        final parts = line.trim().split('|');
+        if (parts.length != 2 || parts[1].trim().isEmpty) continue;
+        final path = parts[1].toLowerCase();
+        if (ours.isNotEmpty && path == ours) continue;
+        if (!found.any((entry) => entry.contains(path))) found.add('winws.exe · ${parts[1]}');
+      }
+    } catch (_) {}
+    conflicts = found;
+    notifyListeners();
+    return found;
+  }
+
+  /// Human-readable conflict list, refreshed by [detectConflicts].
+  List<String> conflicts = const [];
+
   Future<bool> serviceInstalled() async {
     if (!Platform.isWindows) return false;
     try {
@@ -879,10 +914,16 @@ class ZapretService extends ChangeNotifier {
           notifyListeners();
         }
       }));
-      // Give it a moment: a missing driver / no admin rights fails instantly.
-      await Future.delayed(const Duration(milliseconds: 900));
+      // Give it a moment: a missing driver / no admin rights fails instantly,
+      // while a conflict with a foreign capture can take a second or two to
+      // surface in the log.
+      await Future.delayed(const Duration(milliseconds: 1600));
       if (_process == null) {
-        lastError ??= 'winws exited immediately';
+        lastError ??= _log.isEmpty ? 'winws exited immediately' : _log.last;
+        final hints = await detectConflicts();
+        if (hints.isNotEmpty) {
+          lastError = 'conflict: ${hints.join(', ')}';
+        }
         notifyListeners();
         return false;
       }
