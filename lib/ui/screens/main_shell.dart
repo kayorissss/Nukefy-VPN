@@ -88,14 +88,17 @@ class MainShell extends StatelessWidget {
       _ => pageIndex,
     };
     final body = AnimatedSwitcher(
-      duration: const Duration(milliseconds: 260),
+      duration: const Duration(milliseconds: 320),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, animation) => FadeTransition(
         opacity: animation,
         child: SlideTransition(
-          position: Tween<Offset>(begin: const Offset(.018, 0), end: Offset.zero).animate(animation),
-          child: child,
+          position: Tween<Offset>(begin: const Offset(.03, 0), end: Offset.zero).animate(animation),
+          child: ScaleTransition(
+            scale: Tween<double>(begin: .985, end: 1).animate(animation),
+            child: child,
+          ),
         ),
       ),
       // Keep the page host itself stable.  Keying an IndexedStack by the
@@ -719,29 +722,7 @@ class DesktopTitleBar extends StatefulWidget {
   State<DesktopTitleBar> createState() => _DesktopTitleBarState();
 }
 
-class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
-  bool _maximized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    windowManager.addListener(this);
-    windowManager.isMaximized().then((v) {
-      if (mounted) setState(() => _maximized = v);
-    });
-  }
-
-  @override
-  void dispose() {
-    windowManager.removeListener(this);
-    super.dispose();
-  }
-
-  @override
-  void onWindowMaximize() => setState(() => _maximized = true);
-
-  @override
-  void onWindowUnmaximize() => setState(() => _maximized = false);
+class _DesktopTitleBarState extends State<DesktopTitleBar> {
 
   @override
   Widget build(BuildContext context) {
@@ -802,19 +783,8 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
               ),
             ),
           ),
-          // No minimize button: the desktop shell lives maximized, so the
-          // button only ever snapped the window back and read as broken.
-          _WindowButton(
-            icon: _maximized ? Icons.filter_none_rounded : Icons.crop_square_rounded,
-            iconSize: _maximized ? 13 : 16,
-            onTap: () async {
-              if (await windowManager.isMaximized()) {
-                await windowManager.unmaximize();
-              } else {
-                await windowManager.maximize();
-              }
-            },
-          ),
+          // Only Close: the desktop shell lives maximized, so a restore /
+          // minimize control did nothing except snap the window back.
           _WindowButton(icon: Icons.close_rounded, danger: true, onTap: windowManager.close),
         ],
       ),
