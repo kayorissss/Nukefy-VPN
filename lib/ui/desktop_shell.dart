@@ -72,9 +72,14 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
       final ext = Platform.isWindows ? 'ico' : 'png';
       final dir = await getApplicationSupportDirectory();
       final icon = File('${dir.path}/$asset.$ext');
-      if (!icon.existsSync()) {
+      // Always refresh from the bundle: a cached copy may belong to an older
+      // build (or be gone after a "remove my data" pass) and the tray used to
+      // end up with a missing or stale icon.
+      try {
         final data = await rootBundle.load('assets/icons/$asset.$ext');
         await icon.writeAsBytes(data.buffer.asUint8List(), flush: true);
+      } catch (_) {
+        if (!icon.existsSync()) rethrow;
       }
       await trayManager.setIcon(icon.path);
       await trayManager.setToolTip('Nukefy Client — $label');
