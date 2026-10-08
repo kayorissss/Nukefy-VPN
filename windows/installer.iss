@@ -25,6 +25,12 @@ SetupIconFile=runner\resources\app_icon.ico
 Compression=zip
 SolidCompression=no
 WizardStyle=modern
+; Branded wizard: the client logo in the header and the artwork people know
+; from the app splash on the sidebar of the welcome/finish pages.
+WizardImageFile=installer_art\wizard_big.bmp
+WizardSmallImageFile=installer_art\small.bmp
+WizardImageStretch=yes
+ShowLanguageDialog=auto
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -34,6 +40,15 @@ RestartApplications=no
 [Languages]
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
+
+; Shown on the language picker and the welcome page.
+[CustomMessages]
+english.WelcomeLabel1=Welcome to Nukefy Client Setup
+russian.WelcomeLabel1=Установка Nukefy Client
+english.WelcomeLabel2=The setup will install Nukefy Client on your computer.%n%nLater, remove the app through its own window "Uninstall Nukefy Client" - do not delete the folder by hand.
+russian.WelcomeLabel2=Программа установит Nukefy Client на ваш компьютер.%n%nУдалять приложение нужно через его собственное окно «Удалить Nukefy Client» — не удаляйте папку вручную.
+english.FinishedLabel=The installation is complete.
+russian.FinishedLabel=Установка завершена.
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -80,6 +95,13 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then StopZapretStack();
 end;
+
+; Uninstall points at the app's own window: "Remove" in the Windows settings
+; opens the branded screen with the checkboxes, and the app then deletes its
+; own files with an elevated helper.
+[Registry]
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1"; ValueType: string; ValueName: "UninstallString"; ValueData: "\"{app}\nukefy_vpn.exe\" --uninstall"
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1"; ValueType: string; ValueName: "QuietUninstallString"; ValueData: "\"{app}\nukefy_vpn.exe\" --uninstall"
 
 [UninstallRun]
 Filename: "taskkill"; Parameters: "/F /IM winws.exe"; Flags: runhidden; RunOnceId: "killwinws"

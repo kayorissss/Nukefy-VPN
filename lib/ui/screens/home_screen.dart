@@ -22,6 +22,7 @@ import '../widgets/connect_button.dart';
 import '../widgets/country_badge.dart';
 import '../widgets/nukefy_logo.dart';
 import '../widgets/ping_badge.dart';
+import '../../core/services/vpn_platform.dart';
 import 'diagnostics_screen.dart';
 import 'main_shell.dart';
 
@@ -141,6 +142,8 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(height: 14),
           _TrafficCard(vpn: vpn, strings: s),
         ],
+        const SizedBox(height: 14),
+        const _WarpHintCard(),
       ],
     );
     final serverCard = _ServerCard(
@@ -496,6 +499,101 @@ class _TrafficCardState extends State<_TrafficCard> {
                 ],
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown only to people who actually have Cloudflare WARP installed. It is
+/// the one place outside of the settings where WARP can be switched off, and
+/// it never fires by itself: two TUN drivers on one machine is a common cause
+/// of "подключено, а интернет не работает".
+class _WarpHintCard extends StatefulWidget {
+  const _WarpHintCard();
+
+  @override
+  State<_WarpHintCard> createState() => _WarpHintCardState();
+}
+
+class _WarpHintCardState extends State<_WarpHintCard> {
+  bool? _present;
+  bool _running = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    final platform = VpnPlatform();
+    final present = await platform.warpInstalled();
+    if (!mounted) return;
+    if (!present) {
+      setState(() => _present = false);
+      return;
+    }
+    final lines = await platform.warpStatus();
+    if (!mounted) return;
+    setState(() {
+      _present = true;
+      _running = lines.any((line) => line.split('|').length > 1 && line.split('|')[1] == 'Running');
+    });
+  }
+
+  Future<void> _toggle() async {
+    final s = context.read<SettingsProvider>().strings;
+    setState(() => _busy = true);
+    final platform = VpnPlatform();
+    final result = _running ? await platform.disableWarp() : await platform.enableWarp();
+    if (!mounted) return;
+    await _check();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    showNukefySnack(context, s.t(_running ? 'warpOffDone' : 'warpOnDone'));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_present != true) return const SizedBox.shrink();
+    final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 520),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        decoration: BoxDecoration(
+          color: (_running ? AppColors.error : p.textSecondary).withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: p.border),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.cloud_outlined, size: 18, color: _running ? AppColors.error : p.textSecondary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.t('warpCardTitle'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    _running ? s.t('warpCardRunning') : s.t('warpCardHint'),
+                    style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 11.5),
+                  ),
+                ],
+              ),
+            ),
+            if (_busy)
+              const Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)))
+            else
+              NukefyActionButton(
+                label: s.t(_running ? 'warpCardOff' : 'warpCardOn'),
+                filled: _running,
+                onPressed: _toggle,
+              ),
           ],
         ),
       ),

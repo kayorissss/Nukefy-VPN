@@ -18,6 +18,7 @@ import 'core/constants/app_constants.dart';
 import 'core/models/vpn_status.dart';
 import 'core/providers/vpn_provider.dart';
 import 'core/services/app_log.dart';
+import 'core/theme/app_theme.dart';
 import 'core/services/app_perf.dart';
 import 'core/services/desktop_instance_guard.dart';
 import 'core/services/music_audio_handler.dart';
@@ -29,6 +30,8 @@ import 'core/services/vpn_platform.dart';
 import 'core/services/zapret_service.dart';
 import 'ui/desktop_shell.dart';
 import 'ui/screens/settings_screen.dart';
+import 'ui/screens/uninstall_screen.dart';
+import 'ui/widgets/nukefy_splash.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -68,6 +71,9 @@ Future<void> main() async {
 Future<void> _main() async {
   WidgetsFlutterBinding.ensureInitialized();
   _migrateLegacyData();
+  // "Remove" in the Windows settings (or Setup.exe /UNINSTALL) launches the
+  // app with --uninstall: show our own uninstall window instead of the app.
+  final uninstallRequested = Platform.executableArguments.contains('--uninstall');
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     AppLog.log('flutter: ${details.exceptionAsString()}');
@@ -191,6 +197,29 @@ Future<void> _main() async {
     if (seeded.isNotEmpty) AppLog.log('bundle cores installed: ${seeded.join(', ')}');
   }, seconds: 15);
   await guard('core', vpn.refreshCore, seconds: 5);
+
+  if (uninstallRequested) {
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: settings),
+          ChangeNotifierProvider.value(value: servers),
+        ],
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.dark(
+            settings.settings.accent,
+            settings.settings.visualTheme,
+          ),
+          home: NukefySplash(
+            message: settings.strings.t('uninstallSplash'),
+            child: const UninstallScreen(),
+          ),
+        ),
+      ),
+    );
+    return;
+  }
 
   runApp(
     MultiProvider(

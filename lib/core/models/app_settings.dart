@@ -48,6 +48,7 @@ class AppSettings {
     this.zapretWssize = false,
     this.zapretDebugLog = false,
     this.zapretAutoRestart = true,
+    this.zapretExtraArgs = '',
     this.musicUnlocked = false,
     this.warpDisabled = false,
     this.probeHosts = const [],
@@ -125,6 +126,10 @@ class AppSettings {
   bool zapretDebugLog;
   /// Restart winws automatically when the strategy changes.
   bool zapretAutoRestart;
+
+  /// Free-form extra winws arguments (for example `--dns=1.1.1.1`). Passed to
+  /// the capture verbatim, so the field in the UI really reaches the process.
+  String zapretExtraArgs;
   /// Karing-style whitelist bypass profile.
   bool musicUnlocked;
   bool warpDisabled;
@@ -203,6 +208,7 @@ class AppSettings {
         'zapretWssize': zapretWssize,
         'zapretDebugLog': zapretDebugLog,
         'zapretAutoRestart': zapretAutoRestart,
+        'zapretExtraArgs': zapretExtraArgs,
         'musicUnlocked': musicUnlocked,
         'warpDisabled': warpDisabled,
         'probeHosts': probeHosts,
@@ -276,6 +282,7 @@ class AppSettings {
       zapretWssize: json['zapretWssize'] == true,
       zapretDebugLog: json['zapretDebugLog'] == true,
       zapretAutoRestart: json['zapretAutoRestart'] != false,
+      zapretExtraArgs: (json['zapretExtraArgs'] as String?) ?? '',
       musicUnlocked: json['musicUnlocked'] == true,
       warpDisabled: json['warpDisabled'] == true,
       probeHosts: (json['probeHosts'] as List?)?.whereType<String>().toList() ?? const [],

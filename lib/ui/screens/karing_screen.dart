@@ -30,7 +30,20 @@ class KaringScreen extends StatefulWidget {
 
 class _KaringScreenState extends State<KaringScreen> {
   final _karing = KaringService.instance;
+  final _settingsKey = GlobalKey();
   bool _adding = false;
+
+  /// Smoothly brings the settings block into view (the gear in the corner).
+  void _scrollToSettings() {
+    final target = _settingsKey.currentContext;
+    if (target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 520),
+      curve: Curves.easeOutCubic,
+      alignment: 0.06,
+    );
+  }
 
   S get s => context.read<SettingsProvider>().strings;
 
@@ -156,29 +169,12 @@ class _KaringScreenState extends State<KaringScreen> {
     final powerCard = SectionCard(
       title: s.t('karingTitle'),
       icon: Icons.route_rounded,
-      trailing: PopupMenuButton<String>(
+      // A gear in the corner, exactly as asked: tapping it scrolls the page
+      // down to the full set of settings instead of hiding them in a menu.
+      trailing: IconButton(
         tooltip: s.t('zSettings'),
-        icon: const Icon(Icons.more_vert_rounded),
-        onSelected: (id) async {
-          switch (id) {
-            case 'enable':
-              await _setEnabled(!value.karingEnabled);
-            case 'add':
-              final mirror = await _karing.firstReachable();
-              if (!mounted) return;
-              await _addSubscription(mirror?.url ?? WhitelistCatalog.mirrors.first.url);
-            case 'refresh':
-              if (subscription != null) await servers.refreshSubscription(subscription.id);
-            case 'ping':
-              if (subscription != null) await servers.pingSubscription(subscription.id);
-          }
-        },
-        itemBuilder: (_) => [
-          PopupMenuItem(value: 'enable', child: Text(value.karingEnabled ? s.t('wlModeOff') : s.t('wlModeOn'))),
-          PopupMenuItem(value: 'add', child: Text(s.t('karingAddSub'))),
-          PopupMenuItem(value: 'refresh', child: Text(s.t('refresh'))),
-          PopupMenuItem(value: 'ping', child: Text(s.t('checkPing'))),
-        ],
+        onPressed: () => _scrollToSettings(),
+        icon: const Icon(Icons.settings_rounded, size: 19),
       ),
       child: Column(
         children: [
@@ -336,13 +332,21 @@ class _KaringScreenState extends State<KaringScreen> {
           ),
           // The tuning switches and mirrors live below the fold: the first
           // screen is the connect button and the server list, nothing else.
-          const SizedBox(height: 140),
+          // The gear above scrolls here.
+          SizedBox(key: _settingsKey, height: 26),
           SectionCard(
             title: s.t('wlSettingsTitle'),
             icon: Icons.tune_rounded,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                SwitchTile(
+                  icon: Icons.bolt_rounded,
+                  title: s.t('wlModeTitle'),
+                  subtitle: value.karingEnabled ? s.t('wlModeOn') : s.t('wlModeOff'),
+                  value: value.karingEnabled,
+                  onChanged: _adding ? (_) {} : (next) => _setEnabled(next),
+                ),
                 SwitchTile(
                   icon: Icons.speed_rounded,
                   title: s.t('karingBalancer'),

@@ -4,13 +4,16 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import 'nukefy_logo.dart';
 
-/// Short branded intro: logo and name for about a second, then a smooth
-/// fade into the real interface. The overlay is removed from the tree once
-/// finished, so it never intercepts input or keeps a ticker alive.
+/// Short branded intro: the РКН-тянka artwork on the right, the client's own
+/// branding on the left, then a smooth fade into the real interface. The
+/// overlay leaves the tree once finished, so it never intercepts input.
 class NukefySplash extends StatefulWidget {
-  const NukefySplash({super.key, required this.child});
+  const NukefySplash({super.key, required this.child, this.message});
 
   final Widget child;
+
+  /// Optional line under the name (used by the uninstall flow).
+  final String? message;
 
   @override
   State<NukefySplash> createState() => _NukefySplashState();
@@ -19,7 +22,7 @@ class NukefySplash extends StatefulWidget {
 class _NukefySplashState extends State<NukefySplash> with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1500),
+    duration: const Duration(milliseconds: 1700),
   );
   bool _finished = false;
 
@@ -47,47 +50,154 @@ class _NukefySplashState extends State<NukefySplash> with SingleTickerProviderSt
         if (!_finished)
           FadeTransition(
             opacity: Tween<double>(begin: 1, end: 0).animate(
-              CurvedAnimation(parent: _controller, curve: const Interval(0.72, 1, curve: Curves.easeIn)),
+              CurvedAnimation(parent: _controller, curve: const Interval(0.76, 1, curve: Curves.easeIn)),
             ),
             child: ColoredBox(
               color: p.background,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ScaleTransition(
-                      scale: Tween<double>(begin: 0.86, end: 1).animate(
-                        CurvedAnimation(parent: _controller, curve: const Interval(0, 0.55, curve: Curves.easeOutBack)),
-                      ),
-                      child: FadeTransition(
-                        opacity: CurvedAnimation(parent: _controller, curve: const Interval(0, 0.35)),
-                        child: const NukefyLogo(size: 108, glow: false),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    FadeTransition(
-                      opacity: CurvedAnimation(parent: _controller, curve: const Interval(0.25, 0.7)),
-                      child: SlideTransition(
-                        position: Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero).animate(
-                          CurvedAnimation(parent: _controller, curve: const Interval(0.25, 0.7, curve: Curves.easeOutCubic)),
-                        ),
-                        child: Text(
-                          'NUKEFY VPN',
-                          style: AppTextStyles.status.copyWith(
-                            color: p.text,
-                            fontSize: 15,
-                            letterSpacing: 4,
-                            decoration: TextDecoration.none,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final narrow = constraints.maxWidth < 720;
+                  final brand = _Brand(strings: widget.message, controller: _controller);
+                  final art = _Art(controller: _controller);
+                  return Row(
+                    children: [
+                      // Left half: our name, logo and the progress dot line.
+                      Expanded(
+                        flex: narrow ? 1 : 6,
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 28),
+                            child: brand,
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                      // Right half: the artwork the user attached.
+                      if (!narrow)
+                        Expanded(
+                          flex: 5,
+                          child: Align(alignment: Alignment.bottomRight, child: art),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
       ],
+    );
+  }
+}
+
+class _Brand extends StatelessWidget {
+  const _Brand({required this.controller, this.strings});
+
+  final AnimationController controller;
+  final String? strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    Widget wrap(Widget child, double begin, double end) => FadeTransition(
+          opacity: CurvedAnimation(parent: controller, curve: Interval(begin, end)),
+          child: SlideTransition(
+            position: Tween<Offset>(begin: const Offset(-0.06, 0), end: Offset.zero)
+                .animate(CurvedAnimation(parent: controller, curve: Interval(begin, end, curve: Curves.easeOutCubic))),
+            child: child,
+          ),
+        );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        wrap(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const NukefyLogo(size: 64, glow: true),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Nukefy Client',
+                      style: AppTextStyles.headline.copyWith(fontSize: 22, letterSpacing: 1.2, color: p.text)),
+                  const SizedBox(height: 4),
+                  Text('sing-box · Android и Windows',
+                      style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12)),
+                ],
+              ),
+            ],
+          ),
+          0.0,
+          0.45,
+        ),
+        const SizedBox(height: 22),
+        wrap(
+          Text(
+            strings ?? 'Загрузка…',
+            style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12.5),
+          ),
+          0.3,
+          0.7,
+        ),
+        const SizedBox(height: 10),
+        wrap(
+          SizedBox(
+            width: 168,
+            child: AnimatedBuilder(
+              animation: controller,
+              builder: (context, _) => ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  minHeight: 4,
+                  value: controller.value.clamp(0.02, 1),
+                  backgroundColor: p.border,
+                  valueColor: AlwaysStoppedAnimation(p.accent),
+                ),
+              ),
+            ),
+          ),
+          0.15,
+          0.6,
+        ),
+      ],
+    );
+  }
+}
+
+/// The attached artwork, anchored to the bottom-right corner.
+class _Art extends StatelessWidget {
+  const _Art({required this.controller});
+
+  final AnimationController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return FadeTransition(
+      opacity: CurvedAnimation(parent: controller, curve: const Interval(0.12, 0.85)),
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0.06, 0.04), end: Offset.zero)
+            .animate(CurvedAnimation(parent: controller, curve: const Interval(0.12, 0.85, curve: Curves.easeOutCubic))),
+        child: ShaderMask(
+          // Fade the artwork into the background instead of cutting it with a
+          // hard rectangle: no visible seam on any window size.
+          shaderCallback: (rect) => LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [p.background.withValues(alpha: 0), p.background],
+            stops: const [0.0, 0.35],
+          ).createShader(rect),
+          blendMode: BlendMode.dstIn,
+          child: Image.asset(
+            'assets/rkntyan.png',
+            fit: BoxFit.contain,
+            alignment: Alignment.bottomRight,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (context, error, stack) => const SizedBox.shrink(),
+          ),
+        ),
+      ),
     );
   }
 }

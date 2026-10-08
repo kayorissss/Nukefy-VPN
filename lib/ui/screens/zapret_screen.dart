@@ -32,6 +32,7 @@ class ZapretScreen extends StatefulWidget {
 class _ZapretScreenState extends State<ZapretScreen> {
   final _zapret = ZapretService.instance;
   final _scroll = ScrollController();
+  late final TextEditingController _extraArgs = TextEditingController();
   final _updater = ZapretUpdateService();
   List<ZapretStrategy> _strategies = [];
   final Map<String, List<ZapretProbeResult>> _results = {};
@@ -49,6 +50,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
 
   @override
   void initState() {
+    _extraArgs.text = context.read<SettingsProvider>().settings.zapretExtraArgs;
     super.initState();
     _strategies = _zapret.strategies();
     _zapret.addListener(_changed);
@@ -72,6 +74,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
     _cancel?.cancel();
     _zapret.removeListener(_changed);
     _scroll.dispose();
+    _extraArgs.dispose();
     super.dispose();
   }
 
@@ -732,6 +735,56 @@ class _ZapretScreenState extends State<ZapretScreen> {
                           await _restart();
                         }),
               ),
+              // Free-form winws arguments: this is where DNS overrides and
+              // extra flags go. They are now really passed to the process and
+              // the capture restarts so the change takes effect at once.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(2, 8, 2, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(s.t('zExtraArgs'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+                        ),
+                        Tooltip(
+                          message: s.t('zExtraArgsHint'),
+                          child: Icon(Icons.help_outline_rounded, size: 15, color: p.textSecondary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _extraArgs,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              hintText: '--dns=1.1.1.1 --dns=8.8.8.8',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        NukefyActionButton(
+                          label: s.t('apply'),
+                          icon: Icons.play_arrow_rounded,
+                          onPressed: busy
+                              ? null
+                              : () => _run(() async {
+                                    await settings.update((a) => a.zapretExtraArgs = _extraArgs.text.trim());
+                                    _zapret.configure(settings.settings);
+                                    await _restart();
+                                    if (mounted) showNukefySnack(context, s.t('zapretApplied'));
+                                  }),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 6),
               Wrap(
                 spacing: 8,
@@ -1125,8 +1178,13 @@ class _ZapretScreenState extends State<ZapretScreen> {
             );
             if (!ok) return;
           }
-          if (running) await _start(strategy);
+          // Applying a strategy now means applying it for real: save the
+          // choice and (re)start the capture immediately, so a click changes
+          // what is happening on the machine rather than only the checkbox.
+          _zapret.configure(settings.settings);
+          if (!await _zapret.start(strategy)) throw StateError(_zapret.lastError ?? 'winws failed');
           await settings.update((a) => a.zapretStrategy = strategy.id);
+          if (mounted) showNukefySnack(context, '${s.t('zapretApplied')}: ${strategy.id}');
         }),
         child: Padding(
           padding: const EdgeInsets.all(12),

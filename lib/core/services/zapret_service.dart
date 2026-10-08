@@ -83,6 +83,19 @@ class ZapretService extends ChangeNotifier {
       ..addEntries(['discord', 'game'].map((kind) => MapEntry(kind, _readActiveFake(kind))));
   }
 
+  /// Service name for *our* WinDivert capture.
+  ///
+  /// It must not be plain `zapret`: Flowseal's own `service.bat` and other
+  /// winws front-ends install exactly that name, and creating/overwriting it
+  /// silently broke people's working setup ("у меня ошибку выдавал другой
+  /// запрет, типа уже запущен"). We own only this name and never touch theirs.
+  static const String serviceName = 'nukefy-zapret';
+
+  /// True when another application's zapret service exists (Flowseal's
+  /// `zapret`, zapret-gui, etc.). We then refuse to install a second capture:
+  /// two winws instances fight over the WinDivert driver.
+  bool foreignZapretPresent = false;
+
   bool get isSupported => Platform.isWindows && root != null;
   bool get isRunning => _process != null || serviceRunning;
   bool servicePresent = false;
@@ -98,12 +111,19 @@ class ZapretService extends ChangeNotifier {
     finally { busy = false; notifyListeners(); }
   }
 
+  /// User's own `--dns=...` (or any other winws argument) appended verbatim.
+  /// Without this the field in the UI did not reach winws at all, which is
+  /// why "настраиваю DNS, а ничего не меняется".
+  String extraArgs = '';
+
   void configure(AppSettings settings) {
+    _lastSettings = settings;
     gameMode = settings.zapretGameMode;
     gameTcpRange = settings.zapretGameTcp;
     gameUdpRange = settings.zapretGameUdp;
     wssize = settings.zapretWssize;
     debugLog = settings.zapretDebugLog;
+    extraArgs = settings.zapretExtraArgs;
     if (!const ['off', 'all', 'tcp', 'udp'].contains(gameMode) || !validPorts(gameTcpRange) || !validPorts(gameUdpRange)) {
       throw const FormatException('Invalid game filter ports');
     }
@@ -215,6 +235,9 @@ class ZapretService extends ChangeNotifier {
     final args = _tokenize(command);
     if (wssize) args.add('--wssize=1424');
     if (debugLog) args.add('--debug=2');
+    // Anything the user typed (DNS server, extra flags) goes on the command
+    // line exactly as entered, quoted per argument.
+    if (extraArgs.trim().isNotEmpty) args.addAll(_tokenize(extraArgs.trim()));
     if (!withUserList || _userListPath == null) return args;
 
     return withHostlists(args, userList: _userListPath!, gameLists: gameListPaths);
@@ -484,10 +507,10 @@ class ZapretService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<int?> _serviceState() async {
-    final result = await Process.run('sc.exe', ['query', 'zapret']);
+  Future<int?> _serviceState({String? name}) async {
+    final result = await Process.run('sc.exe', ['query', name ?? serviceName]);
     if (result.exitCode == 1060) return null;
-    if (result.exitCode != 0) throw ProcessException('sc.exe', ['query', 'zapret'], '${result.stderr} ${result.stdout}', result.exitCode);
+    if (result.exitCode != 0) throw ProcessException('sc.exe', ['query', name ?? serviceName], '${result.stderr} ${result.stdout}', result.exitCode);
     // STATE is followed by its numeric value even on localized Windows.
     final match = RegExp(r'^\s*[^:\r\n]+:\s+([1-7])\s+[A-Z_]+', multiLine: true).firstMatch('${result.stdout}');
     if (match == null) throw const FormatException('Unrecognized service state');
@@ -496,6 +519,13 @@ class ZapretService extends ChangeNotifier {
 
   Future<bool> serviceInstalled() async {
     if (!Platform.isWindows) return false;
+    try {
+      // Someone else's zapret (Flowseal service.bat, zapret-gui) may be
+      // installed as plain `zapret`: remember that and keep our hands off it.
+      foreignZapretPresent = (await _serviceState(name: 'zapret')) != null;
+    } catch (_) {
+      foreignZapretPresent = false;
+    }
     final state = await _serviceState();
     servicePresent = state != null;
     serviceRunning = state == 4;
@@ -514,7 +544,7 @@ class ZapretService extends ChangeNotifier {
   Future<void> _stopService() async {
     var state = await _serviceState();
     if (state == null || state == 1) { serviceRunning = false; return; }
-    if (state != 3) await _sc(['stop', 'zapret']);
+    if (state != 3) await _sc(['stop', serviceName]);
     final clock = Stopwatch()..start();
     while (state != 1 && state != null) {
       if (clock.elapsed > const Duration(seconds: 15)) throw StateError('Service did not stop');
@@ -525,7 +555,7 @@ class ZapretService extends ChangeNotifier {
   }
 
   Future<void> _startService() async {
-    await _sc(['start', 'zapret']);
+    await _sc(['start', serviceName]);
     final clock = Stopwatch()..start();
     while (true) {
       final state = await _serviceState();
@@ -548,17 +578,37 @@ class ZapretService extends ChangeNotifier {
     _ensureUserLists();
     _writeUserList(loadDomains());
     await refreshGameLists();
-    if (await serviceInstalled()) throw StateError('Service already installed');
-    await _sc(['create', 'zapret', 'binPath=', _serviceCommand(strategy), 'start=', 'auto', 'DisplayName=', 'zapret (Nukefy Client)']);
+    await serviceInstalled();
+    if (foreignZapretPresent) throw StateError('foreign-zapret');
+    if (servicePresent) throw StateError('Service already installed');
+    // start= demand, never auto: our capture must not come up on boot behind
+    // the user's back and clash with whatever else they run.
+    await _sc(['create', serviceName, 'binPath=', _serviceCommand(strategy), 'start=', 'demand', 'DisplayName=', 'Nukefy Client DPI filter']);
     servicePresent = true;
     await _startService();
     _runningStrategyId = strategy.id;
     await StorageService.instance.write('zapret_service_strategy', strategy.id);
   }
 
+  /// Applies the "start together with the computer" checkbox to our service:
+  /// auto when the user asked for it, manual + stopped when they did not.
+  Future<void> setBootAutoStart(bool enabled, {ZapretStrategy? strategy}) async {
+    if (!Platform.isWindows) return;
+    await serviceInstalled();
+    if (!servicePresent) return;
+    try {
+      await _sc(['config', serviceName, 'start=', enabled ? 'auto' : 'demand']);
+      if (!enabled && serviceRunning) await _stopService();
+      serviceRunning = enabled ? serviceRunning : false;
+    } catch (error) {
+      lastError = 'autostart: $error';
+    }
+    notifyListeners();
+  }
+
   Future<void> removeService() async {
     await _stopService();
-    await _sc(['delete', 'zapret']);
+    await _sc(['delete', serviceName]);
     await StorageService.instance.remove('zapret_service_strategy');
     servicePresent = false;
     serviceRunning = false;
@@ -777,6 +827,16 @@ class ZapretService extends ChangeNotifier {
     }
   }
 
+  /// "Strategy changed → really use it": restarts the live capture when one
+  /// is running, and is silent otherwise.
+  Future<bool> applyStrategy(ZapretStrategy strategy) async {
+    configure(_lastSettings ?? AppSettings());
+    if (!isRunning) return false;
+    return start(strategy);
+  }
+
+  AppSettings? _lastSettings;
+
   Future<bool> start(ZapretStrategy strategy) async {
     if (!isSupported || _closing) return false;
     await stop();
@@ -793,7 +853,7 @@ class ZapretService extends ChangeNotifier {
       await refreshGameLists();
       if (_closing) return false;
       if (servicePresent) {
-        await _sc(['config', 'zapret', 'binPath=', _serviceCommand(strategy)]);
+        await _sc(['config', serviceName, 'binPath=', _serviceCommand(strategy)]);
         await _startService();
         _runningStrategyId = strategy.id;
         await StorageService.instance.write('zapret_service_strategy', strategy.id);
@@ -870,9 +930,43 @@ class ZapretService extends ChangeNotifier {
   /// Prevent an in-flight analysis from spawning another child on exit.
   /// A system service (if installed) keeps running: only our own child
   /// process is reaped.
-  Future<void> shutdown() async {
+  /// Full cleanup for app exit: our winws process and, when we installed it,
+  /// our own service — so no WinDivert capture keeps running after the app
+  /// window is gone (the "виндиверт работает, а программа нет" report).
+  /// Foreign zapret installs are never touched.
+  Future<void> shutdown({bool keepService = false}) async {
     _closing = true;
-    await stop(includeService: false);
+    try {
+      await stop(includeService: !keepService);
+    } catch (error) {
+      lastError = 'shutdown: $error';
+    }
+    if (!keepService && Platform.isWindows) {
+      // Belt and braces: an orphaned capture whose service handle we lost
+      // would keep WinDivert loaded. Only ever kill winws from OUR folder.
+      await killStrayCapture();
+    }
+  }
+
+  /// Kills `winws.exe` only when it was started from this installation.
+  Future<void> killStrayCapture() async {
+    final dir = root;
+    if (dir == null) return;
+    final bin = p.join(dir.path, 'bin', 'winws.exe').toLowerCase();
+    try {
+      final result = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        r'''Get-CimInstance Win32_Process -Filter "Name = 'winws.exe'" | ForEach-Object { "$($_.ProcessId)|$($_.ExecutablePath)" }''',
+      ]).timeout(const Duration(seconds: 8));
+      for (final line in '${result.stdout}'.split('\n')) {
+        final parts = line.trim().split('|');
+        if (parts.length != 2) continue;
+        final path = parts[1].toLowerCase().replaceAll('/', '\\');
+        if (!path.endsWith(bin.replaceAll('/', '\\'))) continue;
+        await Process.run('taskkill', ['/F', '/PID', parts[0]]);
+      }
+    } catch (_) {}
   }
 
   /// Stops only our process or, with [includeService], the explicitly

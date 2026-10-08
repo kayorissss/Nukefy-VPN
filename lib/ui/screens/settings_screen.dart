@@ -1315,6 +1315,7 @@ class _ToolsCardState extends State<_ToolsCard> {
   List<String> _services = [];
   bool _loading = true;
   bool _busy = false;
+  bool _warpPresent = false;
 
   @override
   void initState() {
@@ -1324,10 +1325,13 @@ class _ToolsCardState extends State<_ToolsCard> {
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
-    final lines = await VpnPlatform().warpStatus();
+    final platform = VpnPlatform();
+    final lines = await platform.warpStatus();
+    final present = lines.isNotEmpty || await platform.warpInstalled();
     if (!mounted) return;
     setState(() {
       _services = lines;
+      _warpPresent = present;
       _loading = false;
     });
   }
@@ -1391,11 +1395,20 @@ class _ToolsCardState extends State<_ToolsCard> {
               onPressed: () async {
                 final result = await VpnPlatform().windowsNetworkReset();
                 if (!context.mounted) return;
-                showNukefySnack(context, result == 'ok-reboot' ? '${strings.t('netToolsTitle')}: OK — ${strings.t('restart')}' : result);
+                final message = result == 'ok-reboot'
+                    ? '${strings.t('netToolsTitle')}: OK — ${strings.t('restart')}'
+                    : result.startsWith('reset-failed')
+                        ? '${strings.t('netResetFailed')}\n${result.substring('reset-failed:'.length).trim()}'
+                        : result;
+                showNukefySnack(context, message, error: result.startsWith('reset-failed'));
               },
             ),
           ),
-          SettingsTile(
+          // Cloudflare WARP is mentioned only when it is actually installed:
+          // people without it have no idea what warp-svc.exe is and never
+          // should be told to remove it.
+          if (_warpPresent)
+            SettingsTile(
             icon: Icons.cloud_outlined,
             title: strings.t('warpTitle'),
             subtitle: strings.t('warpHint'),

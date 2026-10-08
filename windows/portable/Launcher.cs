@@ -18,12 +18,38 @@ static class Launcher
     {
         try
         {
+            // A second launch of the portable exe while the app is running is
+            // treated as "open the window", never as a second installation.
+            var wantsUninstall = Array.IndexOf(args, "--uninstall") >= 0;
             var asm = Assembly.GetExecutingAssembly();
             var version = asm.GetName().Version.ToString();
             var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppName);
             var appDir = Path.Combine(root, "app");
             var marker = Path.Combine(root, "version.txt");
             var exe = Path.Combine(appDir, "nukefy_vpn.exe");
+
+            if (wantsUninstall)
+            {
+                // Deleting the running exe is impossible on Windows, so hand
+                // the cleanup to a tiny detached helper and show the app's own
+                // uninstall window meanwhile.
+                var helper = Path.Combine(Path.GetTempPath(), "nukefy_portable_uninstall.cmd");
+                File.WriteAllText(helper, string.Join("\r\n", new[]
+                {
+                    "@echo off",
+                    "timeout /t 3 /nobreak >nul",
+                    "taskkill /F /IM winws.exe /T >nul 2>&1",
+                    "taskkill /F /IM nukefy_vpn.exe /T >nul 2>&1",
+                    "rd /s /q \"" + appDir + "\" >nul 2>&1",
+                    "del /f /q \"" + Path.Combine(root, "version.txt") + "\" >nul 2>&1",
+                }));
+                Process.Start(new ProcessStartInfo("cmd.exe", "/c \"" + helper + "\"")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = Path.GetTempPath(),
+                });
+            }
 
             var current = File.Exists(marker) ? File.ReadAllText(marker).Trim() : "";
             if (current != version || !File.Exists(exe))

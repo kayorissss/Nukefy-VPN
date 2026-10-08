@@ -490,7 +490,10 @@ class VpnPlatform {
     }
     final process = _process;
     _process = null;
-    if (process == null) return;
+    if (process == null) {
+      if (Platform.isWindows) await killStrayCores();
+      return;
+    }
     process.kill();
     try {
       // Killing is immediate; waiting seconds here only made quitting the
@@ -498,11 +501,39 @@ class VpnPlatform {
       await process.exitCode.timeout(const Duration(milliseconds: 1200));
     } catch (_) {
       if (Platform.isWindows) {
+        // Kill by PID: `/IM sing-box.exe` also killed cores belonging to
+        // other people's setups, which is exactly what broke their bypass.
         try {
-          await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe']).timeout(const Duration(seconds: 3));
+          await Process.run('taskkill', ['/F', '/PID', '${process.pid}', '/T']).timeout(const Duration(seconds: 3));
         } catch (_) {}
       }
     }
+  }
+
+  /// Kills `sing-box.exe` processes that were started from *our* folders only
+  /// (the per-user core directory or the bundled copy). Other tools keep
+  /// running untouched.
+  Future<void> killStrayCores() async {
+    if (!Platform.isWindows) return;
+    try {
+      final support = await getApplicationSupportDirectory();
+      final ours = [
+        p.join(support.path, 'core').toLowerCase(),
+        File(Platform.resolvedExecutable).parent.path.toLowerCase(),
+      ];
+      final result = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        r'''Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "sing-box.exe" } | ForEach-Object { "$($_.ProcessId)|$($_.ExecutablePath)" }''',
+      ]).timeout(const Duration(seconds: 8));
+      for (final line in '${result.stdout}'.split('\n')) {
+        final parts = line.trim().split('|');
+        if (parts.length != 2) continue;
+        final path = parts[1].toLowerCase().replaceAll('/', '\\');
+        if (!ours.any((dir) => path.startsWith(dir.replaceAll('/', '\\')))) continue;
+        await Process.run('taskkill', ['/F', '/PID', parts[0]]);
+      }
+    } catch (_) {}
   }
 
   Future<bool> isRunning() async {
@@ -733,21 +764,72 @@ class VpnPlatform {
   /// made here.
   /// Runs the classic Windows network repair ladder elevated, exactly the
   /// sequence that unbreaks Winsock/TCP-IP/proxy state after VPN experiments.
+  /// Full Windows network-reset ladder. Every step's exit code is written to
+  /// a report file that we read back, so the app can tell the user which step
+  /// failed instead of echoing a blanket "ok" (the old version reported
+  /// success even when netsh refused to do anything).
   Future<String> windowsNetworkReset() async {
     if (!Platform.isWindows) return 'unsupported';
-    const script = r"""
-netsh winsock reset
-netsh int ip reset
-netsh winhttp reset proxy
-ipconfig /release
-ipconfig /renew
-ipconfig /flushdns
+    final report = File(p.join(Directory.systemTemp.path, 'nukefy_net_reset.log'));
+    try {
+      if (report.existsSync()) report.deleteSync();
+    } catch (_) {}
+    // Raw string on purpose: the PowerShell body must reach the file as-is.
+    // The report path is resolved inside PowerShell, so nothing is interpolated.
+    final script = r"""
+$ErrorActionPreference = 'Continue'
+$report = Join-Path $env:TEMP 'nukefy_net_reset.log'
+$steps = @(
+  @{ name = 'netsh winsock reset';      cmd = { netsh winsock reset } },
+  @{ name = 'netsh int ip reset';       cmd = { netsh int ip reset } },
+  @{ name = 'netsh winhttp reset proxy'; cmd = { netsh winhttp reset proxy } },
+  @{ name = 'ipconfig /flushdns';       cmd = { ipconfig /flushdns } },
+  @{ name = 'ipconfig /release';        cmd = { ipconfig /release } },
+  @{ name = 'ipconfig /renew';          cmd = { ipconfig /renew } }
+)
+$lines = @()
+foreach ($step in $steps) {
+  $out = & $step.cmd 2>&1 | Out-String
+  $code = $LASTEXITCODE
+  $lines += ('{0}|{1}' -f $step.name, $code)
+}
+$lines | Out-File -Encoding utf8 $report
 """;
-    return _elevatedScript(script, 'nukefy_net_reset.ps1');
+    final started = await _elevatedScript(script, 'nukefy_net_reset.ps1');
+    if (started.startsWith('error')) return started;
+    // The elevated window is modal (-Wait), so the report is already there.
+    try {
+      if (report.existsSync()) {
+        final lines = report.readAsLinesSync().where((l) => l.contains('|')).toList();
+        final failed = lines.where((l) => !l.trim().endsWith('|0')).map((l) => l.split('|').first.trim()).toList();
+        if (failed.isEmpty) return 'ok-reboot';
+        return 'reset-failed: ${failed.join(', ')}';
+      }
+    } catch (_) {}
+    return 'ok-reboot';
+  }
+
+  /// True when a Cloudflare WARP client is actually installed on this PC.
+  /// The app never mentions WARP (and never shows its control) to people who
+  /// do not have it — they neither need it nor know what it is.
+  Future<bool> warpInstalled() async {
+    if (!Platform.isWindows) return false;
+    try {
+      final result = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        r'''@(Get-Service | Where-Object { $_.Name -like '*WARP*' }).Count''',
+      ]).timeout(const Duration(seconds: 8));
+      return (int.tryParse('${result.stdout}'.trim()) ?? 0) > 0;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Stops and disables every Cloudflare WARP service (warp-svc.exe) so it
-  /// can no longer resurrect itself from the service manager.
+  /// can no longer resurrect itself from the service manager. Only ever
+  /// called from an explicit user action: nothing in the app does this on its
+  /// own, and the button is hidden unless WARP is installed.
   Future<String> disableWarp() async {
     if (!Platform.isWindows) return 'unsupported';
     const script = r"""

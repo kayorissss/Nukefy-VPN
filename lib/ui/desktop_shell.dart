@@ -324,7 +324,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     await windowManager.hide();
     final vpn = context.read<VpnProvider>();
     await Future.wait<void>([
-      _bounded(() => ZapretService.instance.shutdown(), seconds: 1),
+      _bounded(() => ZapretService.instance.shutdown(keepService: true), seconds: 1),
       _bounded(vpn.disconnect, seconds: 1),
     ]);
     await windowManager.setPreventClose(false);
@@ -343,9 +343,12 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   Future<void> _quit() async {
     await windowManager.hide();
     final vpn = context.read<VpnProvider>();
+    // A real exit must leave nothing behind: the tunnel, our winws capture and
+    // our own zapret service all go down with the window. Foreign tools are
+    // excluded (the service name and the executable path are ours).
     await Future.wait<void>([
-      _bounded(() => ZapretService.instance.shutdown()),
-      _bounded(vpn.disconnect),
+      _bounded(() => ZapretService.instance.shutdown(), seconds: 6),
+      _bounded(vpn.disconnect, seconds: 6),
     ]);
     await windowManager.setPreventClose(false);
     await windowManager.destroy();
