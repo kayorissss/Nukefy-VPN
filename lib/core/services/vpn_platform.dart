@@ -510,6 +510,52 @@ class VpnPlatform {
     }
   }
 
+
+  /// Turns the system proxy off (WinINET + WinHTTP). Reversible: the previous
+  /// values are written to a small backup file next to the app data so the
+  /// user can restore them from Settings.
+  Future<String> disableSystemProxy() async {
+    if (!Platform.isWindows) return 'unsupported';
+    try {
+      final script = r'''
+$backup = Join-Path $env:TEMP "nukefy_proxy_backup.txt"
+$key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+$before = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
+"$($before.ProxyEnable)|$($before.ProxyServer)" | Out-File -Encoding utf8 $backup
+Set-ItemProperty -Path $key -Name ProxyEnable -Value 0 -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path $key -Name ProxyServer -ErrorAction SilentlyContinue
+netsh winhttp reset proxy | Out-Null
+"proxy off, backup: " + $backup
+''';
+      final result = await Process.run('powershell.exe', ['-NoProfile', '-Command', script])
+          .timeout(const Duration(seconds: 20));
+      final out = '${result.stdout}'.trim();
+      return out.isEmpty ? 'ok' : out;
+    } catch (error) {
+      return '$error';
+    }
+  }
+
+  /// Pins plain Cloudflare DNS on the adapter that currently carries traffic.
+  Future<String> applyCloudflareDns() async {
+    if (!Platform.isWindows) return 'unsupported';
+    try {
+      final script = r'''
+$ErrorActionPreference = "SilentlyContinue"
+Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
+  Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ('1.1.1.1','1.0.0.1')
+}
+"dns set"
+''';
+      final result = await Process.run('powershell.exe', ['-NoProfile', '-Command', script])
+          .timeout(const Duration(seconds: 20));
+      final out = '${result.stdout}'.trim();
+      return out.isEmpty ? 'ok' : out;
+    } catch (error) {
+      return '$error';
+    }
+  }
+
   /// Points the Windows "Apps & features" entry at our own uninstall window.
   /// Only touches the key the installer created for this AppId (a portable
   /// copy has none, so nothing happens there).

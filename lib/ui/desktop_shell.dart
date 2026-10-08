@@ -54,21 +54,26 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     if (!mounted) return;
     final vpn = context.read<VpnProvider>();
     final s = context.read<SettingsProvider>().strings;
-    // One clean monochrome tray icon (the dotted variants read as noise at
-    // 16 px); the state travels in the tooltip and the tray menu instead.
-    const name = 'tray_icon';
     final label = switch (vpn.status) {
       VpnStatus.connected => s.t('connected'),
       VpnStatus.connecting => s.t('connecting'),
       VpnStatus.error => s.t('error'),
       VpnStatus.disconnected => s.t('disconnected'),
     };
+    // One icon file per state: the badge turns green while the tunnel is up,
+    // amber while it dials, red on an error and disappears when it is off.
+    final asset = switch (vpn.status) {
+      VpnStatus.connected => 'tray_ok',
+      VpnStatus.connecting => 'tray_warn',
+      VpnStatus.error => 'tray_bad',
+      VpnStatus.disconnected => 'tray_idle',
+    };
     try {
       final ext = Platform.isWindows ? 'ico' : 'png';
       final dir = await getApplicationSupportDirectory();
-      final icon = File('${dir.path}/tray_clean.$ext');
+      final icon = File('${dir.path}/$asset.$ext');
       if (!icon.existsSync()) {
-        final data = await rootBundle.load('assets/icons/$name.$ext');
+        final data = await rootBundle.load('assets/icons/$asset.$ext');
         await icon.writeAsBytes(data.buffer.asUint8List(), flush: true);
       }
       await trayManager.setIcon(icon.path);
@@ -89,7 +94,6 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     } catch (_) {
       if (!icon.existsSync()) return;
     }
-    await trayManager.setIcon(icon.path);
     await _syncTrayIcon();
     if (Platform.isWindows) {
       // window_manager applies the same ICO to the taskbar/window, not only
@@ -111,6 +115,9 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     final zapret = ZapretService.instance;
     final connected = vpn.status == VpnStatus.connected || vpn.status == VpnStatus.connecting;
     final connectable = servers.servers.where((server) => !server.isInformational).take(12).toList();
+    // The native popup used to be plain white: Win32Theme.forceDark() at
+    // startup flips the process into dark app mode, which is what Windows
+    // uses to draw TrackPopupMenu.
     await trayManager.setContextMenu(
       Menu(
         items: [

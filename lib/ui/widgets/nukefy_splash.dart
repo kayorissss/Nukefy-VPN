@@ -140,20 +140,29 @@ class _Brand extends StatelessWidget {
           0.3,
           0.7,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
+        // Three soft dots instead of the old progress bar: the bar read as
+        // yellow stripes under the caption with a warm accent colour.
         wrap(
           SizedBox(
-            width: 168,
+            height: 10,
             child: AnimatedBuilder(
               animation: controller,
-              builder: (context, _) => ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  minHeight: 4,
-                  value: controller.value.clamp(0.02, 1),
-                  backgroundColor: p.border,
-                  valueColor: AlwaysStoppedAnimation(p.accent),
-                ),
+              builder: (context, _) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < 3; i++) ...[
+                    if (i > 0) const SizedBox(width: 6),
+                    Opacity(
+                      opacity: (0.25 + 0.75 * ((controller.value * 3 - i).clamp(0.0, 1.0) * (1 - ((controller.value * 3 - i - 1).clamp(0.0, 1.0))))).clamp(0.2, 1.0),
+                      child: Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(color: p.textSecondary, shape: BoxShape.circle),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -165,7 +174,6 @@ class _Brand extends StatelessWidget {
   }
 }
 
-/// The attached artwork, anchored to the bottom-right corner.
 class _Art extends StatelessWidget {
   const _Art({required this.controller});
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 import '../../core/models/server_model.dart';
 import '../../core/models/vpn_status.dart';
@@ -8,6 +9,8 @@ import '../../core/providers/servers_provider.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/vpn_provider.dart';
 import '../../core/services/connectivity_probe.dart';
+import '../../core/services/vpn_platform.dart';
+import '../../core/services/zapret_service.dart';
 import '../../core/services/connection_analyzer.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -102,6 +105,48 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     if (connected) await vpn.verifyTrafficNow();
   }
 
+  String? _fixing;
+
+  /// Safe, reversible remedies offered directly on an analyzer row. Anything
+  /// that would touch another program's configuration only *stops ours* or
+  /// explains what the user should do themselves.
+  Future<void> _applyFix(AnalyzerCheck check) async {
+    final s = context.read<SettingsProvider>().strings;
+    final id = check.fixId;
+    if (id == null) return;
+    setState(() => _fixing = id);
+    String result = 'ok';
+    try {
+      final vpn = context.read<VpnProvider>();
+      switch (id) {
+        case 'proxy-off':
+          result = await VpnPlatform().disableSystemProxy();
+          break;
+        case 'zapret-stop':
+          await ZapretService.instance.shutdown(keepService: true);
+          result = 'ok';
+          break;
+        case 'dns-apply':
+          result = await VpnPlatform().applyCloudflareDns();
+          break;
+        case 'clock-open':
+          await url_launcher.launchUrl(Uri.parse('ms-settings:dateandtime'));
+          result = 'ok';
+          break;
+        default:
+          result = 'unknown-fix';
+      }
+      if (vpn.status == VpnStatus.connected) await vpn.verifyTrafficNow();
+    } catch (error) {
+      result = '$error';
+    }
+    if (!mounted) return;
+    setState(() => _fixing = null);
+    showNukefySnack(context, '${s.t('diagFixDone')}: $result', error: result != 'ok' && !result.contains('backup'));
+    // Re-run so the row turns green only when it really is fixed.
+    await _run();
+  }
+
   Future<void> _copyReport() async {
     await Clipboard.setData(ClipboardData(text: ConnectionAnalyzer.report(_checks)));
     if (mounted) showNukefySnack(context, context.read<SettingsProvider>().strings.t('copied'));
@@ -188,7 +233,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               children: [
                 Text(s.t('diagHint'), style: p.secondaryStyle),
                 const SizedBox(height: 8),
-                for (final check in _checks) _CheckRow(check: check),
+                for (final check in _checks)
+                  _CheckRow(check: check, onFix: _applyFix, fixing: _fixing == check.fixId),
                 if (_running && _checks.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator(minHeight: 3)),
               ],
             ),
@@ -243,9 +289,13 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
 }
 
 class _CheckRow extends StatelessWidget {
-  const _CheckRow({required this.check});
+  const _CheckRow({required this.check, this.onFix, this.fixing = false});
 
   final AnalyzerCheck check;
+
+  /// Runs the safe remedy offered for this finding, when one exists.
+  final Future<void> Function(AnalyzerCheck check)? onFix;
+  final bool fixing;
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +322,43 @@ class _CheckRow extends StatelessWidget {
                 Text(check.detail, style: p.secondaryStyle),
                 if (check.hint != null) ...[
                   const SizedBox(height: 4),
-                  Text(check.hint!, style: p.captionStyle.copyWith(color: p.accent.withValues(alpha: .9))),
+                  SelectableText(check.hint!, style: p.captionStyle.copyWith(color: p.accent.withValues(alpha: .9))),
+                ],
+                // Right on the row: what can be fixed gets a button, and the
+                // button says what it will do before it is pressed.
+                if (check.fixId != null && onFix != null) ...[
+                  const SizedBox(height: 8),
+                  if (check.fixHint != null) ...[
+                    Text(check.fixHint!, style: p.captionStyle.copyWith(color: p.textDisabled)),
+                    const SizedBox(height: 6),
+                  ],
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: NukefyActionButton(
+                      icon: fixing ? Icons.hourglass_top_rounded : Icons.build_circle_outlined,
+                      label: fixing ? context.read<SettingsProvider>().strings.t('diagFixing') : (check.fixLabel ?? ''),
+                      onPressed: fixing ? null : () => onFix!(check),
+                      filled: true,
+                    ),
+                  ),
+                ],
+                if (check.detail.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(
+                          text: '${check.title}: ${check.detail}${check.hint == null ? '' : '\n${check.hint}'}',
+                        ));
+                        if (context.mounted) {
+                          showNukefySnack(context, context.read<SettingsProvider>().strings.t('copied'));
+                        }
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 15),
+                      label: Text(context.read<SettingsProvider>().strings.t('copy'), style: const TextStyle(fontSize: 12)),
+                    ),
+                  ),
                 ],
               ],
             ),

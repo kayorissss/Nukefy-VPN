@@ -42,15 +42,28 @@ class _UninstallScreenState extends State<UninstallScreen> {
     );
     if (!ok || !mounted) return;
     setState(() => _busy = true);
-    await UninstallerService.instance.start(UninstallOptions(
-      stopZapret: _zapret,
-      removeAutostart: _autostart,
-      removeUserData: _data,
-      removeAppFiles: _appFiles,
-    ));
+    // Never let a failure leave the button spinning forever: the window used
+    // to look frozen when the elevated helper could not be started.
+    try {
+      await UninstallerService.instance
+          .start(UninstallOptions(
+            stopZapret: _zapret,
+            removeAutostart: _autostart,
+            removeUserData: _data,
+            removeAppFiles: _appFiles,
+          ))
+          .timeout(const Duration(seconds: 25));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      showNukefySnack(context, '${s.t('uninstallFailed')}\n$error', error: true);
+      return;
+    }
     if (!mounted) return;
     showNukefySnack(context, s.t('uninstallRunning'));
     await Future<void>.delayed(const Duration(milliseconds: 1200));
+    // Kill the whole process tree: a stray core or winws must not keep the
+    // folder locked while the cleanup script is deleting it.
     exit(0);
   }
 

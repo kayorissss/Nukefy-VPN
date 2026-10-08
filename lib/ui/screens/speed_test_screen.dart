@@ -13,6 +13,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
 import '../../l10n/strings.dart';
+import '../widgets/nukefy_feedback.dart';
 import '../widgets/responsive_sections.dart';
 import '../widgets/nukefy_background.dart';
 
@@ -195,169 +196,256 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
           child: ResponsiveFrame(
             maxWidth: 1200,
             child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-            children: [
-              // Gauge.
-              AnimatedBuilder(
-                animation: _needle,
-                builder: (context, _) => SizedBox(
-                  height: 250,
-                  child: CustomPaint(
-                    painter: _GaugePainter(
-                      value: _currentNeedle,
-                      color: phaseColor,
-                      track: p.border,
-                      text: p.textSecondary,
-                    ),
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 34),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _running || _down != null
-                                  ? SpeedTestService.mbps(_running ? _liveBps : (_down ?? 0))
-                                      .toStringAsFixed(_liveBps > 100e6 ? 0 : 1)
-                                  : '—',
-                              style: AppTextStyles.metric.copyWith(fontSize: 44, color: p.text, height: 1),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              children: [
+                // One hero card: the dial on the left, the four numbers on the
+                // right. The old layout glued a bare gauge, a flat row of
+                // boxes and a pill button on top of each other.
+                Container(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                  decoration: BoxDecoration(
+                    color: p.card.withValues(alpha: p.isDark ? .78 : .96),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: phaseColor.withValues(alpha: .35)),
+                    boxShadow: [
+                      BoxShadow(color: phaseColor.withValues(alpha: p.isDark ? .10 : .05), blurRadius: 34, offset: const Offset(0, 14)),
+                    ],
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, box) {
+                      final wide = box.maxWidth > 720;
+                      final dial = SizedBox(
+                        width: 268,
+                        height: 268,
+                        child: AnimatedBuilder(
+                          animation: _needle,
+                          builder: (context, _) => CustomPaint(
+                            painter: _GaugePainter(
+                              value: _currentNeedle,
+                              color: phaseColor,
+                              track: p.border,
+                              text: p.textSecondary,
                             ),
-                            const SizedBox(height: 4),
-                            Text('Mbit/s', style: AppTextStyles.metricCaption.copyWith(color: p.textSecondary)),
-                            const SizedBox(height: 8),
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: Text(
-                                phaseLabel.toUpperCase(),
-                                key: ValueKey(phaseLabel),
-                                style: AppTextStyles.tab.copyWith(fontSize: 10, color: phaseColor, letterSpacing: 2),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _running || _down != null
+                                        ? SpeedTestService.mbps(_running ? _liveBps : (_down ?? 0))
+                                            .toStringAsFixed(_liveBps > 100e6 ? 0 : 1)
+                                        : '—',
+                                    style: AppTextStyles.metric.copyWith(fontSize: 46, color: p.text, height: 1),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text('Mbit/s', style: AppTextStyles.metricCaption.copyWith(color: p.textSecondary)),
+                                  const SizedBox(height: 8),
+                                  AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 200),
+                                    child: Container(
+                                      key: ValueKey(phaseLabel),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: phaseColor.withValues(alpha: .14),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        phaseLabel.toUpperCase(),
+                                        style: AppTextStyles.tab.copyWith(fontSize: 9.5, color: phaseColor, letterSpacing: 1.6),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
+                          ),
+                        ),
+                      );
+                      final tiles = Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(children: [
+                            _Metric(icon: Icons.speed_rounded, label: s.t('ping'), value: _ping == null ? '—' : '$_ping', unit: 'ms', color: p.textSecondary),
+                            _Metric(icon: Icons.timeline_rounded, label: s.t('jitter'), value: _jitter == null ? '—' : '$_jitter', unit: 'ms', color: p.textSecondary),
+                          ]),
+                          const SizedBox(height: 10),
+                          Row(children: [
+                            _Metric(icon: Icons.download_rounded, label: s.t('download'), value: _down == null ? '—' : SpeedTestService.mbps(_down!).toStringAsFixed(1), unit: 'Mbit/s', color: p.success),
+                            _Metric(icon: Icons.upload_rounded, label: s.t('upload'), value: _up == null ? '—' : SpeedTestService.mbps(_up!).toStringAsFixed(1), unit: 'Mbit/s', color: p.accent),
+                          ]),
+                        ],
+                      );
+                      if (!wide) {
+                        return Column(children: [Center(child: dial), const SizedBox(height: 16), tiles]);
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          dial,
+                          const SizedBox(width: 22),
+                          Expanded(child: tiles),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Run button: a wide, obvious call to action with the target
+                // server right under it.
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: _running ? null : _start,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 220),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            gradient: LinearGradient(colors: _running ? [p.surface, p.surface] : [p.accent, p.accent2]),
+                            boxShadow: _running ? null : [BoxShadow(color: p.accent.withValues(alpha: .30), blurRadius: 22, offset: const Offset(0, 8))],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (_running)
+                                SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: p.accent))
+                              else
+                                Icon(Icons.speed_rounded, color: p.isDark ? Colors.black : Colors.white, size: 20),
+                              const SizedBox(width: 10),
+                              Text(
+                                (_running ? s.t('speedTesting') : s.t('speedTestStart')).toUpperCase(),
+                                style: AppTextStyles.tab.copyWith(
+                                  fontSize: 12,
+                                  letterSpacing: 1.5,
+                                  color: _running ? p.textSecondary : (p.isDark ? Colors.black : Colors.white),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              // Four metrics.
-              Row(
-                children: [
-                  _Metric(label: s.t('ping'), value: _ping == null ? '—' : '$_ping', unit: 'ms', color: p.textSecondary),
-                  _Metric(label: s.t('jitter'), value: _jitter == null ? '—' : '$_jitter', unit: 'ms', color: p.textSecondary),
-                  _Metric(
-                    label: s.t('download'),
-                    value: _down == null ? '—' : SpeedTestService.mbps(_down!).toStringAsFixed(1),
-                    unit: 'Mbit/s',
-                    color: p.success,
-                  ),
-                  _Metric(
-                    label: s.t('upload'),
-                    value: _up == null ? '—' : SpeedTestService.mbps(_up!).toStringAsFixed(1),
-                    unit: 'Mbit/s',
-                    color: p.accent,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              // Start button.
-              Center(
-                child: GestureDetector(
-                  onTap: _running ? null : _start,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 220),
-                    padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(40),
-                      gradient: LinearGradient(colors: _running ? [p.surface, p.surface] : [p.accent, p.accent2]),
-                      boxShadow: _running ? null : [BoxShadow(color: p.accent.withValues(alpha: 0.35), blurRadius: 24, offset: const Offset(0, 8))],
+                    const SizedBox(width: 10),
+                    Container(
+                      height: 54,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: p.card.withValues(alpha: .7),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: p.border),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(vpn.status == VpnStatus.connected ? Icons.vpn_lock_rounded : Icons.public_rounded,
+                              size: 16, color: vpn.status == VpnStatus.connected ? p.success : p.textSecondary),
+                          const SizedBox(width: 8),
+                          Text(
+                            vpn.status == VpnStatus.connected && (vpn.activeServer?.name ?? '').isNotEmpty
+                                ? vpn.activeServer!.name
+                                : s.t('noServerShort'),
+                            style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_running)
-                          SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: p.accent))
-                        else
-                          Icon(Icons.play_arrow_rounded, color: p.isDark ? Colors.black : Colors.white),
-                        const SizedBox(width: 10),
-                        Text(
-                          (_running ? s.t('speedTesting') : s.t('speedTestStart')).toUpperCase(),
-                          style: AppTextStyles.tab.copyWith(
-                            fontSize: 12,
-                            letterSpacing: 1.5,
-                            color: _running ? p.textSecondary : (p.isDark ? Colors.black : Colors.white),
+                  ],
+                ),
+                if (_server != null) ...[
+                  const SizedBox(height: 8),
+                  Text('${s.t('speedServer')}: $_server',
+                      style: AppTextStyles.bodySecondary.copyWith(color: p.textDisabled, fontSize: 11.5)),
+                ],
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  CopyableError(message: _error!, strings: s),
+                ],
+                const SizedBox(height: 22),
+                // History: a card with its own header, a count and a pill that
+                // unfolds the list. Nothing else on the page grows with the
+                // number of past runs.
+                Container(
+                  decoration: BoxDecoration(
+                    color: p.card.withValues(alpha: .55),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: p.border),
+                  ),
+                  child: Column(
+                    children: [
+                      InkWell(
+                        borderRadius: BorderRadius.circular(22),
+                        onTap: _history.isEmpty ? null : () => setState(() => _historyOpen = !_historyOpen),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
+                          child: Row(
+                            children: [
+                              Icon(Icons.history_rounded, size: 18, color: p.textSecondary),
+                              const SizedBox(width: 10),
+                              Text(s.t('speedTestHistory').toUpperCase(), style: AppTextStyles.section.copyWith(color: p.textSecondary)),
+                              const SizedBox(width: 8),
+                              if (_history.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: p.accent.withValues(alpha: .14),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text('${_history.length}',
+                                      style: AppTextStyles.tab.copyWith(fontSize: 10, color: p.accent)),
+                                ),
+                              const Spacer(),
+                              if (_history.isNotEmpty)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(s.t(_historyOpen ? 'collapse' : 'expand'),
+                                        style: AppTextStyles.bodySecondary.copyWith(fontSize: 12, color: p.textSecondary)),
+                                    AnimatedRotation(
+                                      turns: _historyOpen ? .5 : 0,
+                                      duration: const Duration(milliseconds: 200),
+                                      child: Icon(Icons.expand_more_rounded, size: 20, color: p.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
-                  vpn.status == VpnStatus.connected && (vpn.activeServer?.name ?? '').isNotEmpty
-                      ? vpn.activeServer!.name
-                      : s.t('noServerShort'),
-                  style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12),
-                ),
-              ),
-              if (_server != null) ...[
-                const SizedBox(height: 4),
-                Center(
-                  child: Text(
-                    '${s.t('speedServer')}: $_server',
-                    style: AppTextStyles.bodySecondary.copyWith(color: p.textDisabled, fontSize: 11.5),
-                  ),
-                ),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.error_outline_rounded, size: 18, color: AppColors.error),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text(_error!, style: AppTextStyles.bodySecondary.copyWith(color: AppColors.error))),
+                      ),
+                      if (_history.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(s.t('noHistory'), style: AppTextStyles.bodySecondary.copyWith(color: p.textDisabled)),
+                          ),
+                        )
+                      else
+                        // Clip so the rows cannot paint outside the rounded card
+                        // while they slide open.
+                        ClipRRect(
+                          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(22)),
+                          child: AnimatedSize(
+                            duration: const Duration(milliseconds: 240),
+                            curve: Curves.easeOutCubic,
+                            alignment: Alignment.topCenter,
+                            child: _historyOpen
+                                ? Padding(
+                                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+                                    child: Column(
+                                      children: [
+                                        for (var i = 0; i < _history.length; i++)
+                                          _HistoryRow(item: _history[i], strings: s, previous: i + 1 < _history.length ? _history[i + 1] : null),
+                                      ],
+                                    ),
+                                  )
+                                : const SizedBox(width: double.infinity),
+                          ),
+                        ),
                     ],
                   ),
                 ),
               ],
-              // The history lives below the fold and stays collapsed until
-              // asked for: an ever-growing list of past runs made the page
-              // feel endless.
-              const SizedBox(height: 22),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(s.t('speedTestHistory').toUpperCase(), style: AppTextStyles.section.copyWith(color: p.textSecondary)),
-                  ),
-                  if (_history.isNotEmpty)
-                    TextButton.icon(
-                      onPressed: () => setState(() => _historyOpen = !_historyOpen),
-                      icon: AnimatedRotation(
-                        turns: _historyOpen ? .5 : 0,
-                        duration: const Duration(milliseconds: 200),
-                        child: const Icon(Icons.expand_more_rounded, size: 18),
-                      ),
-                      label: Text(s.t(_historyOpen ? 'hideHistory' : 'showHistory')),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              if (_history.isEmpty)
-                Text(s.t('noHistory'), style: AppTextStyles.bodySecondary.copyWith(color: p.textDisabled))
-              else if (_historyOpen)
-                for (final item in _history) _HistoryRow(item: item, strings: s),
-            ],
             ),
           ),
         ),
@@ -367,7 +455,9 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value, required this.unit, required this.color});
+  const _Metric({required this.icon, required this.label, required this.value, required this.unit, required this.color});
+
+  final IconData icon;
   final String label;
   final String value;
   final String unit;
@@ -379,18 +469,43 @@ class _Metric extends StatelessWidget {
     return Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 3),
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         decoration: BoxDecoration(
-          color: p.card.withValues(alpha: p.isDark ? 0.85 : 0.96),
-          borderRadius: BorderRadius.circular(16),
+          color: p.surface.withValues(alpha: .55),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: p.border),
         ),
-        child: Column(
+        child: Row(
           children: [
-            Text(label.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.tab.copyWith(fontSize: 8.5, color: p.textSecondary, letterSpacing: 1)),
-            const SizedBox(height: 6),
-            FittedBox(child: Text(value, style: AppTextStyles.metric.copyWith(fontSize: 18, color: color))),
-            Text(unit, style: AppTextStyles.metricCaption.copyWith(fontSize: 9, color: p.textDisabled)),
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(9)),
+              child: Icon(icon, size: 16, color: color),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.tab.copyWith(fontSize: 8.5, color: p.textSecondary, letterSpacing: 1)),
+                  const SizedBox(height: 2),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(value, style: AppTextStyles.metric.copyWith(fontSize: 17, color: color)),
+                      const SizedBox(width: 4),
+                      Text(unit, style: AppTextStyles.metricCaption.copyWith(fontSize: 9, color: p.textDisabled)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -399,58 +514,81 @@ class _Metric extends StatelessWidget {
 }
 
 class _HistoryRow extends StatelessWidget {
-  const _HistoryRow({required this.item, required this.strings});
+  const _HistoryRow({required this.item, required this.strings, this.previous});
+
   final SpeedTestResult item;
   final S strings;
+
+  /// The run before this one, used for the up/down delta chips.
+  final SpeedTestResult? previous;
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
     final when = FormatUtils.timeAgo(item.at, ru: strings.code == 'ru');
-    final upload = item.uploadBps == null ? '—' : SpeedTestService.mbps(item.uploadBps!).toStringAsFixed(1);
+    final download = SpeedTestService.mbps(item.downloadBps).toStringAsFixed(1);
+    final delta = previous == null ? null : item.downloadBps - previous!.downloadBps;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: p.card.withValues(alpha: p.isDark ? 0.85 : 0.96),
-        borderRadius: BorderRadius.circular(16),
+        color: p.surface.withValues(alpha: .5),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: p.border),
       ),
       child: Row(
         children: [
-          Icon(item.viaVpn ? Icons.vpn_lock_rounded : Icons.public_rounded, size: 18, color: item.viaVpn ? p.accent : p.textSecondary),
-          const SizedBox(width: 12),
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: (item.viaVpn ? p.accent : p.textSecondary).withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(item.viaVpn ? Icons.vpn_lock_rounded : Icons.public_rounded,
+                size: 16, color: item.viaVpn ? p.accent : p.textSecondary),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.arrow_downward_rounded, size: 14, color: p.success),
-                    Text(' ${SpeedTestService.mbps(item.downloadBps).toStringAsFixed(1)}', style: AppTextStyles.metric.copyWith(fontSize: 14, color: p.text)),
-                    const SizedBox(width: 12),
-                    Icon(Icons.arrow_upward_rounded, size: 14, color: p.accent),
-                    Text(' $upload', style: AppTextStyles.metric.copyWith(fontSize: 14, color: p.text)),
-                    const SizedBox(width: 12),
-                    Text('${item.pingMs} ms', style: AppTextStyles.metric.copyWith(fontSize: 13, color: p.textSecondary)),
-                  ],
-                ),
+                Text(when, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600, fontSize: 12.5)),
                 const SizedBox(height: 2),
                 Text(
-                  '$when · ${strings.t('jitter').toLowerCase()} ${item.jitterMs} ms'
-                  '${item.server == null ? '' : ' · ${item.server}'}',
-                  style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 11.5),
+                  [if (item.pingMs > 0) '${item.pingMs} ms', if ((item.server ?? '').isNotEmpty) item.server!].join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.bodySecondary.copyWith(fontSize: 11, color: p.textSecondary),
                 ),
               ],
             ),
           ),
+          if (delta != null && delta.abs() > 0.05)
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(delta >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                      size: 14, color: delta >= 0 ? p.success : AppColors.error),
+                  const SizedBox(width: 3),
+                  Text('${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)}',
+                      style: AppTextStyles.metricCaption.copyWith(
+                          fontSize: 10.5, color: delta >= 0 ? p.success : AppColors.error)),
+                ],
+              ),
+            ),
+          Text('$download', style: AppTextStyles.metric.copyWith(fontSize: 15, color: p.text)),
+          const SizedBox(width: 3),
+          Text('Mbit/s', style: AppTextStyles.metricCaption.copyWith(fontSize: 9, color: p.textDisabled)),
         ],
       ),
     );
   }
 }
 
-/// 240° arc with ticks and a glowing progress sweep.
 class _GaugePainter extends CustomPainter {
   _GaugePainter({required this.value, required this.color, required this.track, required this.text});
   final double value;

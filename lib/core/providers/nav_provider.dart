@@ -10,6 +10,7 @@ enum NavDestination {
   speedTest,
   telegramProxy,
   jammers,
+  diagnostics,
   stats,
   addons,
   autotune,

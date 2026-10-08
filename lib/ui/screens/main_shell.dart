@@ -21,6 +21,7 @@ import 'home_screen.dart';
 import 'jammers_screen.dart';
 import 'servers_screen.dart';
 import 'settings_screen.dart';
+import 'diagnostics_screen.dart';
 import 'dns_screen.dart';
 import 'speed_test_screen.dart';
 import 'stats_screen.dart';
@@ -165,6 +166,7 @@ class MainShell extends StatelessWidget {
         NavDestination.speedTest => const SpeedTestScreen(),
         NavDestination.telegramProxy => const TelegramProxyScreen(),
         NavDestination.jammers => const JammersScreen(),
+        NavDestination.diagnostics => const DiagnosticsScreen(),
         NavDestination.stats => const StatsScreen(),
         NavDestination.settings => const SettingsScreen(showSubtabs: true),
         _ => const SizedBox.shrink(),
@@ -209,11 +211,56 @@ class _LazyPageStackState extends State<_LazyPageStack> {
           if (_visited.contains(i))
             Offstage(
               offstage: i != widget.index,
-              child: TickerMode(enabled: i == widget.index, child: widget.pages[i]),
+              child: TickerMode(
+                enabled: i == widget.index,
+                // Every visit plays a soft fade-and-lift, so switching tabs is
+                // felt instead of the page just teleporting in.
+                child: _PageReveal(active: i == widget.index, child: widget.pages[i]),
+              ),
             )
           else
             const SizedBox.shrink(),
       ],
+    );
+  }
+}
+
+/// Fade + 10 px lift every time its page becomes the active one.
+class _PageReveal extends StatefulWidget {
+  const _PageReveal({required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<_PageReveal> createState() => _PageRevealState();
+}
+
+class _PageRevealState extends State<_PageReveal> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 280), value: 1);
+
+  @override
+  void didUpdateWidget(covariant _PageReveal oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final curve = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    return FadeTransition(
+      opacity: Tween<double>(begin: .45, end: 1).animate(curve),
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, .012), end: Offset.zero).animate(curve),
+        child: widget.child,
+      ),
     );
   }
 }
@@ -458,6 +505,9 @@ class _SideRailState extends State<_SideRail> {
       _RailGroup(key: 'monitor', icon: Icons.monitor_heart_rounded, label: s.t('railMonitoring'), leaves: [
         _RailLeaf(icon: Icons.speed_rounded, label: s.t('speedTest'), destination: NavDestination.speedTest),
         _RailLeaf(icon: Icons.radar_rounded, label: s.t('jammers'), destination: NavDestination.jammers),
+        // The connection analyzer used to hide behind a button on the home
+        // screen, which is exactly where nobody looks when the tunnel fails.
+        _RailLeaf(icon: Icons.health_and_safety_rounded, label: s.t('diagTitle'), destination: NavDestination.diagnostics),
       ]),
     ];
 
@@ -515,27 +565,58 @@ class _SideRailState extends State<_SideRail> {
       ),
       child: Column(
         children: [
-          SizedBox(
-            height: 32,
-            child: Row(
-              mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.end,
+          // Header: the brand lives here, next to the collapse toggle. The
+          // toggle used to float alone in an empty strip above "ГЛАВНАЯ".
+          if (collapsed)
+            Column(
               children: [
+                const Padding(padding: EdgeInsets.only(top: 2, bottom: 4), child: NukefyLogo(size: 26, glow: false)),
                 IconButton(
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-                  tooltip: s.t(collapsed ? 'zExpandMenu' : 'zCollapseMenu'),
+                  constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                  tooltip: s.t('zExpandMenu'),
                   onPressed: nav.toggleRail,
-                  icon: Icon(collapsed ? Icons.menu_rounded : Icons.menu_open_rounded, size: 20),
+                  icon: const Icon(Icons.menu_rounded, size: 19),
                 ),
+                const SizedBox(height: 2),
               ],
+            )
+          else
+            SizedBox(
+              height: 34,
+              child: Row(
+                children: [
+                  const SizedBox(width: 4),
+                  const NukefyLogo(size: 18, glow: false),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('NUKEFY',
+                        style: AppTextStyles.headline.copyWith(
+                            fontSize: 11.5, letterSpacing: 2.2, color: p.textSecondary)),
+                  ),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                    tooltip: s.t('zCollapseMenu'),
+                    onPressed: nav.toggleRail,
+                    icon: const Icon(Icons.menu_open_rounded, size: 19),
+                  ),
+                ],
+              ),
             ),
-          ),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 children: [
                   for (final g in groups) ...[
                     if (collapsed) ...[
+                      if (g != groups.first)
+                        Container(
+                          width: 30,
+                          height: 1,
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          color: p.border,
+                        ),
                       if (g.destination != null) iconButton(g.destination!, g.icon, g.label),
                       for (final l in g.leaves) iconButton(l.destination, l.icon, l.label),
                     ] else ...[
@@ -665,6 +746,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final s = context.watch<SettingsProvider>().strings;
     return SizedBox(
       height: 40,
       child: Row(
@@ -698,8 +780,21 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: p.accent.withValues(alpha: .35)),
                         ),
-                        child: Text('v${AppConstants.version}',
+                        child: Text(AppConstants.version,
                             style: AppTextStyles.headline.copyWith(fontSize: 10.5, letterSpacing: .4, color: p.accent)),
+                      ),
+                      const SizedBox(width: 6),
+                      // Public beta: state it right next to the number instead
+                      // of pretending this is a finished release.
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: p.text.withValues(alpha: .06),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: p.border),
+                        ),
+                        child: Text(s.t('betaTag').toUpperCase(),
+                            style: AppTextStyles.headline.copyWith(fontSize: 9.5, letterSpacing: 1.1, color: p.textSecondary)),
                       ),
                     ],
                   ),
@@ -707,7 +802,8 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
               ),
             ),
           ),
-          _WindowButton(icon: Icons.remove_rounded, onTap: windowManager.minimize),
+          // No minimize button: the desktop shell lives maximized, so the
+          // button only ever snapped the window back and read as broken.
           _WindowButton(
             icon: _maximized ? Icons.filter_none_rounded : Icons.crop_square_rounded,
             iconSize: _maximized ? 13 : 16,

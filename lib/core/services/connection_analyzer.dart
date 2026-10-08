@@ -16,6 +16,9 @@ class AnalyzerCheck {
     required this.title,
     required this.detail,
     this.hint,
+    this.fixId,
+    this.fixLabel,
+    this.fixHint,
   });
 
   final String id;
@@ -23,6 +26,17 @@ class AnalyzerCheck {
   final String title;
   final String detail;
   final String? hint;
+
+  /// Id of a safe, reversible remedy the UI can offer as a button right on
+  /// this row (see DiagnosticsScreen). Null when the finding is informational
+  /// or can only be fixed by the user in Windows itself.
+  final String? fixId;
+
+  /// Button caption for [fixId].
+  final String? fixLabel;
+
+  /// Second line under the button: what the fix will do, exactly.
+  final String? fixHint;
 
   String asText() {
     final mark = switch (level) {
@@ -68,6 +82,9 @@ class ConnectionAnalyzer {
     if (skew > 300) {
       return AnalyzerCheck(
         id: 'clock',
+        fixId: 'clock-open',
+        fixLabel: 'Открыть настройки времени',
+        fixHint: 'Открывает «Дата и время» Windows — время надо синхронизировать вручную.',
         level: CheckLevel.error,
         title: 'Часы и время',
         detail: 'Время сбито на ${_human(skew)}',
@@ -100,6 +117,9 @@ class ConnectionAnalyzer {
     if (enabled == '0x1' || enabled == '1') {
       return AnalyzerCheck(
         id: 'proxy',
+        fixId: 'proxy-off',
+        fixLabel: 'Отключить системный прокси',
+        fixHint: 'Снимает прокси в настройках Windows и сбрасывает winhttp. Обратимо.',
         level: CheckLevel.warn,
         title: 'Системный прокси',
         detail: 'Включён${server == null ? '' : ' ($server)'}',
@@ -196,6 +216,9 @@ class ConnectionAnalyzer {
     if (winws.isNotEmpty) {
       return AnalyzerCheck(
         id: 'zapret',
+        fixId: 'zapret-stop',
+        fixLabel: 'Остановить наш Zapret',
+        fixHint: 'Останавливает только нашу службу nukefy-zapret. Чужие winws не трогает.',
         level: CheckLevel.warn,
         title: 'Zapret (winws)',
         detail: 'winws работает${serviceState.isEmpty ? '' : ' (служба: $serviceState)'}',
@@ -219,6 +242,9 @@ class ConnectionAnalyzer {
     if (failed.length == hosts.length) {
       return AnalyzerCheck(
         id: 'dns',
+        fixId: 'dns-apply',
+        fixLabel: 'Поставить DNS 1.1.1.1',
+        fixHint: 'Прописывает Cloudflare DNS на активный адаптер через netsh. Возврат — «DNS как было» в настройках.',
         level: CheckLevel.error,
         title: 'DNS',
         detail: 'Ни один домен не резолвится (${hosts.length} проверено)',

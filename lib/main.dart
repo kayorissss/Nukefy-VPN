@@ -17,6 +17,7 @@ import 'core/providers/stats_provider.dart';
 import 'core/constants/app_constants.dart';
 import 'core/models/vpn_status.dart';
 import 'core/providers/vpn_provider.dart';
+import 'core/platform/win32_theme.dart';
 import 'core/services/app_log.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/app_perf.dart';
@@ -70,6 +71,8 @@ Future<void> main() async {
 
 Future<void> _main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Dark native chrome (tray menu, common dialogs) before any window appears.
+  forceDarkWin32Chrome();
   _migrateLegacyData();
   // "Remove" in the Windows settings (or Setup.exe /UNINSTALL) launches the
   // app with --uninstall: show our own uninstall window instead of the app.
@@ -179,6 +182,31 @@ Future<void> _main() async {
   final music = MusicService(StorageService.instance, backgroundHandler: musicHandler);
   final vpn = VpnProvider(VpnPlatform());
   await guard('load', () => Future.wait([settings.load(), servers.load(), stats.load(), music.load()]));
+  if (uninstallRequested) {
+    // Uninstall must be instant: no core seeding, no update check, no network
+    // round-trips in front of the window the user is waiting for.
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: settings),
+          ChangeNotifierProvider.value(value: servers),
+        ],
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.dark(
+            settings.settings.accent,
+            settings.settings.visualTheme,
+          ),
+          home: NukefySplash(
+            message: settings.strings.t('uninstallSplash'),
+            child: const UninstallScreen(),
+          ),
+        ),
+      ),
+    );
+    return;
+  }
+
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     // Match the window to the saved theme: a light-theme start used to flash
     // a dark rectangle before the first frame.
@@ -202,29 +230,6 @@ Future<void> _main() async {
   // installs made by older builds, where the entry still pointed at the bare
   // Inno uninstaller.
   await guard('uninstall-entry', () => VpnPlatform().ensureBrandedUninstallEntry(), seconds: 12);
-
-  if (uninstallRequested) {
-    runApp(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider.value(value: settings),
-          ChangeNotifierProvider.value(value: servers),
-        ],
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.dark(
-            settings.settings.accent,
-            settings.settings.visualTheme,
-          ),
-          home: NukefySplash(
-            message: settings.strings.t('uninstallSplash'),
-            child: const UninstallScreen(),
-          ),
-        ),
-      ),
-    );
-    return;
-  }
 
   runApp(
     MultiProvider(
