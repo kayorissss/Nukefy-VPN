@@ -343,13 +343,17 @@ jobs:
         run: |
           set -e
           ver="${RELEASE_TAG#v}"
+          # The page title shows the plain version; a later step needs it too.
+          echo "APP_VERSION=${ver}" >> "$GITHUB_ENV"
           sed "s/__VERSION__/${ver}/g" tool/release_notes.md > RELEASE_NOTES.md
           cat RELEASE_NOTES.md
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
-          name: Nukefy Client ${{ env.RELEASE_TAG }}
+          # Title without the leading "v"; the tag keeps the v prefix only
+          # because the workflow triggers on v*.
+          name: Nukefy Client ${{ env.APP_VERSION }} · бета
           # Hand-written notes, no "Full Changelog" appendix.
           body_path: RELEASE_NOTES.md
           files: |

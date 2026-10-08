@@ -18,7 +18,6 @@ class AppConstants {
       if (info.version.isNotEmpty) version = info.version;
     } catch (_) {}
   }
-  static const int buildNumber = 23;
   static const String packageName = 'com.nukefy.vpn';
 
   static const String author = '@kayorisan';
