@@ -1,0 +1,47 @@
+# Fast syntax check for the C# installer/launcher: a full release build takes
+# minutes before it ever reaches csc, and a typo there used to cost a whole
+# release cycle.
+name: Installer check
+on:
+  push:
+    branches: ['arena/**']
+    paths:
+      - 'windows/installer/**'
+      - 'windows/portable/**'
+      - '.github/workflows/installer-check.yml'
+  workflow_dispatch:
+
+jobs:
+  csc:
+    name: Compile setup and launcher
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build a dummy payload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dummy | Out-Null
+          Set-Content -Path dummy/readme.txt -Value 'payload placeholder'
+          Compress-Archive -Path dummy/* -DestinationPath payload.zip -Force
+      - name: Compile
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          $lines = @(
+            'using System.Reflection;',
+            '[assembly: AssemblyTitle("Nukefy Client")]',
+            '[assembly: AssemblyProduct("Nukefy Client")]',
+            '[assembly: AssemblyCompany("@kayorisan")]',
+            '[assembly: AssemblyVersion("1.0.0.0")]',
+            '[assembly: AssemblyFileVersion("1.0.0.0")]'
+          )
+          Set-Content -Path AssemblyInfo.cs -Value $lines
+          $common = @('/nologo','/target:winexe','/platform:anycpu','/optimize+','/resource:payload.zip,payload.zip',
+                      '/reference:System.IO.Compression.dll','/reference:System.IO.Compression.FileSystem.dll',
+                      '/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Core.dll')
+          & $csc @common /out:setup-test.exe /win32manifest:windows/installer/setup.manifest windows/installer/NukefyInstaller.cs AssemblyInfo.cs
+          if ($LASTEXITCODE -ne 0) { throw "installer csc exit $LASTEXITCODE" }
+          & $csc @common /out:portable-test.exe /win32manifest:windows/portable/launcher.manifest windows/portable/Launcher.cs AssemblyInfo.cs
+          if ($LASTEXITCODE -ne 0) { throw "launcher csc exit $LASTEXITCODE" }
+          Write-Host 'both compiled'

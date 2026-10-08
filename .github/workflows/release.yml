@@ -21,7 +21,7 @@ env:
   # Tag to attach the files to: the tag of the published release, the input
   # from a manual run, or the current tag. The fallback keeps the existing
   # release-build escape hatch usable from this maintenance branch.
-  RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || 'v2.5.7' }}
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || 'v1.0.0' }}
   # sing-box line used for the embedded Android core (libbox). Keep it on the
   # 1.12 branch: 1.13+ replaced `Libbox.newService` with a gRPC command server.
   SINGBOX_VERSION: v1.12.25
@@ -131,12 +131,12 @@ jobs:
           APK=build/app/outputs/flutter-apk/app-release.apk
           "$ANDROID_HOME/build-tools/$(ls -1 "$ANDROID_HOME/build-tools" | tail -1)/apksigner" verify --verbose "$APK"
           "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$APK" | grep -Fx 'com.nukefy.vpn'
-          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest version-code "$APK" | grep -Fx '23'
-      - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyVPN-android.apk
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest version-code "$APK" | grep -Fx '24'
+      - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyClient-${{ env.RELEASE_TAG }}.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: NukefyVPN-android
-          path: NukefyVPN-android.apk
+          name: NukefyClient-android
+          path: NukefyClient-*.apk
           if-no-files-found: error
 
   windows:
@@ -223,14 +223,15 @@ jobs:
             $log += "csc: $csc exists=$(Test-Path $csc)"
             $lines = @(
               'using System.Reflection;',
-              '[assembly: AssemblyTitle("Nukefy VPN")]',
-              '[assembly: AssemblyProduct("Nukefy VPN")]',
+              '[assembly: AssemblyTitle("Nukefy Client")]',
+              '[assembly: AssemblyProduct("Nukefy Client")]',
               '[assembly: AssemblyCompany("@kayorisan")]',
               "[assembly: AssemblyVersion(`"$ver.0`")]",
               "[assembly: AssemblyFileVersion(`"$ver.0`")]"
             )
             Set-Content -Path AssemblyInfo.cs -Value $lines
-            $out = & $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:NukefyVPN.exe `
+            $portable = "NukefyClient-$ver-Portable-x64.exe"
+            $out = & $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:$portable `
               /win32icon:windows\runner\resources\app_icon.ico `
               /win32manifest:windows\portable\launcher.manifest `
               /resource:payload.zip,payload.zip `
@@ -238,8 +239,8 @@ jobs:
               windows\portable\Launcher.cs AssemblyInfo.cs 2>&1
             $log += $out
             if ($LASTEXITCODE -ne 0) { throw "csc exit $LASTEXITCODE" }
-            if (-not (Test-Path NukefyVPN.exe)) { throw 'NukefyVPN.exe not produced' }
-            Get-Item NukefyVPN.exe | Format-List Name,Length
+            if (-not (Test-Path $portable)) { throw "$portable not produced" }
+            Get-Item $portable | Format-List Name,Length
           } catch {
             $log += "ERROR: $_"
             $fence = '```'
@@ -247,23 +248,39 @@ jobs:
             gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" | Out-Null
             throw
           }
-      - name: Build installer (Inno Setup)
+      - name: Build branded installer
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
           $ver = "${{ env.RELEASE_TAG }}".TrimStart('v')
-          # Keep the compiler output: a failed ISCC run used to vanish with the
-          # job log, leaving only "installer not produced".
-          $build = & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$ver" windows\installer.iss 2>&1
-          $code = $LASTEXITCODE
-          $build | ForEach-Object { Write-Host $_ }
-          if ($code -ne 0 -or -not (Test-Path NukefyVPN-Setup-x64.exe)) {
+          if ($ver -notmatch '^\d+\.\d+\.\d+$') { $ver = '0.0.0' }
+          $log = @()
+          try {
+            if (-not (Test-Path payload.zip)) { throw 'payload.zip missing (portable step failed)' }
+            $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+            $setup = "NukefyClient-$ver-Setup-x64.exe"
+            Copy-Item windows\runner\resources\app_icon.ico installer_icon.ico -Force
+            $out = & $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:$setup `
+              /win32icon:installer_icon.ico `
+              /win32manifest:windows\installer\setup.manifest `
+              /resource:payload.zip,payload.zip `
+              /resource:installer_icon.ico,app_icon.ico `
+              /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll `
+              /reference:System.Windows.Forms.dll /reference:System.Drawing.dll `
+              /reference:System.Core.dll `
+              windows\installer\NukefyInstaller.cs AssemblyInfo.cs 2>&1
+            $log += $out
+            if ($LASTEXITCODE -ne 0) { throw "csc exit $LASTEXITCODE" }
+            if (-not (Test-Path $setup)) { throw "$setup not produced" }
+            Get-Item $setup | Format-List Name,Length
+          } catch {
+            $log += "ERROR: $_"
             $fence = '```'
-            $body = "Installer build failed (exit $code):`n`n$fence`n" + (($build | Select-Object -Last 40) -join "`n") + "`n$fence"
+            $body = "Installer build failed:`n`n$fence`n" + ($log -join "`n") + "`n$fence"
             gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" | Out-Null
-            throw 'installer not produced'
+            throw
           }
       - name: Sign Windows files when a certificate is configured
         shell: pwsh
@@ -278,7 +295,7 @@ jobs:
           }
           $pfx = Join-Path $env:RUNNER_TEMP 'nukefy-signing.pfx'
           [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
-          $files = @('NukefyVPN.exe', 'NukefyVPN-Setup-x64.exe')
+          $files = Get-ChildItem 'NukefyClient-*.exe' | ForEach-Object FullName
           $files += Get-ChildItem 'build/windows/x64/runner/Release' -Recurse -Filter '*.exe' | ForEach-Object FullName
           $signtool = (Get-Command signtool.exe -ErrorAction Stop).Source
           foreach ($file in ($files | Select-Object -Unique)) {
@@ -288,10 +305,10 @@ jobs:
           Remove-Item $pfx -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: NukefyVPN-windows-x64
+          name: NukefyClient-windows-x64
           path: |
-            NukefyVPN.exe
-            NukefyVPN-Setup-x64.exe
+            NukefyClient-*-Setup-x64.exe
+            NukefyClient-*-Portable-x64.exe
           if-no-files-found: error
 
   publish:
@@ -300,24 +317,43 @@ jobs:
     runs-on: ubuntu-latest
     needs: [android, windows]
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: NukefyVPN-*
+          pattern: NukefyClient-*
           merge-multiple: true
           path: release-assets
+      - name: Name the Android build after its version
+        working-directory: release-assets
+        run: |
+          set -e
+          ver="${RELEASE_TAG#v}"
+          # One file per platform, version in the name: no "(1)", "(2)" when
+          # the same file is downloaded twice.
+          mv "NukefyClient-${RELEASE_TAG}.apk" "NukefyClient-${ver}.apk" 2>/dev/null || true
       - name: Create release checksums
         working-directory: release-assets
-        run: sha256sum NukefyVPN.exe NukefyVPN-Setup-x64.exe NukefyVPN-android.apk > ../SHA256SUMS.txt
+        run: |
+          set -e
+          # SHA256SUMS.txt is a checksum list: every file here has a line with
+          # its hash, so a downloaded file can be verified as untampered.
+          sha256sum * > ../SHA256SUMS.txt
+          cat ../SHA256SUMS.txt
+      - name: Compose release notes
+        run: |
+          set -e
+          ver="${RELEASE_TAG#v}"
+          sed "s/__VERSION__/${ver}/g" tool/release_notes.md > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
-          name: Nukefy VPN ${{ env.RELEASE_TAG }}
-          generate_release_notes: true
+          name: Nukefy Client ${{ env.RELEASE_TAG }}
+          # Hand-written notes, no "Full Changelog" appendix.
+          body_path: RELEASE_NOTES.md
           files: |
-            release-assets/NukefyVPN.exe
-            release-assets/NukefyVPN-Setup-x64.exe
-            release-assets/NukefyVPN-android.apk
+            release-assets/*
             SHA256SUMS.txt
           fail_on_unmatched_files: true
         env:

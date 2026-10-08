@@ -44,7 +44,15 @@ class _JammersScreenState extends State<JammersScreen> {
       for (final host in AppConstants.jammerTargetsRu) (id: host, host: host, port: AppConstants.jammerProbePort),
       for (final host in AppConstants.jammerTargetsOther) (id: host, host: host, port: AppConstants.jammerProbePort),
     ];
-    final results = await PingUtils.pingAll(targets, timeout: const Duration(seconds: 5));
+    // A whitelist check is a yes/no question per host: one handshake, a short
+    // timeout and every host in flight at once. This used to take the median
+    // of three 5-second attempts per host, which is why it crawled.
+    final results = await PingUtils.pingAll(
+      targets,
+      timeout: const Duration(milliseconds: 1800),
+      concurrency: targets.length.clamp(1, 40),
+      samples: 1,
+    );
     if (!mounted) return;
     setState(() {
       _busy = false;

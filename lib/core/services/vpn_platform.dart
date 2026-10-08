@@ -556,6 +556,37 @@ Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
     }
   }
 
+  /// Applies the boxes ticked in the branded installer (install-options.json
+  /// next to the exe). Runs once: the file is deleted afterwards, so a later
+  /// manual change in Settings is never overwritten by an old choice.
+  Future<void> applyInstallerChoices() async {
+    if (!Platform.isWindows) return;
+    try {
+      final file = File(p.join(File(Platform.resolvedExecutable).parent.path, 'install-options.json'));
+      if (!file.existsSync()) return;
+      final raw = jsonDecode(file.readAsStringSync());
+      await file.delete();
+      if (raw is! Map) return;
+      final autostart = raw['autostart'] == true;
+      // Autostart is owned by the app: the same scheduled task name and
+      // arguments are used no matter who asked for it.
+      final startInTray = false;
+      await setAutoStart(autostart, startInTray: startInTray);
+      final desktop = raw['desktopShortcut'] == true;
+      final shortcut = File(p.join(
+        Platform.environment['PUBLIC'] ?? r'C:\Users\Public',
+        'Desktop',
+        'Nukefy Client.lnk',
+      ));
+      if (!desktop && shortcut.existsSync()) {
+        shortcut.deleteSync();
+      }
+      AppLog.log('installer choices applied: autostart=$autostart desktop=$desktop');
+    } catch (error) {
+      AppLog.log('installer choices failed: $error');
+    }
+  }
+
   /// Points the Windows "Apps & features" entry at our own uninstall window.
   /// Only touches the key the installer created for this AppId (a portable
   /// copy has none, so nothing happens there).

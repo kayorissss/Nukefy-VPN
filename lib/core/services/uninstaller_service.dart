@@ -133,6 +133,13 @@ class UninstallerService {
 
     if (options.removeAppFiles) {
       buffer
+        // Shortcuts and the "Apps & features" entry belong to the install, so
+        // they go with it. Only our own names are touched.
+        ..writeln(r'Remove-Item -Force "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Nukefy Client.lnk" -ErrorAction SilentlyContinue')
+        ..writeln(r'Remove-Item -Force "$env:PUBLIC\Desktop\Nukefy Client.lnk" -ErrorAction SilentlyContinue')
+        ..writeln(r'Remove-Item -Force "$env:USERPROFILE\Desktop\Nukefy Client.lnk" -ErrorAction SilentlyContinue')
+        ..writeln(r'Remove-Item -Recurse -Force "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1" -ErrorAction SilentlyContinue')
+        ..writeln(r'"shortcuts and uninstall entry removed" | Out-File -Append -Encoding utf8 $log')
         // The installer's own uninstaller is preferred: it deletes shortcuts,
         // the registry key and the logged uninstall data. UninstallString must
         // NOT be used as the source, because it points back at our own

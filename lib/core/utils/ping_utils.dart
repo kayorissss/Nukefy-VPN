@@ -66,6 +66,9 @@ class PingUtils {
     List<({String id, String host, int port})> targets, {
     int concurrency = 16,
     Duration timeout = const Duration(seconds: 3),
+    /// 1 = a single handshake per host. The bl​ocking check only needs "open
+    /// or not", and the median of three made it three times as slow.
+    int samples = 3,
     void Function(String id, int ms)? onEach,
   }) async {
     final results = <String, int>{};
@@ -76,7 +79,9 @@ class PingUtils {
         index++;
         if (current >= targets.length) return;
         final target = targets[current];
-        final ms = await tcpPingMedian(target.host, target.port, timeout: timeout);
+        final ms = samples <= 1
+            ? await tcpPing(target.host, target.port, timeout: timeout)
+            : await tcpPingMedian(target.host, target.port, timeout: timeout, samples: samples);
         results[target.id] = ms;
         onEach?.call(target.id, ms);
       }

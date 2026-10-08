@@ -314,22 +314,13 @@ class _KaringScreenState extends State<KaringScreen> {
       child: ResponsiveSections(
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) => constraints.maxWidth >= 860
-                ? IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: powerCard),
-                        const SizedBox(width: 16),
-                        Expanded(flex: 2, child: serversCard),
-                      ],
-                    ),
-                  )
-                : Column(
-                    children: [powerCard, const SizedBox(height: 16), serversCard],
-                  ),
-          ),
+          // One column, like the home screen: hero on top, list under it,
+          // settings at the very bottom. The two-column layout kept the
+          // settings visible next to the hero, so the gear button appeared to
+          // do nothing at all.
+          powerCard,
+          const SizedBox(height: 16),
+          serversCard,
           // The tuning switches and mirrors live below the fold: the first
           // screen is the connect button and the server list, nothing else.
           // The gear above scrolls here.
