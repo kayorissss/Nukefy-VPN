@@ -320,6 +320,62 @@ class VpnPlatform {
     }
   }
 
+  /// Cores shipped inside the Windows bundle, sitting next to the executable:
+  /// `<exe dir>/core/sing-box.exe` and `<exe dir>/xray/xray.exe`. GitHub is
+  /// routinely unreachable for our users, so the installer carries the cores
+  /// and the app only has to move them into the per-user directories it
+  /// manages. No download, no first-run setup step.
+  ///
+  /// A core is seeded when the local file is missing, or when the local file
+  /// is still byte-for-byte the copy we seeded last time — a core the user
+  /// updated in-app is never overwritten by an older bundled build.
+  /// Returns the file names that were installed.
+  Future<List<String>> seedBundledCores() async {
+    if (!Platform.isWindows) return const [];
+    final seeded = <String>[];
+    try {
+      final exeDir = File(Platform.resolvedExecutable).parent;
+      final support = await getApplicationSupportDirectory();
+      final manifest = File(p.join(support.path, 'bundled_cores.txt'));
+      final recorded = <String, int>{};
+      if (manifest.existsSync()) {
+        for (final line in manifest.readAsLinesSync()) {
+          final parts = line.split('=');
+          if (parts.length == 2) recorded[parts[0]] = int.tryParse(parts[1]) ?? -1;
+        }
+      }
+      // (subdirectory inside the bundle, file name there and in appdata)
+      const jobs = [
+        ('core', 'sing-box.exe'),
+        ('xray', 'xray.exe'),
+      ];
+      for (final job in jobs) {
+        final source = File(p.join(exeDir.path, job.$1, job.$2));
+        if (!source.existsSync()) continue;
+        final key = '${job.$1}/${job.$2}';
+        final destinationDir = Directory(p.join(support.path, job.$1));
+        if (!destinationDir.existsSync()) destinationDir.createSync(recursive: true);
+        final destination = File(p.join(destinationDir.path, job.$2));
+        final sourceSize = source.lengthSync();
+        final destinationSize = destination.existsSync() ? destination.lengthSync() : -1;
+        final stillBundled = recorded[key] == destinationSize;
+        if (destinationSize <= 0 || (stillBundled && destinationSize != sourceSize)) {
+          await source.copy(destination.path);
+          recorded[key] = sourceSize;
+          seeded.add(job.$2);
+        }
+      }
+      if (seeded.isNotEmpty) {
+        manifest.writeAsStringSync(recorded.entries.map((entry) => '${entry.key}=${entry.value}').join('\n'));
+      }
+    } catch (_) {
+      // A locked/running core must never block startup: the normal in-app
+      // download path still covers every failure here.
+      return seeded;
+    }
+    return seeded;
+  }
+
   Future<CoreInfo> coreInfo() async {
     if (Platform.isAndroid) {
       try {

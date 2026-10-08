@@ -182,6 +182,13 @@ Future<void> _main() async {
     } catch (_) {}
   }
   vpn.bind(stats: stats, servers: servers, settings: settings);
+  // Windows ships sing-box and Xray inside the installer/portable exe: the
+  // cores are copied into the user directory on first launch, so a fresh
+  // install connects without any download (GitHub is blocked for many users).
+  await guard('bundle-cores', () async {
+    final seeded = await VpnPlatform().seedBundledCores();
+    if (seeded.isNotEmpty) AppLog.log('bundle cores installed: ${seeded.join(', ')}');
+  }, seconds: 15);
   await guard('core', vpn.refreshCore, seconds: 5);
 
   runApp(

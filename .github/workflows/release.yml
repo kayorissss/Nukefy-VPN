@@ -178,6 +178,35 @@ jobs:
           Copy-Item -Recurse -Force (Join-Path $root.FullName 'utils') $dest
           $zip.Name | Out-File -Encoding utf8 -FilePath (Join-Path $dest 'VERSION.txt')
           Get-ChildItem $dest
+      - name: Bundle sing-box and Xray cores
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $rel = 'build/windows/x64/runner/Release'
+          New-Item -ItemType Directory -Force -Path "$rel/core" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$rel/xray" | Out-Null
+          # Official sing-box CLI build (same asset the in-app downloader picks).
+          New-Item -ItemType Directory -Force -Path sbx | Out-Null
+          gh release download -R SagerNet/sing-box --pattern '*windows-amd64.zip' --dir sbx
+          $zip = Get-ChildItem sbx -Filter *.zip | Select-Object -First 1
+          if (-not $zip) { throw 'sing-box windows archive not downloaded' }
+          Expand-Archive -Path $zip.FullName -DestinationPath sbx/out -Force
+          $exe = Get-ChildItem sbx/out -Recurse -Filter 'sing-box.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'sing-box.exe not found in archive' }
+          Copy-Item $exe.FullName "$rel/core/sing-box.exe" -Force
+          # Xray core (same asset the in-app downloader picks).
+          New-Item -ItemType Directory -Force -Path xray-src | Out-Null
+          gh release download -R XTLS/Xray-core --pattern 'Xray-windows-64.zip' --dir xray-src
+          $xzip = Get-ChildItem xray-src -Filter *.zip | Select-Object -First 1
+          if (-not $xzip) { throw 'Xray windows archive not downloaded' }
+          Expand-Archive -Path $xzip.FullName -DestinationPath xray-src/out -Force
+          $xexe = Get-ChildItem xray-src/out -Recurse -Filter 'xray.exe' | Select-Object -First 1
+          if (-not $xexe) { throw 'xray.exe not found in archive' }
+          Copy-Item $xexe.FullName "$rel/xray/xray.exe" -Force
+          Get-ChildItem "$rel/core", "$rel/xray" | Format-Table Name, Length
+
       - name: Build portable single exe
         shell: pwsh
         env:
