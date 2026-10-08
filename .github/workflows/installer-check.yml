@@ -46,7 +46,13 @@ jobs:
           $setupCode = $LASTEXITCODE
           $portable = & $csc @common /out:portable-test.exe /win32manifest:windows/portable/launcher.manifest windows/portable/Launcher.cs AssemblyInfo.cs 2>&1
           $portableCode = $LASTEXITCODE
-          ($setup + $portable) | ForEach-Object { Write-Host $_ }
+          $all = @()
+          $all += '=== setup ==='
+          $all += $setup
+          $all += '=== portable ==='
+          $all += $portable
+          $all | Set-Content -Path csc-output.txt
+          $all | ForEach-Object { Write-Host $_ }
           if ($setupCode -ne 0 -or $portableCode -ne 0) {
             $fence = '```'
             $body = "installer-check failed (setup $setupCode, portable $portableCode):`n`n$fence`n" +
@@ -55,3 +61,10 @@ jobs:
             throw "csc failed: setup=$setupCode portable=$portableCode"
           }
           Write-Host 'both compiled'
+      - name: Upload compiler output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csc-output
+          path: csc-output.txt
+          if-no-files-found: ignore
