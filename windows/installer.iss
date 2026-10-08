@@ -100,8 +100,8 @@ end;
 ; opens the branded screen with the checkboxes, and the app then deletes its
 ; own files with an elevated helper.
 [Registry]
-Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1"; ValueType: string; ValueName: "UninstallString"; ValueData: "\"{app}\nukefy_vpn.exe\" --uninstall"
-Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1"; ValueType: string; ValueName: "QuietUninstallString"; ValueData: "\"{app}\nukefy_vpn.exe\" --uninstall"
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1"; ValueType: string; ValueName: "UninstallString"; ValueData: """{app}\nukefy_vpn.exe"" --uninstall"
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\{{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1"; ValueType: string; ValueName: "QuietUninstallString"; ValueData: """{app}\nukefy_vpn.exe"" --uninstall"
 
 [UninstallRun]
 Filename: "taskkill"; Parameters: "/F /IM winws.exe"; Flags: runhidden; RunOnceId: "killwinws"

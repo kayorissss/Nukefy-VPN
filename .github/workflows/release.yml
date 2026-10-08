@@ -206,6 +206,8 @@ jobs:
           if (-not $xexe) { throw 'xray.exe not found in archive' }
           Copy-Item $xexe.FullName "$rel/xray/xray.exe" -Force
           Get-ChildItem "$rel/core", "$rel/xray" | Format-Table Name, Length
+          Write-Host 'bundled cores:'
+          Get-ChildItem "$rel/core", "$rel/xray" | ForEach-Object { "{0} {1:N0} bytes" -f $_.Name, $_.Length }
 
       - name: Build portable single exe
         shell: pwsh
@@ -247,11 +249,22 @@ jobs:
           }
       - name: Build installer (Inno Setup)
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
           $ver = "${{ env.RELEASE_TAG }}".TrimStart('v')
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$ver" windows\installer.iss
-          if (-not (Test-Path NukefyVPN-Setup-x64.exe)) { throw 'installer not produced' }
+          # Keep the compiler output: a failed ISCC run used to vanish with the
+          # job log, leaving only "installer not produced".
+          $build = & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$ver" windows\installer.iss 2>&1
+          $code = $LASTEXITCODE
+          $build | ForEach-Object { Write-Host $_ }
+          if ($code -ne 0 -or -not (Test-Path NukefyVPN-Setup-x64.exe)) {
+            $fence = '```'
+            $body = "Installer build failed (exit $code):`n`n$fence`n" + (($build | Select-Object -Last 40) -join "`n") + "`n$fence"
+            gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" | Out-Null
+            throw 'installer not produced'
+          }
       - name: Sign Windows files when a certificate is configured
         shell: pwsh
         env:
