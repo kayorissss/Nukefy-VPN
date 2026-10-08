@@ -59,9 +59,13 @@ class TelegramProxyScreen extends StatelessWidget {
                           ],
                         ),
                 ),
-                // The journal stays below the fold.
-                SizedBox(height: MediaQuery.of(context).size.height * 0.22),
-                _LogCard(service: service, s: s),
+                // The journal stays below the fold, and an empty journal is
+                // not shown at all: a blank black box at the bottom read as a
+                // broken screen rather than as "nothing happened yet".
+                if (service.log.isNotEmpty) ...[
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.18),
+                  _LogCard(service: service, s: s),
+                ],
               ],
             ]),
           ),

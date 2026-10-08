@@ -29,6 +29,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
   static const _historyKey = 'speed_history';
 
   bool _running = false;
+  bool _historyOpen = false;
   SpeedPhase _phase = SpeedPhase.done;
   int _liveBps = 0;
   int? _ping;
@@ -296,7 +297,9 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
               const SizedBox(height: 8),
               Center(
                 child: Text(
-                  vpn.status == VpnStatus.connected ? '${s.t('viaVpn')} · ${vpn.activeServer?.name ?? ''}' : s.t('direct'),
+                  vpn.status == VpnStatus.connected && (vpn.activeServer?.name ?? '').isNotEmpty
+                      ? vpn.activeServer!.name
+                      : s.t('noServerShort'),
                   style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12),
                 ),
               ),
@@ -328,14 +331,31 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                   ),
                 ),
               ],
-              // The history lives below the fold: the first screen is the
-              // gauge and the live numbers only.
-              SizedBox(height: MediaQuery.of(context).size.height * 0.24),
-              Text(s.t('speedTestHistory').toUpperCase(), style: AppTextStyles.section.copyWith(color: p.textSecondary)),
-              const SizedBox(height: 10),
+              // The history lives below the fold and stays collapsed until
+              // asked for: an ever-growing list of past runs made the page
+              // feel endless.
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(s.t('speedTestHistory').toUpperCase(), style: AppTextStyles.section.copyWith(color: p.textSecondary)),
+                  ),
+                  if (_history.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: () => setState(() => _historyOpen = !_historyOpen),
+                      icon: AnimatedRotation(
+                        turns: _historyOpen ? .5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: const Icon(Icons.expand_more_rounded, size: 18),
+                      ),
+                      label: Text(s.t(_historyOpen ? 'hideHistory' : 'showHistory')),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
               if (_history.isEmpty)
                 Text(s.t('noHistory'), style: AppTextStyles.bodySecondary.copyWith(color: p.textDisabled))
-              else
+              else if (_historyOpen)
                 for (final item in _history) _HistoryRow(item: item, strings: s),
             ],
             ),
@@ -417,7 +437,7 @@ class _HistoryRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$when · ${item.viaVpn ? strings.t('viaVpn') : strings.t('direct')} · ${strings.t('jitter').toLowerCase()} ${item.jitterMs} ms'
+                  '$when · ${strings.t('jitter').toLowerCase()} ${item.jitterMs} ms'
                   '${item.server == null ? '' : ' · ${item.server}'}',
                   style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 11.5),
                 ),

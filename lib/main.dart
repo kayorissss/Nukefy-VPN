@@ -73,6 +73,7 @@ Future<void> _main() async {
     AppLog.log('flutter: ${details.exceptionAsString()}');
   };
   final startedAt = DateTime.now();
+  await AppConstants.loadVersion();
   await AppLog.init();
   AppLog.log('start ${AppConstants.version} ${Platform.operatingSystem} ${Platform.operatingSystemVersion} args=${Platform.executableArguments}');
   if (Platform.isAndroid || Platform.isIOS) {

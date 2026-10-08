@@ -22,6 +22,7 @@ import '../widgets/connect_button.dart';
 import '../widgets/country_badge.dart';
 import '../widgets/nukefy_logo.dart';
 import '../widgets/ping_badge.dart';
+import 'diagnostics_screen.dart';
 import 'main_shell.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -133,6 +134,13 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(height: 14),
           _ErrorCard(message: _friendlyError(s, vpn.errorMessage!)),
         ],
+        // The honest answer to "вроде подключено, а ничего не работает":
+        // after every connect the app asks the tunnel whether data flows and
+        // shows the per-site verdict instead of a green light on faith.
+        if (vpn.status == VpnStatus.connected) ...[
+          const SizedBox(height: 14),
+          _TrafficCard(vpn: vpn, strings: s),
+        ],
       ],
     );
     final serverCard = _ServerCard(
@@ -220,6 +228,7 @@ class HomeScreen extends StatelessWidget {
     if (raw == 'XRAY_FRONTEND_MISSING') return s.t('xrayFrontendMissing');
     if (raw.startsWith('XRAY_')) return '${s.t('xrayCore')}: $raw';
     if (raw.startsWith('NO_TRAFFIC:')) return '${s.t('noTraffic')}\n${raw.substring(11)}';
+    if (raw == 'NO_TRAFFIC_TARGETS') return s.t('noTrafficTargets');
     if (raw.contains('Permission denied') && raw.contains('sing-box')) return s.t('libboxMissing');
     if (raw.contains('legacy inbound fields')) return s.t('coreOutdatedConfig');
     // Strip ANSI colour codes and the timestamp prefix from core logs.
@@ -392,6 +401,104 @@ class _Metric extends StatelessWidget {
         const SizedBox(width: 6),
         Text(label, style: AppTextStyles.number.copyWith(color: color ?? p.text, fontSize: 13)),
       ],
+    );
+  }
+}
+
+/// Post-connect verdict: does traffic really flow, and through which sites?
+class _TrafficCard extends StatefulWidget {
+  const _TrafficCard({required this.vpn, required this.strings});
+
+  final VpnProvider vpn;
+  final S strings;
+
+  @override
+  State<_TrafficCard> createState() => _TrafficCardState();
+}
+
+class _TrafficCardState extends State<_TrafficCard> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final vpn = widget.vpn;
+    final s = widget.strings;
+    final bad = vpn.trafficOk == false;
+    final color = bad ? AppColors.error : (vpn.trafficOk == true ? AppColors.success : p.textSecondary);
+    final icon = bad ? Icons.error_outline_rounded : (vpn.trafficOk == true ? Icons.verified_rounded : Icons.hourglass_top_rounded);
+    final title = vpn.trafficOk == null ? s.t('trafficChecking') : (bad ? s.t('trafficBad') : s.t('trafficOk'));
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 520),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .10),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: .38)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 17, color: color),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(title, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700, color: p.text)),
+                ),
+                if (_busy)
+                  const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                else
+                  NukefyActionButton(
+                    label: s.t('refresh'),
+                    filled: false,
+                    onPressed: () async {
+                      setState(() => _busy = true);
+                      await vpn.verifyTrafficNow();
+                      if (mounted) setState(() => _busy = false);
+                    },
+                  ),
+              ],
+            ),
+            if (bad) ...[
+              const SizedBox(height: 6),
+              Text(s.t('trafficBadHint'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary)),
+              const SizedBox(height: 8),
+              NukefyActionButton(
+                label: s.t('trafficOpen'),
+                icon: Icons.health_and_safety_outlined,
+                onPressed: () => DiagnosticsScreen.open(context),
+              ),
+            ] else if (vpn.trafficTargets.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  for (final entry in vpn.trafficTargets.entries)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: (entry.value ? AppColors.success : AppColors.error).withValues(alpha: .14),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(entry.value ? Icons.check_rounded : Icons.close_rounded,
+                              size: 13, color: entry.value ? AppColors.success : AppColors.error),
+                          const SizedBox(width: 5),
+                          Text(entry.key, style: AppTextStyles.bodySecondary.copyWith(fontSize: 11.5, color: p.text)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

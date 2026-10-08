@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../constants/app_constants.dart';
+import '../services/connectivity_probe.dart';
 import '../models/app_settings.dart';
 import '../models/server_model.dart';
 import '../models/vpn_status.dart';
@@ -124,6 +125,30 @@ class VpnProvider extends ChangeNotifier {
   void selectServer(String id) {
     activeServerId = id;
     notifyListeners();
+  }
+
+  LocalPorts? _ports;
+
+  /// Resolved local inbound ports of the running session (SOCKS/HTTP/clash).
+  /// The analyzer and the post-connect check talk to the tunnel through the
+  /// HTTP inbound at [LocalPorts.http].
+  LocalPorts? get activePorts => _ports;
+
+  /// Result of the last through-tunnel probe. `null` means "not checked yet",
+  /// `true` means traffic really flows, `false` means the handshake succeeded
+  /// but nothing passes — the case that used to be invisible on Windows.
+  bool? trafficOk;
+
+  /// Per-target results of the last check (YouTube, Discord, Telegram…),
+  /// so the UI can say what exactly does not work instead of a wall of text.
+  Map<String, bool> trafficTargets = const {};
+
+  /// Public re-run of the post-connect check, used by the analyzer screen and
+  /// the "Проверить" button in the traffic banner.
+  Future<void> verifyTrafficNow() async {
+    final id = activeServerId;
+    if (id == null || status != VpnStatus.connected) return;
+    await _verifyTraffic(id);
   }
 
   /// Set when foreign tunnel processes (another zapret/winws, a leftover
@@ -247,6 +272,7 @@ class VpnProvider extends ChangeNotifier {
       ports: ports,
     );
     await _platform.stopXray();
+    _ports = ports;
     var result = await _platform.start(
       configJson: json,
       preferTun: useTun,
@@ -280,6 +306,7 @@ class VpnProvider extends ChangeNotifier {
         serverHost: server.address,
         serverPort: server.port,
       );
+      if (result.ok) _ports = ephemeral;
     }
     if (!result.ok) {
       status = VpnStatus.error;
@@ -481,27 +508,49 @@ class VpnProvider extends ChangeNotifier {
   }
 
   /// A lit VPN icon says nothing about whether packets actually get through.
-  /// A few seconds after connecting, fetch a tiny page through the tunnel
-  /// and tell the user plainly when the server accepts the handshake but
-  /// passes no traffic (wrong transport, dead server, DNS through proxy…).
+  /// A few seconds after connecting we fetch short control pages through the
+  /// tunnel and tell the user plainly when the server accepts the handshake
+  /// but passes no traffic (wrong transport, dead server, DNS through proxy…).
+  ///
+  /// On Windows the app itself is not forced into the tunnel when the user
+  /// picked proxy mode, so the probes are sent through the local HTTP inbound
+  /// explicitly. In TUN mode everything, including these probes, already goes
+  /// through the tunnel — a plain request then proves the whole path.
   Future<void> _verifyTraffic(String serverId) async {
-    if (!Platform.isAndroid) return; // desktop routes the app itself direct.
+    final settings = _settings;
+    if (settings == null) return;
+    trafficOk = null;
+    trafficTargets = const {};
+    notifyListeners();
     await Future.delayed(const Duration(seconds: 4));
     if (status != VpnStatus.connected || activeServerId != serverId) return;
-    String? failure;
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
-    try {
-      final request = await client.getUrl(Uri.parse('http://cp.cloudflare.com/generate_204')).timeout(const Duration(seconds: 10));
-      final response = await request.close().timeout(const Duration(seconds: 10));
-      await response.drain<void>();
-      if (response.statusCode >= 500) failure = 'HTTP ${response.statusCode}';
-    } catch (error) {
-      failure = error.toString().split('\n').first;
-    } finally {
-      client.close(force: true);
-    }
+    final ports = _ports;
+    final tun = settings.settings.tunEnabled;
+    final proxyPort = (!Platform.isAndroid && !tun) ? ports?.http : null;
+    final control = await ConnectivityProbe.http(
+      'http://cp.cloudflare.com/generate_204',
+      httpProxyPort: proxyPort,
+    );
     if (status != VpnStatus.connected || activeServerId != serverId) return;
-    errorMessage = failure == null ? null : 'NO_TRAFFIC:$failure';
+    final results = <String, bool>{};
+    if (control.ok) {
+      for (final target in ConnectivityProbe.defaultTargets) {
+        final probe = await ConnectivityProbe.http(target.url, httpProxyPort: proxyPort);
+        results[target.id] = probe.ok;
+        if (status != VpnStatus.connected || activeServerId != serverId) return;
+      }
+    }
+    trafficTargets = results;
+    if (!control.ok) {
+      trafficOk = false;
+      errorMessage = 'NO_TRAFFIC:${control.status ?? control.error ?? 'no-answer'}';
+    } else if (results.isNotEmpty && results.values.every((ok) => !ok)) {
+      trafficOk = false;
+      errorMessage = 'NO_TRAFFIC_TARGETS';
+    } else {
+      trafficOk = true;
+      errorMessage = null;
+    }
     notifyListeners();
   }
 
@@ -516,6 +565,9 @@ class VpnProvider extends ChangeNotifier {
       await settings.addTraffic(_sessionUp, _sessionDown);
     }
     status = VpnStatus.disconnected;
+    _ports = null;
+    trafficOk = null;
+    trafficTargets = const {};
     _stats?.resetSession();
     if (name.isNotEmpty) await _stats?.addLog(name, 'disconnected');
     notifyListeners();
@@ -533,6 +585,9 @@ class VpnProvider extends ChangeNotifier {
       await settings.addTraffic(_sessionUp, _sessionDown);
     }
     status = VpnStatus.disconnected;
+    _ports = null;
+    trafficOk = null;
+    trafficTargets = const {};
     _stats?.resetSession();
     if (name.isNotEmpty) {
       await _stats?.addLog(name, 'disconnected');

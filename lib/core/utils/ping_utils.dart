@@ -42,6 +42,26 @@ class PingUtils {
     }
   }
 
+  /// Median of three samples. A single TCP handshake can be answered by a
+  /// nearby CDN edge or arrive right after a retransmit, which produced
+  /// numbers that looked fake (1 ms) or random (900 ms). Three samples
+  /// discard the outliers and give a value people trust.
+  static Future<int> tcpPingMedian(
+    String host,
+    int port, {
+    Duration timeout = const Duration(seconds: 3),
+    int samples = 3,
+  }) async {
+    final seen = <int>[];
+    for (var i = 0; i < samples; i++) {
+      final ms = await tcpPing(host, port, timeout: timeout);
+      if (ms < 0) return ms;
+      seen.add(ms);
+    }
+    seen.sort();
+    return seen[seen.length ~/ 2];
+  }
+
   static Future<Map<String, int>> pingAll(
     List<({String id, String host, int port})> targets, {
     int concurrency = 16,
@@ -56,7 +76,7 @@ class PingUtils {
         index++;
         if (current >= targets.length) return;
         final target = targets[current];
-        final ms = await tcpPing(target.host, target.port, timeout: timeout);
+        final ms = await tcpPingMedian(target.host, target.port, timeout: timeout);
         results[target.id] = ms;
         onEach?.call(target.id, ms);
       }

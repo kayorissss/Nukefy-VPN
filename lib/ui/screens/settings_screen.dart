@@ -24,6 +24,7 @@ import '../import_actions.dart';
 import '../widgets/nukefy_feedback.dart';
 import '../widgets/responsive_sections.dart';
 import '../widgets/section_card.dart';
+import 'diagnostics_screen.dart';
 import 'dns_screen.dart';
 import 'log_screen.dart';
 import 'per_app_screen.dart';
@@ -1367,6 +1368,12 @@ class _ToolsCardState extends State<_ToolsCard> {
       ),
       child: Column(
         children: [
+          SettingsTile(
+            icon: Icons.health_and_safety_outlined,
+            title: strings.t('diagTools'),
+            subtitle: strings.t('diagToolsHint'),
+            onTap: () => DiagnosticsScreen.open(context),
+          ),
           SettingsTile(
             icon: Icons.wifi_tethering_rounded,
             title: strings.t('netResetRun'),

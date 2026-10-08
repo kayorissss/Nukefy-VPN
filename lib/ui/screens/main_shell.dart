@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:nukefy_vpn/ui/widgets/nukefy_logo.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/nav_provider.dart';
 import '../../core/providers/settings_provider.dart';
@@ -506,7 +507,7 @@ class _SideRailState extends State<_SideRail> {
       curve: Curves.easeOutCubic,
       width: collapsed ? 82 : 272,
       margin: const EdgeInsets.fromLTRB(12, 0, 0, 12),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       decoration: BoxDecoration(
         color: p.card.withValues(alpha: .82),
         borderRadius: BorderRadius.circular(24),
@@ -515,13 +516,13 @@ class _SideRailState extends State<_SideRail> {
       child: Column(
         children: [
           SizedBox(
-            height: 38,
+            height: 32,
             child: Row(
               mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.end,
               children: [
                 IconButton(
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 38, height: 38),
+                  constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                   tooltip: s.t(collapsed ? 'zExpandMenu' : 'zCollapseMenu'),
                   onPressed: nav.toggleRail,
                   icon: Icon(collapsed ? Icons.menu_rounded : Icons.menu_open_rounded, size: 20),
@@ -529,7 +530,6 @@ class _SideRailState extends State<_SideRail> {
               ],
             ),
           ),
-          const SizedBox(height: 2),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
@@ -689,6 +689,18 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
                       const SizedBox(width: 8),
                       Text('Nukefy Client',
                           style: AppTextStyles.headline.copyWith(fontSize: 12, letterSpacing: .8, color: p.textSecondary)),
+                      const SizedBox(width: 8),
+                      // The installed version, right where people look for it.
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: p.accent.withValues(alpha: .12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: p.accent.withValues(alpha: .35)),
+                        ),
+                        child: Text('v${AppConstants.version}',
+                            style: AppTextStyles.headline.copyWith(fontSize: 10.5, letterSpacing: .4, color: p.accent)),
+                      ),
                     ],
                   ),
                 ),

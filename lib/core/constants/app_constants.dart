@@ -1,6 +1,23 @@
+import 'package:package_info_plus/package_info_plus.dart';
+
 class AppConstants {
   static const String appName = 'Nukefy Client';
-  static const String version = '2.5.8';
+
+  /// Filled from the real package metadata at startup ([loadVersion]). The
+  /// constant was hardcoded and silently stayed at 2.5.8 through eleven
+  /// releases: the update check compared against a wrong "current" version
+  /// and the HWID sent the wrong client version to subscription servers.
+  static String version = '2.5.8';
+
+  /// Reads the version baked into the built package (pubspec for Android,
+  /// VERSIONINFO for the Windows exe) so the UI, the update check and the
+  /// subscription headers always agree with what is actually installed.
+  static Future<void> loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (info.version.isNotEmpty) version = info.version;
+    } catch (_) {}
+  }
   static const int buildNumber = 23;
   static const String packageName = 'com.nukefy.vpn';
 
