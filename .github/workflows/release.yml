@@ -11,7 +11,7 @@ on:
       tag:
         description: 'Tag the built files belong to'
         required: false
-        default: v2.5.7
+        default: v1.1.0
 
 permissions:
   contents: write
@@ -21,7 +21,7 @@ env:
   # Tag to attach the files to: the tag of the published release, the input
   # from a manual run, or the current tag. The fallback keeps the existing
   # release-build escape hatch usable from this maintenance branch.
-  RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || 'v1.0.0' }}
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || 'v1.1.0' }}
   # sing-box line used for the embedded Android core (libbox). Keep it on the
   # 1.12 branch: 1.13+ replaced `Libbox.newService` with a gRPC command server.
   SINGBOX_VERSION: v1.12.25
@@ -212,45 +212,6 @@ jobs:
           Write-Host 'bundled cores:'
           Get-ChildItem "$rel/core", "$rel/xray" | ForEach-Object { "{0} {1:N0} bytes" -f $_.Name, $_.Length }
 
-      - name: Build portable single exe
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $ver = "${{ env.RELEASE_TAG }}".TrimStart('v')
-          if ($ver -notmatch '^\d+\.\d+\.\d+$') { $ver = '0.0.0' }
-          $log = @()
-          try {
-            Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath payload.zip -CompressionLevel Optimal -ErrorAction Stop
-            $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-            $log += "csc: $csc exists=$(Test-Path $csc)"
-            $lines = @(
-              'using System.Reflection;',
-              '[assembly: AssemblyTitle("Nukefy Client")]',
-              '[assembly: AssemblyProduct("Nukefy Client")]',
-              '[assembly: AssemblyCompany("@kayorisan")]',
-              "[assembly: AssemblyVersion(`"$ver.0`")]",
-              "[assembly: AssemblyFileVersion(`"$ver.0`")]"
-            )
-            Set-Content -Path AssemblyInfo.cs -Value $lines
-            $portable = "NukefyClient-$ver-Portable-x64.exe"
-            $out = & $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:$portable `
-              /win32icon:windows\runner\resources\app_icon.ico `
-              /win32manifest:windows\portable\launcher.manifest `
-              /resource:payload.zip,payload.zip `
-              /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /reference:System.Windows.Forms.dll `
-              windows\portable\Launcher.cs AssemblyInfo.cs 2>&1
-            $log += $out
-            if ($LASTEXITCODE -ne 0) { throw "csc exit $LASTEXITCODE" }
-            if (-not (Test-Path $portable)) { throw "$portable not produced" }
-            Get-Item $portable | Format-List Name,Length
-          } catch {
-            $log += "ERROR: $_"
-            $fence = '```'
-            $body = "Portable exe build failed:`n`n$fence`n" + ($log -join "`n") + "`n$fence"
-            gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" | Out-Null
-            throw
-          }
       - name: Build branded installer
         shell: pwsh
         env:
@@ -261,9 +222,18 @@ jobs:
           if ($ver -notmatch '^\d+\.\d+\.\d+$') { $ver = '0.0.0' }
           $log = @()
           try {
-            if (-not (Test-Path payload.zip)) { throw 'payload.zip missing (portable step failed)' }
+            Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath payload.zip -CompressionLevel Optimal -ErrorAction Stop
+            $lines = @(
+              'using System.Reflection;',
+              '[assembly: AssemblyTitle("Nukefy Client")]',
+              '[assembly: AssemblyProduct("Nukefy Client")]',
+              '[assembly: AssemblyCompany("@kayorisan")]',
+              "[assembly: AssemblyVersion(`"$ver.0`")]",
+              "[assembly: AssemblyFileVersion(`"$ver.0`")]"
+            )
+            Set-Content -Path AssemblyInfo.cs -Value $lines
             $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-            $setup = "NukefyClient-$ver-Setup-x64.exe"
+            $setup = "NukefyClient-$ver-x64.exe"
             Copy-Item windows\runner\resources\app_icon.ico installer_icon.ico -Force
             $out = & $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:$setup `
               /win32icon:installer_icon.ico `
@@ -310,8 +280,7 @@ jobs:
         with:
           name: NukefyClient-windows-x64
           path: |
-            NukefyClient-*-Setup-x64.exe
-            NukefyClient-*-Portable-x64.exe
+            NukefyClient-*-x64.exe
           if-no-files-found: error
 
   publish:
@@ -365,3 +334,17 @@ jobs:
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Keep only the current release page
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current="${RELEASE_TAG}"
+          gh release list --limit 100 --json tagName --jq '.[].tagName' > old-releases.txt
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            [ "$tag" = "$current" ] && continue
+            echo "Deleting old release page: $tag"
+            gh release delete "$tag" --yes
+          done < old-releases.txt

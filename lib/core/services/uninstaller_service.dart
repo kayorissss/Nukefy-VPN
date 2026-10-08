@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'vpn_platform.dart';
+
 /// What the user ticked in the uninstall screen.
 class UninstallOptions {
   UninstallOptions({
@@ -34,12 +36,14 @@ class UninstallerService {
 
   static final UninstallerService instance = UninstallerService._();
 
-  /// Kill only the copies of [exeName] that live under a path containing
-  /// "nukefy": someone else's sing-box or xray keeps running.
-  static String _killOwned(String exeName) =>
-      r'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "' +
-      exeName +
-      r'" -and $_.ExecutablePath -like "*nukefy*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }';
+  /// Stop a core only when its image path exactly matches the location this
+  /// installation owns; same-named binaries from other apps remain untouched.
+  static String _psQuote(String value) => "'${value.replaceAll("'", "''")}'";
+
+  static String _killAtPath(String exeName, String path) =>
+      'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq ${_psQuote(exeName)} -and '
+      '[string]::Equals($_.ExecutablePath, ${_psQuote(path)}, [System.StringComparison]::OrdinalIgnoreCase) } '
+      '| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }';
 
   /// Writes the cleanup script and starts it detached. The caller should quit
   /// the app right after: the script waits for this process to disappear.
@@ -49,6 +53,23 @@ class UninstallerService {
       return;
     }
     final support = (await getApplicationSupportDirectory()).path;
+    if (options.removeUserData || options.removeAppFiles) {
+      // If the app changed global network settings, restore them before either
+      // deleting their backup or removing the app that offers the restore UI.
+      final platform = VpnPlatform();
+      final proxyResult = await platform.restoreSystemProxy();
+      if (proxyResult != 'no-system-proxy-backup' && !proxyResult.startsWith('Previous current-user proxy settings restored')) {
+        throw StateError('Could not restore the saved current-user proxy before uninstall: $proxyResult');
+      }
+      final dnsResult = await platform.restoreSystemDns();
+      if (dnsResult != 'no-dns-backup' && !dnsResult.startsWith('Previous DNS restored')) {
+        throw StateError('Could not restore the saved system DNS before uninstall: $dnsResult');
+      }
+      final tcpResult = await platform.restoreFlowsealTcpTimestamps();
+      if (tcpResult != 'no-tcp-timestamp-backup' && !tcpResult.startsWith('TCP timestamps restored')) {
+        throw StateError('Could not restore the saved TCP timestamp setting before uninstall: $tcpResult');
+      }
+    }
     final exe = Platform.resolvedExecutable;
     final exeDir = File(exe).parent.path;
     final script = _script(
@@ -60,8 +81,6 @@ class UninstallerService {
     );
     final file = File(p.join(Directory.systemTemp.path, 'nukefy_uninstall.ps1'));
     await file.writeAsString(script);
-    final done = File(doneFlagPath);
-    if (done.existsSync()) done.deleteSync();
     if (await _isElevated()) {
       // The client itself runs elevated (TUN + WinDivert need it), so the
       // helper can start directly. The old code always asked for RunAs, which
@@ -86,11 +105,6 @@ class UninstallerService {
       mode: ProcessStartMode.detached,
     );
   }
-
-  /// Marker the cleanup script drops when it is finished, so the UI can wait
-  /// for real completion instead of guessing with a timer.
-  static String get doneFlagPath =>
-      p.join(Directory.systemTemp.path, 'nukefy_uninstall.done');
 
   /// True when this process already runs with an administrator token.
   Future<bool> _isElevated() async {
@@ -126,23 +140,29 @@ class UninstallerService {
     final buffer = StringBuffer()
       ..writeln(r'$ErrorActionPreference = "SilentlyContinue"')
       ..writeln(r'$log = Join-Path $env:TEMP "nukefy_uninstall.log"')
-      ..writeln(r'$done = Join-Path $env:TEMP "nukefy_uninstall.done"')
+      ..writeln(r'$exeDir = ' + _psQuote(exeDir))
+      ..writeln(r'$support = ' + _psQuote(support))
       ..writeln(r'"Nukefy uninstall start $(Get-Date -Format o)" | Out-File -Encoding utf8 $log')
       // Wait for the app to close so nothing is locked while we work.
       ..writeln('Wait-Process -Id $pid -Timeout 90 -ErrorAction SilentlyContinue')
       ..writeln('Start-Sleep -Milliseconds 900')
       ..writeln(r'"target exe: ' + exe + r'" | Out-File -Append -Encoding utf8 $log');
 
+    // Full exit must stop our own VPN cores even when the user elects to keep
+    // the separately-managed zapret service. Exact executable paths ensure no
+    // process with the same name from another product is touched.
+    buffer
+      ..writeln(_killAtPath('sing-box.exe', p.join(support, 'core', 'sing-box.exe')))
+      ..writeln(_killAtPath('xray.exe', p.join(support, 'xray', 'xray.exe')));
+
     if (options.stopZapret) {
+      final winws = p.join(exeDir, 'zapret', 'bin', 'winws.exe');
       buffer
         // Only OUR service and OUR capture: other zapret installs stay intact.
         ..writeln(r'sc.exe stop nukefy-zapret | Out-Null')
         ..writeln(r'sc.exe delete nukefy-zapret | Out-Null')
-        ..writeln(r'''Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "winws.exe" -and $_.ExecutablePath -like "*nukefy*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }''')
-        ..writeln(_killOwned('sing-box.exe'))
-        ..writeln(_killOwned('xray.exe'))
-        // The WinDivert driver is shared: stopping it would disable a zapret
-        // the user installed themselves, so it is left alone here.
+        ..writeln(_killAtPath('winws.exe', winws))
+        // WinDivert is shared with other tools; do not stop or uninstall it.
         ..writeln(r'"zapret stack stopped" | Out-File -Append -Encoding utf8 $log');
     }
 
@@ -152,15 +172,16 @@ class UninstallerService {
         ..writeln(r'schtasks /Delete /TN "Nukefy Client" /F | Out-Null')
         ..writeln(r'Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "NukefyVPN" -ErrorAction SilentlyContinue')
         ..writeln(r'Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Nukefy Client" -ErrorAction SilentlyContinue')
-        ..writeln(r'Remove-Item -Recurse -Force "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Nukefy*" -ErrorAction SilentlyContinue')
+        ..writeln(r'Remove-Item -Force "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\NukefyVPN.lnk" -ErrorAction SilentlyContinue')
+        ..writeln(r'Remove-Item -Force "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Nukefy Client.lnk" -ErrorAction SilentlyContinue')
         ..writeln(r'"autostart cleaned" | Out-File -Append -Encoding utf8 $log');
     }
 
     if (options.removeUserData) {
       buffer
-        ..writeln('Remove-Item -Recurse -Force "$support" -ErrorAction SilentlyContinue')
-        ..writeln(r'Remove-Item -Recurse -Force "$env:APPDATA\kayorisan" -ErrorAction SilentlyContinue')
-        ..writeln(r'Remove-Item -Recurse -Force "$env:LOCALAPPDATA\NukefyVPN" -ErrorAction SilentlyContinue')
+        ..writeln(r'Remove-Item -Recurse -Force $support -ErrorAction SilentlyContinue')
+        // Never delete the whole vendor folder: it can contain other apps.
+        // The portable launcher directory is program files, not user data.
         ..writeln(r'Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Nukefy Client" -ErrorAction SilentlyContinue')
         ..writeln(r'"user data removed" | Out-File -Append -Encoding utf8 $log');
     }
@@ -185,14 +206,18 @@ class UninstallerService {
         ..writeln(r'  "installer uninstall done" | Out-File -Append -Encoding utf8 $log')
         ..writeln('  } else {')
         ..writeln('  Start-Sleep -Milliseconds 500')
-        ..writeln('  Remove-Item -Recurse -Force "$exeDir" -ErrorAction SilentlyContinue')
-        ..writeln(r'  "portable folder removed" | Out-File -Append -Encoding utf8 $log')
+        ..writeln(r'  $portableRoot = Join-Path $env:LOCALAPPDATA "NukefyVPN"')
+        ..writeln(r'  $portableApp = Join-Path $portableRoot "app"')
+        ..writeln(r'  if ([String]::Equals([IO.Path]::GetFullPath($exeDir).TrimEnd([IO.Path]::DirectorySeparatorChar), [IO.Path]::GetFullPath($portableApp).TrimEnd([IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)) {')
+        ..writeln(r'    Remove-Item -Recurse -Force $portableRoot -ErrorAction SilentlyContinue')
+        ..writeln('  } else {')
+        ..writeln(r'    Remove-Item -Recurse -Force $exeDir -ErrorAction SilentlyContinue')
+        ..writeln('  }')
+        ..writeln(r'  "application files removed" | Out-File -Append -Encoding utf8 $log')
         ..writeln('  }');
     }
 
     buffer.writeln(r'"Nukefy uninstall finished" | Out-File -Append -Encoding utf8 $log');
-    // The window stays open until this marker appears.
-    buffer.writeln(r'"done" | Out-File -Encoding utf8 $done');
     return buffer.toString();
   }
 }

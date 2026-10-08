@@ -14,6 +14,7 @@ import '../../core/services/zapret_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../l10n/strings.dart';
+import '../widgets/nukefy_feedback.dart';
 import '../widgets/nukefy_logo.dart';
 import '../widgets/section_card.dart';
 
@@ -51,6 +52,7 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
   List<_PlanItem> _plan = [];
   bool _busy = false;
   bool _restartNeeded = false;
+  String? _failure;
 
   S get s => context.read<SettingsProvider>().strings;
 
@@ -75,10 +77,12 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
     final items = <_PlanItem>[];
     switch (_purpose) {
       case _Purpose.games:
-        items.add(_PlanItem(id: 'zapret', label: s.t('zapretAutoStart'), detail: s.t('zapretAutoStartHint')));
-        items.add(_PlanItem(id: 'gamefilter', label: s.t('zapretGameFilter'), detail: 'TCP + UDP'));
+        if (ZapretService.instance.isSupported) {
+          items.add(_PlanItem(id: 'zapret', label: s.t('zapretAutoStart'), detail: s.t('zapretAutoStartHint'), checked: false, destructive: true));
+          items.add(_PlanItem(id: 'gamefilter', label: s.t('zapretGameFilter'), detail: 'TCP + UDP', checked: false, destructive: true));
+        }
         items.add(_PlanItem(id: 'dns', label: s.t('dnsCloudflare'), detail: s.t('dnsHint')));
-        items.add(_PlanItem(id: 'boot', label: s.t('launchOnBoot'), detail: s.t('startInTrayHint')));
+        items.add(_PlanItem(id: 'boot', label: s.t('launchOnBoot'), detail: s.t('startInTrayHint'), checked: false, destructive: true));
       case _Purpose.media:
         items.add(_PlanItem(id: 'karing', label: s.t('karingEnable'), detail: s.t('karingEnableHint')));
         items.add(_PlanItem(id: 'whitelist', label: s.t('karingAddSub'), detail: WhitelistCatalog.defaultName));
@@ -89,7 +93,7 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
         items.add(_PlanItem(id: 'autoconnect', label: s.t('autoConnect'), detail: s.t('autoConnectHint')));
       case _Purpose.balanced:
         items.add(_PlanItem(id: 'dns', label: s.t('dnsCloudflare'), detail: s.t('dnsHint')));
-        items.add(_PlanItem(id: 'boot', label: s.t('launchOnBoot'), detail: s.t('startInTrayHint')));
+        items.add(_PlanItem(id: 'boot', label: s.t('launchOnBoot'), detail: s.t('startInTrayHint'), checked: false, destructive: true));
         items.add(_PlanItem(id: 'tray', label: s.t('minimizeToTray')));
     }
     // Conflict-driven remedies.
@@ -120,14 +124,28 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
     final settings = context.read<SettingsProvider>();
     final servers = context.read<ServersProvider>();
     final vpn = context.read<VpnProvider>();
-    setState(() => _busy = true);
+    setState(() { _busy = true; _failure = null; });
     final chosen = _plan.where((item) => item.checked).map((item) => item.id).toSet();
-    _applied
-      ..clear()
-      ..addAll(_plan.where((item) => item.checked).map((item) => item.label));
     try {
+      if (chosen.contains('proxy-off')) {
+        final confirmed = await confirmDialog(
+          context,
+          title: s.t('proxyDisableTitle'),
+          body: s.t('proxyDisableBody'),
+          confirm: s.t('proxyDisable'),
+          cancel: s.t('cancel'),
+        );
+        if (!mounted) return;
+        if (!confirmed) {
+          chosen.remove('proxy-off');
+          final item = _plan.where((item) => item.id == 'proxy-off').firstOrNull;
+          if (item != null) item.checked = false;
+        }
+      }
+      _applied
+        ..clear()
+        ..addAll(_plan.where((item) => chosen.contains(item.id)).map((item) => item.label));
       await settings.update((value) {
-        if (chosen.contains('zapret')) value.zapretAutoStart = true;
         if (chosen.contains('gamefilter')) {
           value.zapretGameFilter = true;
           value.zapretGameMode = 'all';
@@ -156,7 +174,9 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
           value.localProxyEnabled = true;
         }
       });
-      if (chosen.contains('boot') || chosen.contains('tray')) {
+      final updateBootTask = chosen.contains('boot') ||
+          (chosen.contains('tray') && settings.settings.launchOnBoot);
+      if (updateBootTask) {
         await VpnPlatform().setAutoStart(
           settings.settings.launchOnBoot,
           startInTray: settings.settings.startInTray,
@@ -171,21 +191,25 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
         }
       }
       if (chosen.contains('proxy-off')) {
-        await _diag.disableSystemProxy();
+        final result = await _diag.disableSystemProxy();
+        if (!result.startsWith('Current-user proxy disabled')) throw StateError(result);
       }
       if (chosen.contains('zapret') || chosen.contains('gamefilter')) {
         final zapret = ZapretService.instance;
-        if (zapret.isSupported && !zapret.isRunning) {
-          final strategies = zapret.strategies();
-          final strategy = strategies.where((item) => item.id == settings.settings.zapretStrategy).firstOrNull ?? strategies.firstOrNull;
-          if (strategy != null) {
-            zapret.configure(settings.settings);
-            await zapret.start(strategy);
-          }
+        if (!zapret.isSupported) throw StateError('Zapret is available only in the Windows build.');
+        final strategies = zapret.strategies();
+        final strategy = strategies.where((item) => item.id == settings.settings.zapretStrategy).firstOrNull ?? strategies.firstOrNull;
+        if (strategy == null) throw StateError('No bundled zapret strategies were found.');
+        zapret.configure(settings.settings);
+        if (!await zapret.start(strategy)) throw StateError(zapret.lastError ?? 'winws failed');
+        if (chosen.contains('zapret')) {
+          await settings.update((value) => value.zapretAutoStart = true);
         }
       }
       if (vpn.status == VpnStatus.connected) _restartNeeded = true;
       if (mounted) setState(() => _stage = _Stage.done);
+    } catch (error) {
+      if (mounted) setState(() => _failure = '${s.t('autoPartialApply')}\n$error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -259,6 +283,8 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
           Text(s.t('autoTitle'), style: AppTextStyles.title, textAlign: TextAlign.center),
           const SizedBox(height: 10),
           Text(s.t('autoHint'), style: p.secondaryStyle, textAlign: TextAlign.center),
+          const SizedBox(height: 10),
+          Text(s.t('autoSafeNote'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12), textAlign: TextAlign.center),
           const SizedBox(height: 26),
           FilledButton.icon(
             onPressed: () => _goto(_Stage.purpose),
@@ -354,6 +380,10 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _header(s, p, 'autoStagePlan'),
+          if (_failure != null) ...[
+            CopyableError(message: _failure!, strings: s, title: s.t('autoApplyError')),
+            const SizedBox(height: 12),
+          ],
           SectionCard(
             title: s.t('autoPlan'),
             icon: Icons.checklist_rounded,
@@ -366,7 +396,15 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
                     controlAffinity: ListTileControlAffinity.leading,
                     value: item.checked,
                     title: Text(item.label),
-                    subtitle: item.detail == null ? null : Text(item.detail!),
+                    subtitle: item.detail == null && !item.destructive
+                        ? null
+                        : Text([
+                            if (item.detail != null) item.detail!,
+                            if (item.destructive) s.t('autoSystemChangeConsent'),
+                          ].join('\n')),
+                    secondary: item.destructive
+                        ? Icon(Icons.admin_panel_settings_outlined, color: p.warning, size: 19)
+                        : null,
                     onChanged: (value) => setState(() => item.checked = value ?? false),
                   ),
               ],

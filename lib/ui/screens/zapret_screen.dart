@@ -166,7 +166,13 @@ class _ZapretScreenState extends State<ZapretScreen> {
   Future<void> _start(ZapretStrategy strategy) async {
     _zapret.configure(context.read<SettingsProvider>().settings);
     await _refreshConflicts();
-    if (!await _zapret.start(strategy)) throw StateError(_zapret.lastError ?? 'winws failed');
+    if (!await _zapret.start(strategy)) {
+      final conflicts = _zapret.conflicts;
+      if (conflicts.isNotEmpty) {
+        throw StateError('${s.t('zConflictTitle')}\n${conflicts.join('\n')}\n${s.t('zConflictBody')}');
+      }
+      throw StateError(_zapret.lastError ?? 'winws failed');
+    }
   }
 
   ZapretStrategy? _selected() => _strategies.where((e) => e.id == context.read<SettingsProvider>().settings.zapretStrategy).firstOrNull ?? _strategies.firstOrNull;

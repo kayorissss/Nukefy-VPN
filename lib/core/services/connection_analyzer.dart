@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'connectivity_probe.dart';
+import 'zapret_service.dart';
+import 'vpn_platform.dart';
 
 /// Severity of one analyzer line.
 enum CheckLevel { ok, warn, error, info }
@@ -112,18 +114,35 @@ class ConnectionAnalyzer {
     if (!Platform.isWindows) {
       return AnalyzerCheck(id: 'proxy', level: CheckLevel.info, title: 'Системный прокси', detail: 'Проверяется только на Windows');
     }
-    final enabled = await _regValue(r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings', 'ProxyEnable');
-    final server = await _regValue(r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings', 'ProxyServer');
-    if (enabled == '0x1' || enabled == '1') {
+    const key = r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
+    final enabled = await _regValue(key, 'ProxyEnable');
+    final server = await _regValue(key, 'ProxyServer');
+    final autoConfig = await _regValue(key, 'AutoConfigURL');
+    final hasBackup = await VpnPlatform().hasSystemProxyBackup();
+    if (enabled == '0x1' || enabled == '1' || (autoConfig != null && autoConfig.isNotEmpty)) {
       return AnalyzerCheck(
         id: 'proxy',
         fixId: 'proxy-off',
-        fixLabel: 'Отключить системный прокси',
-        fixHint: 'Снимает прокси в настройках Windows и сбрасывает winhttp. Обратимо.',
+        fixLabel: 'Отключить текущий прокси',
+        fixHint: 'Изменяет только ProxyEnable/PAC текущего пользователя; предыдущие значения сохраняются. WinHTTP и другие пользователи не затрагиваются.',
         level: CheckLevel.warn,
         title: 'Системный прокси',
-        detail: 'Включён${server == null ? '' : ' ($server)'}',
-        hint: 'Посторонний HTTPS-прокси перехватывает трафик и ломает сертификаты. Отключите прокси в Параметрах Windows → Сеть → Прокси.',
+        detail: [
+          if (enabled == '0x1' || enabled == '1') 'включён${server == null ? '' : ' ($server)'}',
+          if (autoConfig != null && autoConfig.isNotEmpty) 'PAC: $autoConfig',
+        ].join(' · '),
+        hint: 'Прокси или PAC могут перехватывать HTTP-трафик. Изменение обратимо: кнопка восстановления вернёт сохранённые значения.',
+      );
+    }
+    if (hasBackup) {
+      return AnalyzerCheck(
+        id: 'proxy',
+        fixId: 'proxy-restore',
+        fixLabel: 'Вернуть сохранённые параметры прокси',
+        fixHint: 'Восстановит ProxyEnable, ProxyServer, ProxyOverride и AutoConfigURL, сохранённые перед изменением Nukefy.',
+        level: CheckLevel.ok,
+        title: 'Системный прокси',
+        detail: 'Сейчас выключен; есть сохранённая копия прежних параметров',
       );
     }
     return AnalyzerCheck(
@@ -205,27 +224,72 @@ class ConnectionAnalyzer {
     if (!Platform.isWindows) {
       return AnalyzerCheck(id: 'zapret', level: CheckLevel.info, title: 'Zapret (winws)', detail: 'Проверяется только на Windows');
     }
-    final running = await _powershell(
-      r"Get-Process -Name winws -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }",
-    );
-    final service = await _powershell(
-      r"Get-Service -Name zapret -ErrorAction SilentlyContinue | ForEach-Object { $_.Status }",
-    );
-    final winws = (running ?? '').trim();
-    final serviceState = (service ?? '').trim();
-    if (winws.isNotEmpty) {
+    final zapret = ZapretService.instance;
+    await zapret.serviceInstalled();
+    final foreign = await zapret.detectConflicts();
+    if (foreign.isNotEmpty) {
+      return AnalyzerCheck(
+        id: 'zapret',
+        level: CheckLevel.error,
+        title: 'Конфликт с другим zapret',
+        detail: foreign.join(' · '),
+        hint: 'Два процесса используют WinDivert одновременно. Закройте zapret-gui/Flowseal сами и нажмите «Повторить проверку». Nukefy чужой процесс не останавливает.',
+      );
+    }
+    if (zapret.isRunning) {
       return AnalyzerCheck(
         id: 'zapret',
         fixId: 'zapret-stop',
-        fixLabel: 'Остановить наш Zapret',
-        fixHint: 'Останавливает только нашу службу nukefy-zapret. Чужие winws не трогает.',
+        fixLabel: 'Остановить наш zapret',
+        fixHint: 'Останавливает только службу Nukefy «nukefy-zapret» и процесс из папки Nukefy. Общий драйвер WinDivert остаётся установленным.',
         level: CheckLevel.warn,
-        title: 'Zapret (winws)',
-        detail: 'winws работает${serviceState.isEmpty ? '' : ' (служба: $serviceState)'}',
-        hint: 'WinDivert перехватывает трафик на уровне драйвера и мешает sing-box. Для VPN остановите zapret на его странице.',
+        title: 'Работает Zapret Nukefy',
+        detail: 'Наш winws ${zapret.serviceRunning ? 'запущен как служба' : 'работает как процесс'}',
+        hint: 'Одновременная работа с VPN может конфликтовать: остановите наш Zapret перед подключением VPN.',
       );
     }
-    return AnalyzerCheck(id: 'zapret', level: CheckLevel.ok, title: 'Zapret (winws)', detail: serviceState.isEmpty ? 'Не запущен, служба не установлена' : 'Не запущен (служба: $serviceState)');
+    return AnalyzerCheck(
+      id: 'zapret',
+      level: CheckLevel.ok,
+      title: 'Zapret (winws)',
+      detail: zapret.servicePresent ? 'Служба Nukefy установлена, но остановлена' : 'Чужой winws не найден; служба Nukefy не установлена',
+    );
+  }
+
+  static Future<AnalyzerCheck> checkTcpTimestamps() async {
+    if (!Platform.isWindows) {
+      return AnalyzerCheck(id: 'tcp-timestamps', level: CheckLevel.info, title: 'TCP timestamps', detail: 'Проверяется только на Windows');
+    }
+    final platform = VpnPlatform();
+    final state = await platform.tcpTimestampStatus();
+    final hasBackup = await platform.hasTcpTimestampBackup();
+    if (state == 'disabled') {
+      return AnalyzerCheck(
+        id: 'tcp-timestamps',
+        fixId: 'tcp-timestamps-enable',
+        fixLabel: 'Включить TCP timestamps (как в Flowseal)',
+        fixHint: 'Глобальная настройка Windows. Перед изменением сохраняется прежнее значение; вернуть его можно этой же проверкой.',
+        level: CheckLevel.warn,
+        title: 'TCP timestamps',
+        detail: 'Выключены. Flowseal включает их при запуске сервиса.',
+        hint: 'Некоторые DPI-стратегии могут зависеть от этой настройки. Nukefy не меняет её молча; сначала выберите действие и подтвердите.',
+      );
+    }
+    if (hasBackup) {
+      return AnalyzerCheck(
+        id: 'tcp-timestamps',
+        fixId: 'tcp-timestamps-restore',
+        fixLabel: 'Вернуть настройку, которая была до Nukefy',
+        fixHint: 'Восстановит сохранённое состояние Windows; если оно было «mixed», Windows вернёт значение по умолчанию.',
+        level: state == 'enabled' ? CheckLevel.ok : CheckLevel.warn,
+        title: 'TCP timestamps',
+        detail: state == 'enabled' ? 'Включены' : 'Состояние профилей различается',
+      );
+    }
+    if (state == 'enabled') {
+      return AnalyzerCheck(id: 'tcp-timestamps', level: CheckLevel.ok, title: 'TCP timestamps', detail: 'Включены');
+    }
+    return AnalyzerCheck(id: 'tcp-timestamps', level: CheckLevel.info, title: 'TCP timestamps', detail: 'Не удалось достоверно прочитать настройки TCP Windows');
   }
 
   static Future<AnalyzerCheck> checkDns() async {
@@ -242,9 +306,9 @@ class ConnectionAnalyzer {
     if (failed.length == hosts.length) {
       return AnalyzerCheck(
         id: 'dns',
-        fixId: 'dns-apply',
+        fixId: Platform.isWindows ? 'dns-apply' : null,
         fixLabel: 'Поставить DNS 1.1.1.1',
-        fixHint: 'Прописывает Cloudflare DNS на активный адаптер через netsh. Возврат — «DNS как было» в настройках.',
+        fixHint: 'Попросит подтверждение, выберет только физический IPv4-адаптер по маршруту по умолчанию и сохранит прежний DNS. Вернуть его можно на странице DNS.',
         level: CheckLevel.error,
         title: 'DNS',
         detail: 'Ни один домен не резолвится (${hosts.length} проверено)',

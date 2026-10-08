@@ -198,8 +198,12 @@ class VpnPlatform {
       await process.exitCode.timeout(const Duration(milliseconds: 1200));
     } catch (_) {
       if (Platform.isWindows) {
+        // This PID came from the Process.start call above and is ours. Never
+        // fall back to `/IM xray.exe`: another VPN/client may have its own
+        // Xray process, which must be left untouched.
         try {
-          await Process.run('taskkill', ['/F', '/IM', 'xray.exe']).timeout(const Duration(seconds: 3));
+          await Process.run('taskkill', ['/F', '/PID', '${process.pid}', '/T'])
+              .timeout(const Duration(seconds: 3));
         } catch (_) {}
       }
     }
@@ -511,46 +515,262 @@ class VpnPlatform {
   }
 
 
-  /// Turns the system proxy off (WinINET + WinHTTP). Reversible: the previous
-  /// values are written to a small backup file next to the app data so the
-  /// user can restore them from Settings.
+  /// Disables only the current user's Windows Internet Settings proxy. The
+  /// exact enable/PAC values are backed up in app support; WinHTTP and other
+  /// users' settings are deliberately not changed.
   Future<String> disableSystemProxy() async {
     if (!Platform.isWindows) return 'unsupported';
     try {
+      final support = await getApplicationSupportDirectory();
+      final backup = File(p.join(support.path, 'system_proxy_backup.json'));
+      await backup.parent.create(recursive: true);
       final script = r'''
-$backup = Join-Path $env:TEMP "nukefy_proxy_backup.txt"
-$key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
-$before = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
-"$($before.ProxyEnable)|$($before.ProxyServer)" | Out-File -Encoding utf8 $backup
-Set-ItemProperty -Path $key -Name ProxyEnable -Value 0 -ErrorAction SilentlyContinue
-Remove-ItemProperty -Path $key -Name ProxyServer -ErrorAction SilentlyContinue
-netsh winhttp reset proxy | Out-Null
-"proxy off, backup: " + $backup
-''';
-      final result = await Process.run('powershell.exe', ['-NoProfile', '-Command', script])
+$ErrorActionPreference = 'Stop'
+$backup = __BACKUP_PATH__
+$key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+if (-not (Test-Path -LiteralPath $backup)) {
+  $current = Get-ItemProperty -Path $key -ErrorAction Stop
+  [pscustomobject]@{
+    ProxyEnable = $current.ProxyEnable
+    ProxyServer = $current.ProxyServer
+    ProxyOverride = $current.ProxyOverride
+    AutoConfigURL = $current.AutoConfigURL
+  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $backup -Encoding UTF8
+}
+Set-ItemProperty -Path $key -Name ProxyEnable -Value 0 -ErrorAction Stop
+Remove-ItemProperty -Path $key -Name AutoConfigURL -ErrorAction SilentlyContinue
+'Current-user proxy disabled; the previous values are saved for restore.'
+'''.replaceFirst('__BACKUP_PATH__', _psQuote(backup.path));
+      final result = await Process.run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script])
           .timeout(const Duration(seconds: 20));
-      final out = '${result.stdout}'.trim();
-      return out.isEmpty ? 'ok' : out;
+      if (result.exitCode != 0) {
+        final error = '${result.stderr}'.trim();
+        throw StateError(error.isEmpty ? '${result.stdout}'.trim() : error);
+      }
+      return '${result.stdout}'.trim();
     } catch (error) {
       return '$error';
     }
   }
 
-  /// Pins plain Cloudflare DNS on the adapter that currently carries traffic.
+  Future<bool> hasSystemProxyBackup() async {
+    if (!Platform.isWindows) return false;
+    final support = await getApplicationSupportDirectory();
+    return File(p.join(support.path, 'system_proxy_backup.json')).existsSync();
+  }
+
+  Future<String> restoreSystemProxy() async {
+    if (!Platform.isWindows) return 'unsupported';
+    try {
+      final support = await getApplicationSupportDirectory();
+      final backup = File(p.join(support.path, 'system_proxy_backup.json'));
+      if (!backup.existsSync()) return 'no-system-proxy-backup';
+      final script = r'''
+$ErrorActionPreference = 'Stop'
+$backup = __BACKUP_PATH__
+if (-not (Test-Path -LiteralPath $backup)) { throw 'No saved current-user proxy settings were found.' }
+$key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+$state = Get-Content -LiteralPath $backup -Raw | ConvertFrom-Json
+foreach ($name in @('ProxyEnable','ProxyServer','ProxyOverride','AutoConfigURL')) {
+  $value = $state.$name
+  if ($null -eq $value -or ([string]$value -eq '')) {
+    Remove-ItemProperty -Path $key -Name $name -ErrorAction SilentlyContinue
+  } else {
+    Set-ItemProperty -Path $key -Name $name -Value $value -ErrorAction Stop
+  }
+}
+Remove-Item -LiteralPath $backup -Force
+'Previous current-user proxy settings restored.'
+'''.replaceFirst('__BACKUP_PATH__', _psQuote(backup.path));
+      final result = await Process.run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script])
+          .timeout(const Duration(seconds: 20));
+      if (result.exitCode != 0) {
+        final error = '${result.stderr}'.trim();
+        throw StateError(error.isEmpty ? '${result.stdout}'.trim() : error);
+      }
+      return '${result.stdout}'.trim();
+    } catch (error) {
+      return '$error';
+    }
+  }
+
+  static String _psQuote(String value) => "'${value.replaceAll("'", "''")}'";
+
+  /// Pins Cloudflare DNS only on the physical adapter selected by the active
+  /// IPv4 default route. The original DNS configuration is saved once in app
+  /// support and can be restored with [restoreSystemDns]. Virtual/tunnel
+  /// adapters are refused rather than being modified blindly.
   Future<String> applyCloudflareDns() async {
     if (!Platform.isWindows) return 'unsupported';
     try {
+      final support = await getApplicationSupportDirectory();
+      final backup = File(p.join(support.path, 'system_dns_backup.json'));
+      await backup.parent.create(recursive: true);
       final script = r'''
-$ErrorActionPreference = "SilentlyContinue"
-Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
-  Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ('1.1.1.1','1.0.0.1')
+$ErrorActionPreference = 'Stop'
+$backup = __BACKUP_PATH__
+$route = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+  Sort-Object RouteMetric, InterfaceMetric | Select-Object -First 1
+if (-not $route) { throw 'No active IPv4 default route was found.' }
+$adapter = Get-NetAdapter -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue
+if (-not $adapter -or $adapter.Status -ne 'Up') { throw 'The default-route adapter is not active.' }
+$virtual = '(?i)wintun|\btun\b|\bvpn\b|virtual|vmware|virtualbox|\btap\b|loopback|hyper-v|warp'
+if ($adapter.Name -match $virtual -or $adapter.InterfaceDescription -match $virtual) {
+  throw "The active route uses a virtual/VPN adapter ($($adapter.Name)); refusing to overwrite its DNS."
 }
-"dns set"
-''';
-      final result = await Process.run('powershell.exe', ['-NoProfile', '-Command', script])
+$current = Get-DnsClientServerAddress -InterfaceIndex $route.InterfaceIndex -AddressFamily IPv4 -ErrorAction Stop
+$interfaceKey = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$($adapter.InterfaceGuid.ToString('B'))"
+$manualDns = (Get-ItemProperty -Path $interfaceKey -Name NameServer -ErrorAction SilentlyContinue).NameServer
+$wasStatic = -not [string]::IsNullOrWhiteSpace([string]$manualDns)
+if (-not (Test-Path -LiteralPath $backup)) {
+  [pscustomobject]@{
+    InterfaceIndex = [int]$route.InterfaceIndex
+    InterfaceAlias = [string]$adapter.Name
+    WasStatic = $wasStatic
+    ServerAddresses = @($current.ServerAddresses)
+  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $backup -Encoding UTF8
+}
+Set-DnsClientServerAddress -InterfaceIndex $route.InterfaceIndex -ServerAddresses @('1.1.1.1','1.0.0.1') -ErrorAction Stop
+"Cloudflare DNS set on $($adapter.Name). Previous DNS saved to $backup"
+'''.replaceFirst('__BACKUP_PATH__', _psQuote(backup.path));
+      final result = await Process.run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script])
           .timeout(const Duration(seconds: 20));
-      final out = '${result.stdout}'.trim();
-      return out.isEmpty ? 'ok' : out;
+      if (result.exitCode != 0) {
+        final error = '${result.stderr}'.trim();
+        throw StateError(error.isEmpty ? '${result.stdout}'.trim() : error);
+      }
+      return '${result.stdout}'.trim();
+    } catch (error) {
+      return '$error';
+    }
+  }
+
+  /// Restores the exact IPv4 DNS setting saved by [applyCloudflareDns].
+  Future<String> restoreSystemDns() async {
+    if (!Platform.isWindows) return 'unsupported';
+    try {
+      final support = await getApplicationSupportDirectory();
+      final backup = File(p.join(support.path, 'system_dns_backup.json'));
+      if (!backup.existsSync()) return 'no-dns-backup';
+      final script = r'''
+$ErrorActionPreference = 'Stop'
+$backup = __BACKUP_PATH__
+if (-not (Test-Path -LiteralPath $backup)) { throw 'No saved DNS configuration was found.' }
+$state = Get-Content -LiteralPath $backup -Raw | ConvertFrom-Json
+$adapter = Get-NetAdapter -InterfaceIndex ([int]$state.InterfaceIndex) -ErrorAction SilentlyContinue
+if (-not $adapter -and $state.InterfaceAlias) { $adapter = Get-NetAdapter -Name $state.InterfaceAlias -ErrorAction SilentlyContinue }
+if (-not $adapter) { throw 'The saved network adapter is not present. Reconnect it, then retry restore.' }
+$addresses = @($state.ServerAddresses | Where-Object { $_ })
+if ($state.WasStatic -and $addresses.Count -gt 0) {
+  Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $addresses -ErrorAction Stop
+} else {
+  Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServerAddresses -ErrorAction Stop
+}
+Remove-Item -LiteralPath $backup -Force
+"Previous DNS restored on $($adapter.Name)."
+'''.replaceFirst('__BACKUP_PATH__', _psQuote(backup.path));
+      final result = await Process.run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script])
+          .timeout(const Duration(seconds: 20));
+      if (result.exitCode != 0) {
+        final error = '${result.stderr}'.trim();
+        throw StateError(error.isEmpty ? '${result.stdout}'.trim() : error);
+      }
+      return '${result.stdout}'.trim();
+    } catch (error) {
+      return '$error';
+    }
+  }
+
+  /// Reads every Windows TCP profile so the diagnostic is not tied to the
+  /// language of `netsh` output.
+  Future<String> tcpTimestampStatus() async {
+    if (!Platform.isWindows) return 'unsupported';
+    try {
+      const script = r'''
+$ErrorActionPreference = 'Stop'
+$values = @(Get-NetTCPSetting -ErrorAction Stop | ForEach-Object { [int]$_.Timestamps } | Sort-Object -Unique)
+if ($values.Count -eq 0) { throw 'No TCP settings were returned.' }
+if ($values.Count -eq 1 -and $values[0] -eq 0) { 'disabled' }
+elseif ($values -contains 0) { 'mixed' }
+else { 'enabled' }
+''';
+      final result = await Process.run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script])
+          .timeout(const Duration(seconds: 12));
+      if (result.exitCode != 0) return 'unknown';
+      return '${result.stdout}'.trim().toLowerCase();
+    } catch (_) {
+      return 'unknown';
+    }
+  }
+
+  Future<bool> hasTcpTimestampBackup() async {
+    if (!Platform.isWindows) return false;
+    final support = await getApplicationSupportDirectory();
+    return File(p.join(support.path, 'tcp_timestamps_backup.json')).existsSync();
+  }
+
+  /// Applies the same timestamp setting that Flowseal's service.bat requests,
+  /// but only after an explicit user action. The previous global state is
+  /// saved once and can be restored later or during uninstall.
+  Future<String> enableFlowsealTcpTimestamps() async {
+    if (!Platform.isWindows) return 'unsupported';
+    try {
+      final support = await getApplicationSupportDirectory();
+      final backup = File(p.join(support.path, 'tcp_timestamps_backup.json'));
+      await backup.parent.create(recursive: true);
+      final script = r'''
+$ErrorActionPreference = 'Stop'
+$backup = __BACKUP_PATH__
+if (-not (Test-Path -LiteralPath $backup)) {
+  $values = @(Get-NetTCPSetting -ErrorAction Stop | ForEach-Object { [int]$_.Timestamps } | Sort-Object -Unique)
+  if ($values.Count -eq 0) { throw 'No TCP settings were returned.' }
+  $state = if ($values.Count -eq 1) { [int]$values[0] } else { -1 }
+  [pscustomobject]@{ State = $state } | ConvertTo-Json | Set-Content -LiteralPath $backup -Encoding UTF8
+}
+netsh interface tcp set global timestamps=enabled | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'netsh could not enable TCP timestamps.' }
+'TCP timestamps enabled; the previous setting is saved for restore.'
+'''.replaceFirst('__BACKUP_PATH__', _psQuote(backup.path));
+      final result = await Process.run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script])
+          .timeout(const Duration(seconds: 20));
+      if (result.exitCode != 0) {
+        final error = '${result.stderr}'.trim();
+        throw StateError(error.isEmpty ? '${result.stdout}'.trim() : error);
+      }
+      return '${result.stdout}'.trim();
+    } catch (error) {
+      return '$error';
+    }
+  }
+
+  Future<String> restoreFlowsealTcpTimestamps() async {
+    if (!Platform.isWindows) return 'unsupported';
+    try {
+      final support = await getApplicationSupportDirectory();
+      final backup = File(p.join(support.path, 'tcp_timestamps_backup.json'));
+      if (!backup.existsSync()) return 'no-tcp-timestamp-backup';
+      final script = r'''
+$ErrorActionPreference = 'Stop'
+$backup = __BACKUP_PATH__
+if (-not (Test-Path -LiteralPath $backup)) { throw 'No saved TCP timestamp setting was found.' }
+$state = Get-Content -LiteralPath $backup -Raw | ConvertFrom-Json
+$restore = switch ([int]$state.State) {
+  0 { 'disabled'; break }
+  1 { 'enabled'; break }
+  default { 'default' }
+}
+netsh interface tcp set global "timestamps=$restore" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'netsh could not restore TCP timestamps.' }
+Remove-Item -LiteralPath $backup -Force
+"TCP timestamps restored to $restore."
+'''.replaceFirst('__BACKUP_PATH__', _psQuote(backup.path));
+      final result = await Process.run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script])
+          .timeout(const Duration(seconds: 20));
+      if (result.exitCode != 0) {
+        final error = '${result.stderr}'.trim();
+        throw StateError(error.isEmpty ? '${result.stdout}'.trim() : error);
+      }
+      return '${result.stdout}'.trim();
     } catch (error) {
       return '$error';
     }

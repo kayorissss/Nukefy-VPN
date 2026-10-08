@@ -1,10 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/providers/settings_provider.dart';
 import '../../core/services/vpn_platform.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../widgets/nukefy_feedback.dart';
 import '../widgets/section_card.dart';
@@ -21,6 +22,8 @@ class _DnsScreenState extends State<DnsScreen> {
   late final TextEditingController _direct;
   bool _flushing = false;
   String? _flushResult;
+  bool _systemDnsBusy = false;
+  String? _systemDnsResult;
 
   static const _presets = <String, ({String labelKey, String proxy, String direct, IconData icon})>{
     'dhcp': (labelKey: 'dnsDhcp', proxy: 'system', direct: 'system', icon: Icons.router_outlined),
@@ -90,6 +93,35 @@ class _DnsScreenState extends State<DnsScreen> {
       if (mounted) setState(() => _flushResult = '$error');
     } finally {
       if (mounted) setState(() => _flushing = false);
+    }
+  }
+
+  Future<void> _runSystemDns({required bool restore}) async {
+    if (_systemDnsBusy) return;
+    final s = context.read<SettingsProvider>().strings;
+    final ok = await confirmDialog(
+      context,
+      title: s.t(restore ? 'dnsSystemRestoreTitle' : 'dnsSystemApplyTitle'),
+      body: s.t(restore ? 'dnsSystemRestoreBody' : 'dnsSystemApplyBody'),
+      confirm: s.t(restore ? 'dnsSystemRestore' : 'dnsSystemApply'),
+      cancel: s.t('cancel'),
+    );
+    if (!ok || !mounted) return;
+    setState(() {
+      _systemDnsBusy = true;
+      _systemDnsResult = null;
+    });
+    try {
+      final result = restore
+          ? await VpnPlatform().restoreSystemDns()
+          : await VpnPlatform().applyCloudflareDns();
+      if (mounted) {
+        setState(() => _systemDnsResult = result == 'no-dns-backup' ? s.t('dnsSystemNoBackup') : result);
+      }
+    } catch (error) {
+      if (mounted) setState(() => _systemDnsResult = '$error');
+    } finally {
+      if (mounted) setState(() => _systemDnsBusy = false);
     }
   }
 
@@ -177,6 +209,48 @@ class _DnsScreenState extends State<DnsScreen> {
               ],
             ),
           ),
+          if (Platform.isWindows)
+            SectionCard(
+              title: s.t('dnsSystemTitle'),
+              icon: Icons.settings_ethernet_rounded,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.t('dnsSystemHint'), style: context.palette.secondaryStyle),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _systemDnsBusy ? null : () => _runSystemDns(restore: false),
+                        icon: _systemDnsBusy
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.shield_outlined),
+                        label: Text(s.t('dnsSystemApply')),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _systemDnsBusy ? null : () => _runSystemDns(restore: true),
+                        icon: const Icon(Icons.restore_rounded),
+                        label: Text(s.t('dnsSystemRestore')),
+                      ),
+                    ],
+                  ),
+                  if (_systemDnsResult != null) ...[
+                    const SizedBox(height: 12),
+                    SelectableText(_systemDnsResult!, style: AppTextStyles.monoValue.copyWith(fontSize: 12)),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: IconButton(
+                        onPressed: () => Clipboard.setData(ClipboardData(text: _systemDnsResult!)),
+                        tooltip: s.t('copy'),
+                        icon: const Icon(Icons.copy_rounded),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
         ],
         ),
       );

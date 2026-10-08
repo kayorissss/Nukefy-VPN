@@ -229,6 +229,7 @@ class HomeScreen extends StatelessWidget {
     if (raw == 'XRAY_PLATFORM_UNSUPPORTED') return s.t('xrayPlatformUnsupported');
     if (raw == 'XRAY_UNSUPPORTED_PROTOCOL') return s.t('xrayUnsupportedProtocol');
     if (raw == 'XRAY_FRONTEND_MISSING') return s.t('xrayFrontendMissing');
+    if (raw == 'XRAY_NO_TRAFFIC_MODE') return s.t('xrayNoTrafficMode');
     if (raw.startsWith('XRAY_')) return '${s.t('xrayCore')}: $raw';
     if (raw.startsWith('NO_TRAFFIC:')) return '${s.t('noTraffic')}\n${raw.substring(11)}';
     if (raw == 'NO_TRAFFIC_TARGETS') return s.t('noTrafficTargets');

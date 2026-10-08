@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'zapret_service.dart';
+import 'vpn_platform.dart';
 
 enum DiagSeverity { info, warning, conflict }
 
@@ -135,21 +136,7 @@ class SystemDiagnosticService {
     }
   }
 
-  /// Opt-in remedy for the "system proxy" finding. Reversible: Windows keeps
-  /// the proxy address, only the enable flag is cleared.
-  Future<String> disableSystemProxy() async {
-    if (!Platform.isWindows) return 'unsupported';
-    final result = await Process.run('reg', [
-      'add',
-      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-      '/v',
-      'ProxyEnable',
-      '/t',
-      'REG_DWORD',
-      '/d',
-      '0',
-      '/f',
-    ]);
-    return '${result.stdout}${result.stderr}'.trim();
-  }
+  /// Opt-in, reversible remedy for the system-proxy finding. Delegates to the
+  /// service that snapshots the current user's proxy and PAC values first.
+  Future<String> disableSystemProxy() => VpnPlatform().disableSystemProxy();
 }

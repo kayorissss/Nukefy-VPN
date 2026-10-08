@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/providers/settings_provider.dart';
 import '../../core/services/uninstaller_service.dart';
+import '../../core/services/zapret_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../widgets/nukefy_feedback.dart';
@@ -34,9 +35,18 @@ class _UninstallScreenState extends State<UninstallScreen> {
   /// The cleanup helper is running: the screen shows a live progress note
   /// instead of an apparently frozen button.
   bool _waiting = false;
+  String? _failure;
 
   Future<void> _run() async {
     final s = context.read<SettingsProvider>().strings;
+    if (Platform.isWindows && _appFiles && !_zapret) {
+      final zapret = ZapretService.instance;
+      await zapret.serviceInstalled();
+      if ((zapret.servicePresent || zapret.serviceRunning) && mounted) {
+        showNukefySnack(context, s.t('uninstallZapretDependency'), error: true);
+        return;
+      }
+    }
     final ok = await confirmDialog(
       context,
       title: s.t('uninstallConfirmTitle'),
@@ -45,7 +55,7 @@ class _UninstallScreenState extends State<UninstallScreen> {
       cancel: s.t('cancel'),
     );
     if (!ok || !mounted) return;
-    setState(() => _busy = true);
+    setState(() { _busy = true; _failure = null; });
     // Never let a failure leave the button spinning forever: the window used
     // to look frozen when the elevated helper could not be started.
     try {
@@ -59,26 +69,18 @@ class _UninstallScreenState extends State<UninstallScreen> {
           .timeout(const Duration(seconds: 25));
     } catch (error) {
       if (!mounted) return;
-      setState(() => _busy = false);
-      showNukefySnack(context, '${s.t('uninstallFailed')}\n$error', error: true);
+      setState(() { _busy = false; _failure = '$error'; });
       return;
     }
     if (!mounted) return;
     setState(() => _waiting = true);
     showNukefySnack(context, s.t('uninstallRunning'));
-    // Wait for the marker the cleanup script drops, not for a stopwatch: the
-    // window used to sit "frozen" and then close while the script was still
-    // working. 90 s is the script's own upper bound (it waits for this process
-    // to exit first), the hard stop keeps a broken helper from hanging the UI.
-    final flag = File(UninstallerService.doneFlagPath);
-    final clock = Stopwatch()..start();
-    while (mounted && clock.elapsed < const Duration(seconds: 95)) {
-      if (flag.existsSync()) break;
-      await Future<void>.delayed(const Duration(milliseconds: 400));
-    }
+    // The detached helper waits for this PID to exit before deleting the
+    // installation; waiting for its final marker here would deadlock. Show a
+    // visible hand-off, then close cleanly so the helper can finish in the
+    // background. The cleanup script records its result in the temp log.
+    await Future<void>.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
-    // Kill the whole process tree: a stray core or winws must not keep the
-    // folder locked while the cleanup script is deleting it.
     exit(0);
   }
 
@@ -162,6 +164,10 @@ class _UninstallScreenState extends State<UninstallScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_failure != null) ...[
+                CopyableError(message: _failure!, strings: s, title: s.t('uninstallFailed')),
+                const SizedBox(height: 12),
+              ],
               Text(
                 _waiting ? s.t('uninstallRunning') : s.t('uninstallHowBody'),
                 style: AppTextStyles.bodySecondary.copyWith(color: _waiting ? p.accent : p.textSecondary),

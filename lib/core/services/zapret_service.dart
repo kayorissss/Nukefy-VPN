@@ -879,6 +879,15 @@ class ZapretService extends ChangeNotifier {
 
   Future<bool> start(ZapretStrategy strategy) async {
     if (!isSupported || _closing) return false;
+    // zapret-gui / Flowseal commonly owns a second WinDivert capture. Never
+    // start beside it: the UI asks the user to close the other program, and
+    // this service never kills a foreign winws or touches its service.
+    final conflict = await detectConflicts();
+    if (conflict.isNotEmpty) {
+      lastError = 'foreign-zapret: ${conflict.join(', ')}';
+      notifyListeners();
+      return false;
+    }
     await stop();
     // WinDivert is released a beat after the previous winws exits; starting
     // the next capture immediately makes it die silently (analysis showed

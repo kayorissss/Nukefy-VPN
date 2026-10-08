@@ -150,24 +150,20 @@ class _PrintScreenCatcherState extends State<PrintScreenCatcher> {
   }
 }
 
-/// Selectable text with a menu that fits the app.
-///
-/// Flutter draws its own selection menu; the real Win32 menu cannot be asked
-/// for inside a Flutter surface, so this one is styled to the app theme and
-/// offers the entries people actually need (copy / select all / copy all).
+/// Selectable text that leaves Flutter's full platform-adaptive editing menu
+/// intact. Replacing it with a one-action custom menu hid normal text actions
+/// (select all, cut/paste where applicable) from the Windows right-click menu.
 class NukefySelectableText extends StatefulWidget {
   const NukefySelectableText(
     this.text, {
     super.key,
     this.style,
     this.maxLines,
-    this.selectAllOnFocus = false,
   });
 
   final String text;
   final TextStyle? style;
   final int? maxLines;
-  final bool selectAllOnFocus;
 
   @override
   State<NukefySelectableText> createState() => _NukefySelectableTextState();
@@ -197,7 +193,6 @@ class _NukefySelectableTextState extends State<NukefySelectableText> {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final s = context.read<SettingsProvider>().strings;
     return TextField(
       controller: _controller,
       readOnly: true,
@@ -210,68 +205,6 @@ class _NukefySelectableTextState extends State<NukefySelectableText> {
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
         contentPadding: EdgeInsets.zero,
-      ),
-      contextMenuBuilder: (context, editable) => AdaptiveTextSelectionToolbar(
-        anchors: editable.contextMenuAnchors,
-        children: [
-          _MenuEntry(
-            icon: Icons.copy_rounded,
-            label: s.t('copy'),
-            onTap: () {
-              final selection = editable.textEditingValue.selection;
-              final text = selection.isValid && !selection.isCollapsed
-                  ? selection.textInside(editable.textEditingValue.text)
-                  : editable.textEditingValue.text;
-              Clipboard.setData(ClipboardData(text: text));
-              editable.hideToolbar();
-              showNukefySnack(context, s.t('copied'));
-            },
-          ),
-          _MenuEntry(
-            icon: Icons.select_all_rounded,
-            label: s.t('selectAll'),
-            onTap: () {
-              editable.selectAll(SelectionChangedCause.toolbar);
-              editable.showToolbar();
-            },
-          ),
-          _MenuEntry(
-            icon: Icons.copy_all_rounded,
-            label: s.t('copyAll'),
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: editable.textEditingValue.text));
-              editable.hideToolbar();
-              showNukefySnack(context, s.t('copied'));
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MenuEntry extends StatelessWidget {
-  const _MenuEntry({required this.icon, required this.label, required this.onTap});
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: p.textSecondary),
-            const SizedBox(width: 8),
-            Text(label, style: AppTextStyles.bodyRegular.copyWith(fontSize: 13)),
-          ],
-        ),
       ),
     );
   }

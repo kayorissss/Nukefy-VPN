@@ -20,7 +20,6 @@ static class Launcher
         {
             // A second launch of the portable exe while the app is running is
             // treated as "open the window", never as a second installation.
-            var wantsUninstall = Array.IndexOf(args, "--uninstall") >= 0;
             var asm = Assembly.GetExecutingAssembly();
             var version = asm.GetName().Version.ToString();
             var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppName);
@@ -28,33 +27,15 @@ static class Launcher
             var marker = Path.Combine(root, "version.txt");
             var exe = Path.Combine(appDir, "nukefy_vpn.exe");
 
-            if (wantsUninstall)
-            {
-                // Deleting the running exe is impossible on Windows, so hand
-                // the cleanup to a tiny detached helper and show the app's own
-                // uninstall window meanwhile.
-                var helper = Path.Combine(Path.GetTempPath(), "nukefy_portable_uninstall.cmd");
-                File.WriteAllText(helper, string.Join("\r\n", new[]
-                {
-                    "@echo off",
-                    "timeout /t 3 /nobreak >nul",
-                    "taskkill /F /IM winws.exe /T >nul 2>&1",
-                    "taskkill /F /IM nukefy_vpn.exe /T >nul 2>&1",
-                    "rd /s /q \"" + appDir + "\" >nul 2>&1",
-                    "del /f /q \"" + Path.Combine(root, "version.txt") + "\" >nul 2>&1",
-                }));
-                Process.Start(new ProcessStartInfo("cmd.exe", "/c \"" + helper + "\"")
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WorkingDirectory = Path.GetTempPath(),
-                });
-            }
+            // --uninstall is deliberately passed through to the branded app.
+            // It owns confirmation, scope checkboxes and the path-filtered
+            // cleanup helper; doing anything here used to delete the portable
+            // install before the user had even confirmed.
 
             var current = File.Exists(marker) ? File.ReadAllText(marker).Trim() : "";
             if (current != version || !File.Exists(exe))
             {
-                KillRunning();
+                KillRunning(appDir);
                 Extract(asm, appDir);
                 Directory.CreateDirectory(root);
                 File.WriteAllText(marker, version);
@@ -104,13 +85,27 @@ static class Launcher
         }
     }
 
-    static void KillRunning()
+    static void KillRunning(string appDir)
     {
-        foreach (var name in new[] { "nukefy_vpn", "winws", "sing-box" })
+        // Replacing the portable payload may close only processes whose image
+        // is inside this exact installation. Other VPN clients also use
+        // sing-box/winws and must never be killed by process name alone.
+        var root = Path.GetFullPath(appDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        foreach (var name in new[] { "nukefy_vpn", "winws", "sing-box", "xray" })
         {
-            foreach (var p in Process.GetProcessesByName(name))
+            foreach (var process in Process.GetProcessesByName(name))
             {
-                try { p.Kill(); p.WaitForExit(3000); } catch { }
+                try
+                {
+                    var image = process.MainModule == null ? null : process.MainModule.FileName;
+                    if (String.IsNullOrEmpty(image)) continue;
+                    var fullImage = Path.GetFullPath(image);
+                    if (!fullImage.StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
+                    process.Kill();
+                    process.WaitForExit(3000);
+                }
+                catch { }
             }
         }
     }

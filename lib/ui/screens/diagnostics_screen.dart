@@ -81,6 +81,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     await add(ConnectionAnalyzer.checkCertificateInspectors);
     await add(ConnectionAnalyzer.checkVpnConflicts);
     await add(ConnectionAnalyzer.checkZapretStack);
+    await add(ConnectionAnalyzer.checkTcpTimestamps);
     await add(ConnectionAnalyzer.checkDns);
     final (directCheck, directIp) = await ConnectionAnalyzer.checkDirectInternet();
     if (mounted) setState(() => _checks.add(directCheck));
@@ -106,6 +107,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   }
 
   String? _fixing;
+  String? _fixError;
 
   /// Safe, reversible remedies offered directly on an analyzer row. Anything
   /// that would touch another program's configuration only *stops ours* or
@@ -114,19 +116,83 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     final s = context.read<SettingsProvider>().strings;
     final id = check.fixId;
     if (id == null) return;
-    setState(() => _fixing = id);
+    setState(() { _fixing = id; _fixError = null; });
     String result = 'ok';
     try {
       final vpn = context.read<VpnProvider>();
       switch (id) {
         case 'proxy-off':
+          final confirmed = await confirmDialog(
+            context,
+            title: s.t('proxyDisableTitle'),
+            body: s.t('proxyDisableBody'),
+            confirm: s.t('proxyDisable'),
+            cancel: s.t('cancel'),
+          );
+          if (!confirmed || !mounted) {
+            if (mounted) setState(() => _fixing = null);
+            return;
+          }
           result = await VpnPlatform().disableSystemProxy();
           break;
+        case 'proxy-restore':
+          final confirmed = await confirmDialog(
+            context,
+            title: s.t('proxyRestoreTitle'),
+            body: s.t('proxyRestoreBody'),
+            confirm: s.t('proxyRestore'),
+            cancel: s.t('cancel'),
+          );
+          if (!confirmed || !mounted) {
+            if (mounted) setState(() => _fixing = null);
+            return;
+          }
+          result = await VpnPlatform().restoreSystemProxy();
+          break;
         case 'zapret-stop':
-          await ZapretService.instance.shutdown(keepService: true);
+          await ZapretService.instance.stop(includeService: true);
           result = 'ok';
           break;
+        case 'tcp-timestamps-enable':
+          final confirmed = await confirmDialog(
+            context,
+            title: s.t('tcpTimestampsTitle'),
+            body: s.t('tcpTimestampsEnableBody'),
+            confirm: s.t('tcpTimestampsEnable'),
+            cancel: s.t('cancel'),
+          );
+          if (!confirmed || !mounted) {
+            if (mounted) setState(() => _fixing = null);
+            return;
+          }
+          result = await VpnPlatform().enableFlowsealTcpTimestamps();
+          break;
+        case 'tcp-timestamps-restore':
+          final confirmed = await confirmDialog(
+            context,
+            title: s.t('tcpTimestampsRestoreTitle'),
+            body: s.t('tcpTimestampsRestoreBody'),
+            confirm: s.t('tcpTimestampsRestore'),
+            cancel: s.t('cancel'),
+          );
+          if (!confirmed || !mounted) {
+            if (mounted) setState(() => _fixing = null);
+            return;
+          }
+          result = await VpnPlatform().restoreFlowsealTcpTimestamps();
+          break;
         case 'dns-apply':
+          final confirmed = await confirmDialog(
+            context,
+            title: s.t('dnsSystemApplyTitle'),
+            body: s.t('dnsSystemApplyBody'),
+            confirm: s.t('dnsSystemApply'),
+            cancel: s.t('cancel'),
+          );
+          if (!confirmed || !mounted) {
+            if (mounted) setState(() => _fixing = null);
+            return;
+          }
           result = await VpnPlatform().applyCloudflareDns();
           break;
         case 'clock-open':
@@ -142,7 +208,16 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     }
     if (!mounted) return;
     setState(() => _fixing = null);
-    showNukefySnack(context, '${s.t('diagFixDone')}: $result', error: result != 'ok' && !result.contains('backup'));
+    final succeeded = result == 'ok' || const [
+      'Current-user proxy disabled',
+      'Previous current-user proxy settings restored',
+      'Cloudflare DNS set',
+      'Previous DNS restored',
+      'TCP timestamps enabled',
+      'TCP timestamps restored',
+    ].any(result.startsWith);
+    setState(() => _fixError = succeeded ? null : result);
+    showNukefySnack(context, '${s.t('diagFixDone')}: $result', error: !succeeded);
     // Re-run so the row turns green only when it really is fixed.
     await _run();
   }
@@ -239,6 +314,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               ],
             ),
           ),
+          if (_fixError != null) ...[
+            const SizedBox(height: 12),
+            CopyableError(message: _fixError!, strings: s, title: s.t('diagFixError')),
+          ],
           const SizedBox(height: 4),
           SectionCard(
             title: s.t('diagScanTitle'),

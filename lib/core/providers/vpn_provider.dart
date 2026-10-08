@@ -380,6 +380,13 @@ class VpnProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (!settings.tunEnabled && !settings.localProxyEnabled) {
+      status = VpnStatus.error;
+      mode = 'xray-no-route';
+      errorMessage = 'XRAY_NO_TRAFFIC_MODE';
+      notifyListeners();
+      return;
+    }
     final useTunFrontend = settings.tunEnabled && (core?.available ?? false);
     if (settings.tunEnabled && !useTunFrontend) {
       status = VpnStatus.error;
@@ -438,6 +445,10 @@ class VpnProvider extends ChangeNotifier {
       // Xray owns the XHTTP protocol. When TUN is enabled, sing-box is only
       // the transparent front-end and forwards all traffic to Xray; when it is
       // disabled, the user gets an explicitly labelled local proxy instead.
+      // Keep the resolved ports so proxy-mode probes target the actual Xray
+      // HTTP inbound (not a guessed/default port), and verify actual traffic
+      // after startup instead of treating two live processes as success.
+      _ports = xrayPorts;
       status = VpnStatus.connected;
       mode = useTunFrontend ? 'xray-tun' : 'xray-proxy';
       errorMessage = null;
@@ -445,6 +456,7 @@ class VpnProvider extends ChangeNotifier {
       _sessionDown = 0;
       _stats?.startSession();
       if (useTunFrontend) unawaited(_listenTraffic());
+      unawaited(_verifyTraffic(server.id));
       await _stats?.addLog(server.name, 'connected', message: mode);
       _startTicker();
       notifyListeners();
@@ -533,14 +545,21 @@ class VpnProvider extends ChangeNotifier {
     final control = await ConnectivityProbe.http(
       'http://cp.cloudflare.com/generate_204',
       httpProxyPort: proxyPort,
+      timeout: const Duration(seconds: 5),
     );
     if (status != VpnStatus.connected || activeServerId != serverId) return;
     final results = <String, bool>{};
     if (control.ok) {
-      for (final target in ConnectivityProbe.defaultTargets) {
-        final probe = await ConnectivityProbe.http(target.url, httpProxyPort: proxyPort);
-        results[target.id] = probe.ok;
-        if (status != VpnStatus.connected || activeServerId != serverId) return;
+      final probes = await Future.wait(
+        ConnectivityProbe.defaultTargets.map((target) => ConnectivityProbe.http(
+              target.url,
+              httpProxyPort: proxyPort,
+              timeout: const Duration(seconds: 5),
+            )),
+      );
+      if (status != VpnStatus.connected || activeServerId != serverId) return;
+      for (var i = 0; i < probes.length; i++) {
+        results[ConnectivityProbe.defaultTargets[i].id] = probes[i].ok;
       }
     }
     trafficTargets = results;
