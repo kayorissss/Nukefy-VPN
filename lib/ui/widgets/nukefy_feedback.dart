@@ -194,11 +194,6 @@ class _NukefySelectableTextState extends State<NukefySelectableText> {
     super.dispose();
   }
 
-  void _copyAll() {
-    Clipboard.setData(ClipboardData(text: _controller.text));
-    showNukefySnack(context, context.read<SettingsProvider>().strings.t('copied'));
-  }
-
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
