@@ -670,6 +670,7 @@ class _ServerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 560),
       child: Material(
