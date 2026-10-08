@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -10,6 +9,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/services/game_icon_service.dart';
 import '../../core/utils/ping_utils.dart';
 import '../../l10n/strings.dart';
 
@@ -377,7 +377,7 @@ class _ServiceIcon extends StatefulWidget {
 
 class _ServiceIconState extends State<_ServiceIcon> {
   static final Map<String, Uint8List?> _memory = {};
-Uint8List? _bytes;
+  Uint8List? _bytes;
 
   @override
   void initState() {
@@ -388,21 +388,9 @@ Uint8List? _bytes;
 
   Future<void> _fetch() async {
     _memory[widget.host] = null;
-    try {
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
-      final request = await client.getUrl(Uri.parse('https://www.google.com/s2/favicons?domain=${widget.host}&sz=128'));
-      final response = await request.close().timeout(const Duration(seconds: 8));
-      final builder = BytesBuilder(copy: false);
-      await for (final chunk in response) {
-        builder.add(chunk);
-      }
-      client.close(force: true);
-      final bytes = builder.takeBytes();
-      _memory[widget.host] = bytes.length > 100 ? bytes : null;
-      if (mounted) setState(() => _bytes = _memory[widget.host]);
-    } catch (_) {
-      // Fallback glyph stays.
-    }
+    final bytes = await GameIconService.instance.fetchBytesForFavicon(widget.host);
+    _memory[widget.host] = bytes;
+    if (mounted) setState(() => _bytes = bytes);
   }
 
   @override

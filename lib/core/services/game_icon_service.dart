@@ -168,28 +168,77 @@ Get-ItemProperty $keys | Where-Object { $_.DisplayName } | Select-Object Display
     }
   }
 
+  /// Browser-like headers. Image CDNs (Yandex, Steam, Pinterest) reject the
+  /// bare "Mozilla/5.0" agent with 403 or a redirect to an HTML page, which
+  /// used to leave the catalog stuck on letter tiles.
+  static const _browserHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+    'Accept': 'image/avif,image/webp,image/png,image/jpeg,image/*,*/*;q=0.8',
+    'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': 'https://yandex.ru/',
+    'Cache-Control': 'no-cache',
+  };
+
   Future<bool> _download(String url, File out, {required bool topCrop}) async {
+    final bytes = await _fetch(url);
+    if (bytes == null) return false;
+    // An HTML error page decodes as a "valid" image codec only if it really is
+    // one, so the codec below doubles as the content check.
+    final squared = await _square(bytes, topCrop: topCrop);
+    if (squared == null) return false;
+    if (!out.parent.existsSync()) out.parent.createSync(recursive: true);
+    await out.writeAsBytes(squared, flush: true);
+    return true;
+  }
+
+  Future<Uint8List?> _fetch(String url) async {
     try {
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
       final request = await client.getUrl(Uri.parse(url));
-      request.headers.set('User-Agent', 'Mozilla/5.0');
+      _browserHeaders.forEach(request.headers.set);
       final response = await request.close().timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) return false;
+      if (response.statusCode != 200) {
+        client.close(force: true);
+        return null;
+      }
       final builder = BytesBuilder(copy: false);
       await for (final chunk in response) {
         builder.add(chunk);
       }
       client.close(force: true);
       final bytes = builder.takeBytes();
-      if (bytes.length < 400) return false;
-      final squared = await _square(bytes, topCrop: topCrop);
-      if (squared == null) return false;
-      if (!out.parent.existsSync()) out.parent.createSync(recursive: true);
-      await out.writeAsBytes(squared, flush: true);
-      return true;
+      if (bytes.length < 400) return null;
+      return bytes;
     } catch (_) {
-      return false;
+      return null;
     }
+  }
+
+  /// Raw favicon bytes for a service tile: Google's renderer first, then the
+  /// site's own /favicon.ico. Returns null when nothing usable came back, so
+  /// the caller keeps its fallback glyph.
+  Future<Uint8List?> fetchBytesForFavicon(String host) async {
+    final clean = host.trim().replaceAll(RegExp(r'^https?://'), '').split('/').first;
+    if (clean.isEmpty) return null;
+    final google = await _fetch('https://www.google.com/s2/favicons?sz=128&domain=$clean');
+    if (google != null && google.length > 100) return google;
+    final own = await _fetch('https://$clean/favicon.ico');
+    if (own != null && own.length > 100) return own;
+    return null;
+  }
+
+  /// Google's favicon service is the last resort: it renders a real logo for
+  /// almost any domain the user typed, at a usable size (sz=256).
+  Future<String?> fetchFavicon(String domain) async {
+    final clean = domain.trim().replaceAll(RegExp(r'^https?://'), '').split('/').first;
+    if (clean.isEmpty) return null;
+    final out = await _cachedIcon('favicon-${clean.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_')}');
+    if (out.existsSync()) return out.path;
+    final head = Uri.parse('https://www.google.com/s2/favicons?sz=256&domain=$clean');
+    if (await _download(head.toString(), out, topCrop: false)) return out.path;
+    final direct = Uri.parse('https://$clean/favicon.ico');
+    if (await _download(direct.toString(), out, topCrop: false)) return out.path;
+    return null;
   }
 
   /// Centre- (or top-) crops any image into a 256 px square PNG.
