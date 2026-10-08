@@ -54,7 +54,6 @@ class CopyableError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
     final s = strings;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
