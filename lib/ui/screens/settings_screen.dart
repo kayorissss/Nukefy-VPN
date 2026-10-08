@@ -25,6 +25,7 @@ import '../widgets/nukefy_feedback.dart';
 import '../widgets/responsive_sections.dart';
 import '../widgets/section_card.dart';
 import 'diagnostics_screen.dart';
+import 'uninstall_screen.dart';
 import 'dns_screen.dart';
 import 'log_screen.dart';
 import 'per_app_screen.dart';
@@ -416,6 +417,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: s.t('checkUpdates'),
                   subtitle: '${s.t('version')} ${AppConstants.version}',
                   onTap: () => checkUpdatesFlow(context),
+                ),
+                SettingsTile(
+                  icon: Icons.delete_forever_rounded,
+                  title: s.t('uninstallTitle'),
+                  subtitle: s.t('uninstallBody'),
+                  onTap: () => UninstallScreen.open(context),
                 ),
                 SettingsTile(
                   icon: Icons.bug_report_outlined,

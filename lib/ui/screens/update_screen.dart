@@ -55,6 +55,11 @@ class _UpdateScreenState extends State<UpdateScreen> {
   File? _file;
   String? _error;
 
+  /// Installer-style choices shown before the download starts, so the user
+  /// decides once and the flow runs to the end by itself.
+  bool _installAfterDownload = true;
+  bool _deleteInstaller = false;
+
   Future<void> _download() async {
     setState(() {
       _phase = _Phase.downloading;
@@ -70,6 +75,16 @@ class _UpdateScreenState extends State<UpdateScreen> {
         _file = file;
         _phase = _Phase.done;
       });
+      if (_installAfterDownload && Platform.isWindows) {
+        await _install();
+        if (_deleteInstaller) {
+          try {
+            if (file.existsSync()) file.deleteSync();
+          } catch (_) {
+            // The installer may still hold the file; Windows will clean TEMP.
+          }
+        }
+      }
     } on UpdateDownloadException catch (error) {
       if (!mounted) return;
       final s = context.read<SettingsProvider>().strings;
@@ -194,6 +209,39 @@ class _UpdateScreenState extends State<UpdateScreen> {
                             ),
                           ),
                         ).animate().fadeIn(delay: 120.ms).slideY(begin: 0.06),
+                      if (_phase == _Phase.offer && info.hasAsset) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                          decoration: BoxDecoration(
+                            color: p.card.withValues(alpha: .75),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: p.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${info.assetName ?? ''}${info.assetSize == null ? '' : ' · ${FormatUtils.bytes(info.assetSize!)}'}',
+                                style: p.captionStyle,
+                              ),
+                              if (Platform.isWindows) ...[
+                                const SizedBox(height: 4),
+                                _OptionCheck(
+                                  label: s.t('updateRunAfter'),
+                                  value: _installAfterDownload,
+                                  onChanged: (next) => setState(() => _installAfterDownload = next),
+                                ),
+                                _OptionCheck(
+                                  label: s.t('updateDeleteFile'),
+                                  value: _deleteInstaller,
+                                  onChanged: (next) => setState(() => _deleteInstaller = next),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                       if (_phase == _Phase.downloading && _progress != null)
                         Column(
                           children: [
@@ -238,6 +286,43 @@ class _UpdateScreenState extends State<UpdateScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Checkbox row in the installer-style options card.
+class _OptionCheck extends StatelessWidget {
+  const _OptionCheck({required this.label, required this.value, required this.onChanged});
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => onChanged(!value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 30,
+              height: 30,
+              child: Checkbox(
+                value: value,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                onChanged: (next) => onChanged(next ?? false),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(label, style: AppTextStyles.bodyRegular.copyWith(fontSize: 13, color: p.text))),
+          ],
         ),
       ),
     );
