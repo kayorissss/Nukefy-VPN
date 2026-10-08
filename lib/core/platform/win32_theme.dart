@@ -1,4 +1,6 @@
-import 'dart:ffi' show DynamicLibrary, Int32, NativeFunction, Pointer, Void;
+// No `show` list: lookupFunction/asFunction are extension methods, and a
+// show clause would hide them.
+import 'dart:ffi';
 import 'dart:io';
 
 /// Flips the whole Win32 process into dark app mode (undocumented
