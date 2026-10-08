@@ -87,7 +87,10 @@ jobs:
           APK=build/app/outputs/flutter-apk/app-release.apk
           "$ANDROID_HOME/build-tools/$(ls -1 "$ANDROID_HOME/build-tools" | tail -1)/apksigner" verify --verbose "$APK"
           "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$APK" | grep -Fx 'com.nukefy.vpn'
-          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest version-code "$APK" | grep -Fx '23'
+          # Read the expected build number from pubspec instead of hardcoding
+          # it: bumping the version used to break CI here.
+          EXPECTED_CODE=$(grep -m1 '^version:' pubspec.yaml | sed -E 's/.*\+([0-9]+).*/\1/')
+          "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest version-code "$APK" | grep -Fx "$EXPECTED_CODE"
 
   windows:
     name: Windows release build
