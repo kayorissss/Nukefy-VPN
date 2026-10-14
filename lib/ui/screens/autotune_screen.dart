@@ -518,6 +518,16 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.shield_outlined, size: 16, color: p.textSecondary),
+              const SizedBox(width: 8),
+              Expanded(child: Text(s.t('autoNothingDeleted'), style: p.captionStyle)),
+            ],
+          ),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
