@@ -915,7 +915,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
                     ),
                   Tooltip(message: s.t('zDnsNote'), child: Icon(Icons.help_outline_rounded, size: 15, color: p.textSecondary)),
                 ],
-            ),
+              ),
               const SizedBox(height: 6),
               Wrap(
                 spacing: 8,
