@@ -62,7 +62,7 @@ class UpdateService {
     final response = await _dio.get<Map<String, dynamic>>(
       AppConstants.releasesApi,
       options: Options(
-        headers: const {
+        headers: {
           'Accept': 'application/vnd.github+json',
           'User-Agent': AppConstants.clientUserAgent,
         },

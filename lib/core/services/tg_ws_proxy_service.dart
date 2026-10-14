@@ -88,9 +88,9 @@ class TgWsProxyService extends ChangeNotifier {
     final response = await _dio.get<Map<String, dynamic>>(
       _releaseApi,
       options: Options(
-        headers: const {
+        headers: {
           'Accept': 'application/vnd.github+json',
-          'User-Agent': AppConstants.userAgent,
+          'User-Agent': AppConstants.clientUserAgent,
         },
         responseType: ResponseType.json,
       ),
@@ -152,7 +152,7 @@ class TgWsProxyService extends ChangeNotifier {
           onProgress?.call(snapshot);
           notifyListeners();
         },
-        options: Options(headers: const {'User-Agent': AppConstants.userAgent}),
+        options: Options(headers: {'User-Agent': AppConstants.clientUserAgent}),
       ).timeout(const Duration(minutes: 5));
       if (!temporary.existsSync() || await temporary.length() != release.size) {
         throw const FormatException('tg-ws-size-mismatch');

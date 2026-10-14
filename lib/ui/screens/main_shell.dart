@@ -17,6 +17,7 @@ import '../../core/services/zapret_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../widgets/nukefy_background.dart';
+import '../widgets/nukefy_feedback.dart';
 import 'home_screen.dart';
 import 'jammers_screen.dart';
 import 'servers_screen.dart';
@@ -66,6 +67,15 @@ class MainShell extends StatelessWidget {
       _TabSpec(Icons.settings_rounded, Icons.settings_outlined, s.t('settings'), NavDestination.settings),
     ];
 
+    // Every page the app can show, in one list: the mobile bar and the
+    // desktop rail both read it, so a page pinned on a phone appears in the
+    // same place on the desktop rail and the other way round.
+    final sitemap = <_TabSpec>[
+      ...tabs,
+      if (zapret) _TabSpec(Icons.sports_esports_rounded, Icons.sports_esports_outlined, s.t('zApps'), NavDestination.zapretApps),
+      if (zapret) _TabSpec(Icons.settings_suggest_rounded, Icons.settings_suggest_outlined, s.t('zSettings'), NavDestination.zapretSettings),
+    ];
+
     final pages = <Widget>[
       for (final tab in tabs) _pageFor(tab.destination, destination, desktop: desktop),
       if (zapret) ZapretGamesScreen(active: destination == NavDestination.zapretApps, embedded: true),
@@ -82,13 +92,6 @@ class MainShell extends StatelessWidget {
       // DNS is a first-class tab now; the legacy settings child route follows.
       NavDestination.settingsDns => tabs.indexWhere((tab) => tab.destination == NavDestination.dns),
       _ => tabs.indexWhere((tab) => tab.destination == destination),
-    };
-    final activeTab = switch (destination) {
-      // Child destinations own the highlight. Keeping the parent selected at
-      // the same time made Zapret look like two active tabs, especially on
-      // the mobile bottom bar.
-      NavDestination.zapretApps || NavDestination.zapretSettings || NavDestination.settingsGeneral || NavDestination.settingsAppearance || NavDestination.settingsAbout => -1,
-      _ => pageIndex,
     };
     final body = AnimatedSwitcher(
       duration: const Duration(milliseconds: 320),
@@ -131,7 +134,7 @@ class MainShell extends StatelessWidget {
                           Expanded(
                             child: Row(
                               children: [
-                                _SideRail(destination: destination),
+                                _SideRail(destination: destination, sitemap: sitemap),
                                 Expanded(
                                   child: Stack(
                                     children: [
@@ -155,7 +158,7 @@ class MainShell extends StatelessWidget {
               ),
             ],
           ),
-          bottomNavigationBar: desktop ? null : _BottomBar(tabs: tabs, index: activeTab),
+          bottomNavigationBar: desktop ? null : _BottomBar(sitemap: sitemap, destination: destination),
         ),
       ),
     );
@@ -280,33 +283,51 @@ class _TabSpec {
 }
 
 class _BottomBar extends StatelessWidget {
-  const _BottomBar({required this.tabs, required this.index});
-  final List<_TabSpec> tabs;
-  final int index;
+  const _BottomBar({required this.sitemap, required this.destination});
+
+  final List<_TabSpec> sitemap;
+  final NavDestination destination;
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final nav = context.watch<NavProvider>();
+    final s = context.read<SettingsProvider>().strings;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    // Keep the bottom bar legible on a phone. Less common tools remain one
-    // tap away in More instead of shrinking nine icons into unreadable slots.
-    const primaryDestinations = <NavDestination>{
-      NavDestination.home,
-      NavDestination.servers,
-      NavDestination.stats,
-      NavDestination.settings,
-    };
-    final primary = tabs.where((tab) => primaryDestinations.contains(tab.destination)).toList();
-    final extra = tabs.where((tab) => !primaryDestinations.contains(tab.destination)).toList();
-    bool selected(_TabSpec tab) {
-      if (tab.destination == NavDestination.settings) {
-        return index == tabs.indexWhere((item) => item.destination == NavDestination.settings);
+
+    _TabSpec? specOf(NavDestination value) {
+      for (final spec in sitemap) {
+        if (spec.destination == value) return spec;
       }
-      return index == tabs.indexOf(tab);
+      return null;
     }
-    final extraSelected = extra.any((tab) => index == tabs.indexOf(tab));
-    final more = _TabSpec(Icons.more_horiz_rounded, Icons.more_horiz_rounded, context.read<SettingsProvider>().strings.t('more'), NavDestination.speedTest);
-    final visibleCount = primary.length + (extra.isEmpty ? 0 : 1);
+
+    final home = specOf(NavDestination.home);
+    final servers = specOf(NavDestination.servers);
+    final settings = specOf(NavDestination.settings);
+
+    // The bar never scrolls and never swipes: three fixed keys, then the pages
+    // the user pinned (in pin order). With nothing pinned the free slot shows
+    // the page you are actually on, so the bar stays useful out of the box.
+    final pinned = <_TabSpec>[];
+    for (final value in nav.pins) {
+      final spec = specOf(value);
+      if (spec != null && !pinned.contains(spec)) pinned.add(spec);
+    }
+    if (pinned.isEmpty) {
+      final here = specOf(destination);
+      if (here != null && here.destination != NavDestination.home && here.destination != NavDestination.servers && here.destination != NavDestination.settings) {
+        pinned.add(here);
+      }
+    }
+
+    final slots = <_TabSpec>[
+      if (home != null) home,
+      if (servers != null) servers,
+      ...pinned,
+      if (settings != null) settings,
+    ];
+    final more = _TabSpec(Icons.more_horiz_rounded, Icons.more_horiz_rounded, s.t('sitemap'), NavDestination.speedTest);
 
     return Padding(
       // Sits above the gesture bar; the background continues underneath.
@@ -326,72 +347,214 @@ class _BottomBar extends StatelessWidget {
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            for (final spec in primary)
-              _Tab(
-                spec: spec,
-                selected: selected(spec),
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  context.read<NavProvider>().go(spec.destination);
-                },
-              ),
-            if (extra.isNotEmpty)
-              _Tab(
-                spec: more,
-                selected: extraSelected,
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  _showMobileMore(context, extra, index >= 0 && index < tabs.length ? tabs[index].destination : null);
-                },
-              ),
-          ].take(visibleCount).toList(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final count = slots.length + 1;
+            final slotWidth = constraints.maxWidth / count;
+            return Row(
+              children: [
+                for (final spec in slots)
+                  _Tab(
+                    spec: spec,
+                    selected: spec.destination == destination,
+                    maxWidth: slotWidth,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      context.read<NavProvider>().go(spec.destination);
+                    },
+                  ),
+                _Tab(
+                  spec: more,
+                  selected: false,
+                  maxWidth: slotWidth,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    _showSitemap(context, sitemap, desktop: false);
+                  },
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-Future<void> _showMobileMore(BuildContext context, List<_TabSpec> tabs, NavDestination? current) {
-  final s = context.read<SettingsProvider>().strings;
+/// The section map: every page of the app, with a pin for the ones the user
+/// wants in the bar. It is a bottom sheet on phones and a compact card on the
+/// desktop, where it opens from the three-dot button in the rail header.
+Future<void> _showSitemap(BuildContext context, List<_TabSpec> entries, {required bool desktop}) {
+  if (desktop) {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => _SitemapCard(entries: entries),
+    );
+  }
   return showModalBottomSheet<void>(
     context: context,
     useSafeArea: true,
     showDragHandle: true,
     backgroundColor: context.palette.card,
-    builder: (sheetContext) => Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(s.t('more'), style: AppTextStyles.headline),
-          const SizedBox(height: 8),
-          for (final spec in tabs)
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-              leading: Icon(spec.icon, color: spec.destination == current ? context.palette.accent : context.palette.textSecondary),
-              title: Text(spec.label),
-              trailing: spec.destination == current ? Icon(Icons.check_rounded, color: context.palette.accent) : null,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                context.read<NavProvider>().go(spec.destination);
-              },
-            ),
-        ],
-      ),
-    ),
+    builder: (_) => _SitemapCard(entries: entries, sheet: true),
   );
 }
 
+class _SitemapCard extends StatelessWidget {
+  const _SitemapCard({required this.entries, this.sheet = false});
+
+  final List<_TabSpec> entries;
+  final bool sheet;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
+    final nav = context.watch<NavProvider>();
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.map_rounded, size: 18, color: p.textSecondary),
+            const SizedBox(width: 10),
+            Expanded(child: Text(s.t('sitemap'), style: AppTextStyles.headline)),
+            Text('${s.t('pinnedOf')} ${nav.pins.length}/${NavProvider.maxPins}',
+                style: AppTextStyles.bodySecondary.copyWith(fontSize: 12, color: p.textSecondary)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(s.t('sitemapHint'), style: AppTextStyles.bodySecondary.copyWith(fontSize: 12.5, color: p.textSecondary)),
+        const SizedBox(height: 10),
+        Flexible(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final spec in entries) _SitemapRow(spec: spec),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+    if (!sheet) {
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 430, maxHeight: 560),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+            decoration: BoxDecoration(
+              color: p.card,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: p.border),
+            ),
+            child: body,
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+      child: ConstrainedBox(constraints: const BoxConstraints(maxHeight: 520), child: body),
+    );
+  }
+}
+
+class _SitemapRow extends StatelessWidget {
+  const _SitemapRow({required this.spec});
+
+  final _TabSpec spec;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
+    final nav = context.watch<NavProvider>();
+    final destination = nav.destination;
+    final selected = spec.destination == destination;
+    final fixed = _isFixedSlot(spec.destination);
+    final pinned = nav.isPinned(spec.destination);
+    final index = nav.pinIndex(spec.destination);
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        Navigator.of(context).pop();
+        nav.go(spec.destination);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 2),
+        padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
+        decoration: BoxDecoration(
+          color: selected ? p.accent.withValues(alpha: .12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(selected ? spec.icon : spec.outlined, size: 18, color: selected ? p.accent : p.textSecondary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(spec.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.bodyRegular.copyWith(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? p.accent : p.text)),
+            ),
+            if (fixed)
+              Tooltip(
+                message: s.t('alwaysInBar'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Icon(Icons.vertical_align_bottom_rounded, size: 15, color: p.textSecondary),
+                ),
+              )
+            else
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                tooltip: pinned ? s.t('unpin') : s.t('pin'),
+                onPressed: () {
+                  final ok = nav.togglePin(spec.destination);
+                  if (!ok) showNukefySnack(context, s.t('pinLimit'), error: true);
+                },
+                icon: Icon(
+                  pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                  size: 17,
+                  color: pinned ? p.accent : p.textDisabled,
+                ),
+              ),
+            if (pinned)
+              Padding(
+                padding: const EdgeInsets.only(left: 6, right: 6),
+                child: Text('${index + 1}',
+                    style: AppTextStyles.bodySecondary.copyWith(fontSize: 11, color: p.textSecondary)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The three keys that are always on the bar, so pinning them would be a
+/// no-op the user cannot explain.
+bool _isFixedSlot(NavDestination value) =>
+    value == NavDestination.home || value == NavDestination.servers || value == NavDestination.settings;
+
 class _Tab extends StatelessWidget {
-  const _Tab({required this.spec, required this.selected, required this.onTap});
+  const _Tab({required this.spec, required this.selected, required this.onTap, this.maxWidth = 60});
 
   final _TabSpec spec;
   final bool selected;
   final VoidCallback onTap;
+
+  /// Width of one bar slot. The pill shrinks instead of overflowing when the
+  /// user pins pages on a narrow phone.
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -416,7 +579,7 @@ class _Tab extends StatelessWidget {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 280),
               curve: Curves.easeOutBack,
-              width: selected ? 60 : 44,
+              width: (selected ? 60.0 : 44.0) < maxWidth ? (selected ? 60.0 : 44.0) : maxWidth,
               height: 40,
               decoration: BoxDecoration(
                 color: selected ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
@@ -478,8 +641,9 @@ class _RailGroup {
 /// Grouped navigation: four sections with sub-pages, plus a fixed bottom
 /// row for auto-tune, add-ons and the wide settings button.
 class _SideRail extends StatefulWidget {
-  const _SideRail({required this.destination});
+  const _SideRail({required this.destination, required this.sitemap});
   final NavDestination destination;
+  final List<_TabSpec> sitemap;
   @override
   State<_SideRail> createState() => _SideRailState();
 }
@@ -495,6 +659,14 @@ class _SideRailState extends State<_SideRail> {
     final collapsed = nav.collapsed;
     final zapret = Platform.isWindows;
     final destination = widget.destination;
+    // Pinned pages keep their pin order here too, so the rail and the phone
+    // bar never disagree about what sits where.
+    final pinnedSpecs = <_TabSpec>[];
+    for (final value in nav.pins) {
+      for (final spec in widget.sitemap) {
+        if (spec.destination == value && !pinnedSpecs.contains(spec)) pinnedSpecs.add(spec);
+      }
+    }
 
     final groups = <_RailGroup>[
       _RailGroup(key: 'home', alwaysOpen: true, icon: Icons.home_rounded, label: s.t('home'), destination: NavDestination.home, leaves: [
@@ -588,6 +760,13 @@ class _SideRailState extends State<_SideRail> {
                   onPressed: nav.toggleRail,
                   icon: const Icon(Icons.menu_rounded, size: 19),
                 ),
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                  tooltip: s.t('sitemap'),
+                  onPressed: () => _showSitemap(context, widget.sitemap, desktop: true),
+                  icon: Icon(Icons.more_horiz_rounded, size: 19, color: p.textSecondary),
+                ),
                 const SizedBox(height: 2),
               ],
             )
@@ -604,6 +783,27 @@ class _SideRailState extends State<_SideRail> {
                   // down and read as a second title. The rail starts with the
                   // sections, and the three lines on the right fold it.
                   const Spacer(),
+                  // Right side of the header: the pinned pages as plain icons,
+                  // then the three-dot map of everything else.
+                  for (final pin in pinnedSpecs)
+                    Tooltip(
+                      message: pin.label,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                        onPressed: () => nav.go(pin.destination),
+                        icon: Icon(pin.icon,
+                            size: 16, color: pin.destination == destination ? p.accent : p.textSecondary),
+                      ),
+                    ),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                    tooltip: s.t('sitemap'),
+                    onPressed: () => _showSitemap(context, widget.sitemap, desktop: true),
+                    icon: Icon(pinnedSpecs.isEmpty ? Icons.more_horiz_rounded : Icons.more_vert_rounded,
+                        size: 19, color: p.textSecondary),
+                  ),
                   IconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(width: 30, height: 30),

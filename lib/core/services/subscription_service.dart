@@ -100,7 +100,7 @@ class SubscriptionService {
           'User-Agent': subscription.userAgent ??
               userAgent ??
               clientUserAgents[clientIdentity] ??
-              AppConstants.userAgent,
+              AppConstants.clientUserAgent,
           'Accept': '*/*',
           // Remnawave/Marzban panels with device limits refuse clients that
           // do not identify themselves ("Включите передачу HWID"). The id is

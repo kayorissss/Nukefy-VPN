@@ -210,10 +210,10 @@ class VpnPlatform {
   }
 
   Future<String> downloadXrayCore({void Function(DownloadProgress progress)? onProgress}) async {
-    if (Platform.isAndroid || Platform.isIOS) throw const CoreDownloadException('xray-platform-unsupported');
+    if (Platform.isAndroid || Platform.isIOS) throw CoreDownloadException('xray-platform-unsupported');
     final response = await _dio.get<Map<String, dynamic>>(
       'https://api.github.com/repos/XTLS/Xray-core/releases/latest',
-      options: Options(headers: const {'Accept': 'application/vnd.github+json', 'User-Agent': AppConstants.userAgent}, responseType: ResponseType.json),
+      options: Options(headers: {'Accept': 'application/vnd.github+json', 'User-Agent': AppConstants.clientUserAgent}, responseType: ResponseType.json),
     );
     final assets = (response.data?['assets'] as List?) ?? const [];
     final asset = _pickXrayAsset(assets);
@@ -223,11 +223,11 @@ class VpnPlatform {
     final expected = (asset['size'] as num?)?.toInt() ?? 0;
     final digest = '${asset['digest'] ?? ''}';
     if (!Uri.tryParse(url).toString().startsWith('https://github.com/XTLS/Xray-core/releases/download/')) throw const CoreDownloadException('xray-invalid-url');
-    if (!RegExp(r'^sha256:[a-f0-9]{64}$').hasMatch(digest)) throw const CoreDownloadException('xray-no-digest');
+    if (!RegExp(r'^sha256:[a-f0-9]{64}$').hasMatch(digest)) throw CoreDownloadException('xray-no-digest');
     final dir = await xrayDirectory();
     final archive = File(p.join(dir.path, name));
     final started = DateTime.now();
-    final streamResponse = await _dio.get<ResponseBody>(url, options: Options(responseType: ResponseType.stream, headers: const {'User-Agent': AppConstants.userAgent}));
+    final streamResponse = await _dio.get<ResponseBody>(url, options: Options(responseType: ResponseType.stream, headers: {'User-Agent': AppConstants.clientUserAgent}));
     final total = expected > 0 ? expected : int.tryParse(streamResponse.headers.value(Headers.contentLengthHeader) ?? '') ?? 0;
     var received = 0;
     final sink = archive.openWrite();
@@ -1213,9 +1213,9 @@ foreach ($s in $svcs) {
     final response = await _dio.get<Map<String, dynamic>>(
       AppConstants.singboxReleasesApi,
       options: Options(
-        headers: const {
+        headers: {
           'Accept': 'application/vnd.github+json',
-          'User-Agent': AppConstants.userAgent,
+          'User-Agent': AppConstants.clientUserAgent,
         },
         responseType: ResponseType.json,
       ),
@@ -1240,7 +1240,7 @@ foreach ($s in $svcs) {
     if (expected > 0 && existing == expected) {
       onProgress?.call(DownloadProgress(received: existing, total: expected, startedAt: started));
     } else {
-      final headers = <String, dynamic>{'User-Agent': AppConstants.userAgent};
+      final headers = <String, dynamic>{'User-Agent': AppConstants.clientUserAgent};
       if (existing > 0) headers['Range'] = 'bytes=$existing-';
       final streamResponse = await _dio.get<ResponseBody>(
         url,

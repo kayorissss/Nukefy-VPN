@@ -189,7 +189,7 @@ class GameBlocklistService {
       final response = await _dio.get<List<dynamic>>(
         _contentsApi,
         options: Options(
-          headers: const {
+          headers: {
             'Accept': 'application/vnd.github+json',
             'User-Agent': AppConstants.clientUserAgent,
           },

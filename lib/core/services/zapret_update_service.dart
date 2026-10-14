@@ -25,10 +25,10 @@ class ZapretUpdateInfo {
 class ZapretUpdateService {
   final Dio _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 15),
-    receiveTimeout: const Duration(minutes: 2),
-    sendTimeout: const Duration(seconds: 30),
+    receiveTimeout: Duration(minutes: 2),
+    sendTimeout: Duration(seconds: 30),
   ));
-  static const repo = 'Flowseal/zapret-discord-youtube';
+  static repo = 'Flowseal/zapret-discord-youtube';
 
   Future<ZapretUpdateInfo?> check() async {
     final response = await _dio.get<Map<String, dynamic>>(

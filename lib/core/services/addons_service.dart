@@ -132,7 +132,7 @@ class AddonsService extends ChangeNotifier {
       final response = await _dio.get<List<dynamic>>(
         'https://api.github.com/users/kayorissss/repos?per_page=100&sort=pushed',
         options: Options(
-          headers: const {
+          headers: {
             'Accept': 'application/vnd.github+json',
             'User-Agent': AppConstants.clientUserAgent,
           },
@@ -171,7 +171,7 @@ class AddonsService extends ChangeNotifier {
       final response = await _dio.get<Map<String, dynamic>>(
         'https://api.github.com/repos/${AppConstants.githubRepo.split('/').first}/$repo/releases/latest',
         options: Options(
-          headers: const {
+          headers: {
             'Accept': 'application/vnd.github+json',
             'User-Agent': AppConstants.clientUserAgent,
           },
