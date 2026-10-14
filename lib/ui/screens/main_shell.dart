@@ -596,8 +596,10 @@ class _SideRailState extends State<_SideRail> {
               height: 34,
               child: Row(
                 children: [
-                  const SizedBox(width: 4),
-                  const NukefyLogo(size: 18, glow: false),
+                  // Same left offset as the section icons below, so the logo,
+                  // every section icon and every leaf icon share one column.
+                  const SizedBox(width: 10),
+                  const NukefyLogo(size: 20, glow: false),
                   // The spelled-out brand caption is gone: it pushed «ГЛАВНАЯ»
                   // down and read as a second title. The rail starts with the
                   // sections, and the three lines on the right fold it.
