@@ -111,7 +111,7 @@ class ZapretService extends ChangeNotifier {
     finally { busy = false; notifyListeners(); }
   }
 
-  /// User's own `--dns=...` (or any other winws argument) appended verbatim.
+  /// User's own `--dns-addr=...` (or any other winws argument) appended verbatim.
   /// Without this the field in the UI did not reach winws at all, which is
   /// why "настраиваю DNS, а ничего не меняется".
   String extraArgs = '';

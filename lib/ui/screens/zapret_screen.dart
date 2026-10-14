@@ -861,7 +861,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
                             controller: _extraArgs,
                             decoration: InputDecoration(
                               isDense: true,
-                              hintText: '--dns=1.1.1.1 --dns=8.8.8.8',
+                              hintText: '--dns-addr=1.1.1.1 --dns-port=53',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                           ),

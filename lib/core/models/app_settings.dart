@@ -127,7 +127,7 @@ class AppSettings {
   /// Restart winws automatically when the strategy changes.
   bool zapretAutoRestart;
 
-  /// Free-form extra winws arguments (for example `--dns=1.1.1.1`). Passed to
+  /// Free-form extra winws arguments (for example `--dns-addr=1.1.1.1`). Passed to
   /// the capture verbatim, so the field in the UI really reaches the process.
   String zapretExtraArgs;
   /// Karing-style whitelist bypass profile.
