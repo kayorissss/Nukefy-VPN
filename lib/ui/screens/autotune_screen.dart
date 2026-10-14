@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/models/app_settings.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/nav_provider.dart';
 import '../../core/providers/servers_provider.dart';
@@ -273,7 +272,7 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
   /// the snapshot, the system proxy from its own backup file, autostart from the
   /// snapshot too, and only the things this run actually started are stopped.
   /// Nothing is deleted and no foreign software is touched.
-  Future<void> _undo() async {
+  Future<void> _revert() async {
     final record = _undo;
     if (record == null || _busy) return;
     final settings = context.read<SettingsProvider>();
@@ -397,7 +396,7 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
           Text(s.t('autoSafeNote'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12), textAlign: TextAlign.center),
           const SizedBox(height: 26),
           if (_undo != null) ...[
-            _UndoCard(s: s, record: _undo!, busy: _busy, onUndo: _undo),
+            _UndoCard(s: s, record: _undo!, busy: _busy, onUndo: _revert),
             const SizedBox(height: 18),
           ],
           FilledButton.icon(
@@ -581,7 +580,7 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
           if (_undo != null) ...[
             const SizedBox(height: 14),
             TextButton.icon(
-              onPressed: _busy ? null : _undo,
+              onPressed: _busy ? null : _revert,
               icon: const Icon(Icons.undo_rounded, size: 17),
               label: Text(s.t('autoUndo')),
             ),
