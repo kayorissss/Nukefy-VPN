@@ -191,6 +191,20 @@ class ShareLinkBuilder {
     if (headers is Map && headers['Host'] != null) {
       query['host'] = '${headers['Host']}';
     }
+    if (transport['host'] != null && '${transport['host']}'.isNotEmpty) {
+      query['host'] = '${transport['host']}';
+    }
+    if (type == 'xhttp' || type == 'splithttp') {
+      query['type'] = 'xhttp';
+      final mode = transport['mode'];
+      if (mode != null && '$mode'.isNotEmpty && '$mode' != 'auto') {
+        query['mode'] = '$mode';
+      }
+      final extra = transport['extra'];
+      if (extra is Map && extra.isNotEmpty) {
+        query['extra'] = jsonEncode(extra);
+      }
+    }
     return query;
   }
 

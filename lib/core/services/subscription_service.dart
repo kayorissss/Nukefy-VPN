@@ -8,6 +8,7 @@ import '../utils/link_parser.dart';
 class SubscriptionFetch {
   SubscriptionFetch({
     required this.servers,
+    required this.usedUrl,
     this.title,
     this.uploadBytes,
     this.downloadBytes,
@@ -18,6 +19,9 @@ class SubscriptionFetch {
   });
 
   final List<ServerDraft> servers;
+
+  /// The URL that actually answered: the main one or one of the mirrors.
+  final String usedUrl;
   final String? title;
   final int? uploadBytes;
   final int? downloadBytes;
@@ -36,8 +40,28 @@ class SubscriptionService {
     SubscriptionModel subscription, {
     String? userAgent,
   }) async {
-    final response = await _dio.get<String>(
+    final candidates = <String>[
       subscription.url,
+      ...subscription.mirrors,
+    ].map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList();
+    Object? lastError;
+    for (final url in candidates) {
+      try {
+        return await _fetchOne(url, subscription, userAgent: userAgent);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw SubscriptionException('${lastError ?? 'empty-subscription'}');
+  }
+
+  Future<SubscriptionFetch> _fetchOne(
+    String url,
+    SubscriptionModel subscription, {
+    String? userAgent,
+  }) async {
+    final response = await _dio.get<String>(
+      url,
       options: Options(
         responseType: ResponseType.plain,
         headers: {
@@ -63,6 +87,7 @@ class SubscriptionService {
     );
     return SubscriptionFetch(
       servers: parsed.servers,
+      usedUrl: url,
       title: _profileTitle(headers),
       uploadBytes: _userInfo(headers, 'upload'),
       downloadBytes: _userInfo(headers, 'download'),

@@ -31,7 +31,7 @@ class BootReceiver : BroadcastReceiver() {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
-                NotificationChannel("nukefy_vpn", "Nukefy VPN", NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel("nukefy_vpn", "Nukefy Client", NotificationManager.IMPORTANCE_HIGH),
             )
         }
         val pending = PendingIntent.getActivity(
@@ -42,7 +42,7 @@ class BootReceiver : BroadcastReceiver() {
         )
         val notification = NotificationCompat.Builder(context, "nukefy_vpn")
             .setSmallIcon(R.drawable.ic_stat_vpn)
-            .setContentTitle("Nukefy VPN")
+            .setContentTitle("Nukefy Client")
             .setContentText("Tap to open")
             .setContentIntent(pending)
             .setAutoCancel(true)

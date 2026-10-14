@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 class PingUtils {
+  /// Real TCP handshake timing — nothing is simulated anywhere in the app.
+  /// Returns elapsed milliseconds, or -1 when the host cannot be resolved
+  /// or the port does not answer within [timeout].
   static Future<int> tcpPing(
     String host,
     int port, {
@@ -9,7 +12,18 @@ class PingUtils {
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
-      final socket = await Socket.connect(host, port, timeout: timeout);
+      var target = host;
+      if (InternetAddress.tryParse(host) == null) {
+        final resolved = await InternetAddress.lookup(host)
+            .timeout(timeout);
+        if (resolved.isEmpty) return -1;
+        target = resolved.first.address;
+      }
+      final socket = await Socket.connect(
+        target,
+        port,
+        timeout: timeout - stopwatch.elapsed,
+      );
       stopwatch.stop();
       socket.destroy();
       final ms = stopwatch.elapsedMilliseconds;

@@ -1,7 +1,12 @@
 class FormatUtils {
+  /// Unit language follows the UI language (set once from NukefyApp).
+  static bool ruUnits = true;
+
   static String bytes(int value) {
     if (value < 0) value = 0;
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    final units = ruUnits
+        ? const ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
+        : const ['B', 'KB', 'MB', 'GB', 'TB'];
     var size = value.toDouble();
     var unit = 0;
     while (size >= 1024 && unit < units.length - 1) {
@@ -13,7 +18,13 @@ class FormatUtils {
   }
 
   static String speed(int bytesPerSecond) {
-    return '${bytes(bytesPerSecond)}/s';
+    return '${bytes(bytesPerSecond)}${ruUnits ? '/с' : '/s'}';
+  }
+
+  static String ping(int? ms) {
+    if (ms == null) return '—';
+    if (ms < 0) return ruUnits ? 'недоступен' : 'unreachable';
+    return '$ms ${ruUnits ? 'мс' : 'ms'}';
   }
 
   static String duration(Duration value) {

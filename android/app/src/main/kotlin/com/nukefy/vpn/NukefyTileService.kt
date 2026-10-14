@@ -11,7 +11,7 @@ class NukefyTileService : TileService() {
         super.onStartListening()
         val tile = qsTile ?: return
         tile.state = if (NukefyVpnService.running) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = "Nukefy VPN"
+        tile.label = "Nukefy Client"
         tile.updateTile()
     }
 

@@ -206,6 +206,7 @@ class ServersProvider extends ChangeNotifier {
       sub
         ..lastUpdated = DateTime.now()
         ..lastError = null
+        ..lastUsedUrl = fetched.usedUrl
         ..uploadBytes = fetched.uploadBytes ?? sub.uploadBytes
         ..downloadBytes = fetched.downloadBytes ?? sub.downloadBytes
         ..totalBytes = fetched.totalBytes ?? sub.totalBytes
@@ -247,6 +248,7 @@ class ServersProvider extends ChangeNotifier {
     UpdateInterval? interval,
     String? userAgent,
     bool? pinned,
+    List<String>? mirrors,
   }) async {
     final sub = subscriptions.where((s) => s.id == id).firstOrNull;
     if (sub == null) return;
@@ -255,6 +257,13 @@ class ServersProvider extends ChangeNotifier {
     if (interval != null) sub.autoUpdateInterval = interval;
     if (userAgent != null) sub.userAgent = userAgent;
     if (pinned != null) sub.isPinned = pinned;
+    if (mirrors != null) {
+      sub.mirrors = mirrors
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty && e != sub.url)
+          .toSet()
+          .toList();
+    }
     await _persist();
     notifyListeners();
   }

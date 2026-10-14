@@ -19,7 +19,7 @@ class NukefyVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ensureChannel()
-        promoteForeground("Nukefy VPN")
+        promoteForeground("Nukefy Client")
         when (intent?.action) {
             ACTION_STOP -> {
                 stopCore()
@@ -31,7 +31,8 @@ class NukefyVpnService : VpnService() {
                 val configJson = intent.getStringExtra("configJson").orEmpty()
                 val configPath = intent.getStringExtra("configPath").orEmpty()
                 val preferTun = intent.getBooleanExtra("preferTun", false)
-                val error = startCore(configJson, configPath, preferTun)
+                val engine = intent.getStringExtra("engine") ?: "singbox"
+                val error = startCore(configJson, configPath, preferTun, engine)
                 if (error != null) {
                     stopCore()
                     finish(mapOf("ok" to false, "mode" to mode, "error" to error))
@@ -46,7 +47,7 @@ class NukefyVpnService : VpnService() {
             else -> {
                 val config = File(filesDir, "run/config.json")
                 if (shouldRevive() && config.exists()) {
-                    val error = startCore(config.readText(), config.absolutePath, NukefyCore.hasLibbox)
+                    val error = startCore(config.readText(), config.absolutePath, NukefyCore.hasLibbox, "singbox")
                     if (error == null) {
                         running = true
                         return START_STICKY
@@ -69,7 +70,17 @@ class NukefyVpnService : VpnService() {
         super.onDestroy()
     }
 
-    private fun startCore(configJson: String, configPath: String, preferTun: Boolean): String? {
+    private fun startCore(configJson: String, configPath: String, preferTun: Boolean, engine: String): String? {
+        if (engine == "xray") {
+            // XHTTP/SplitHTTP servers: sing-box (and libbox) cannot run them.
+            val binary = xrayFile(this)
+            if (binary == null || !binary.exists()) {
+                mode = "missing"
+                return "XRAY_MISSING"
+            }
+            mode = "proxy"
+            return startProcess(binary, configPath, xray = true)
+        }
         if (NukefyCore.hasLibbox) {
             mode = if (preferTun) "tun" else "proxy"
             return NukefyCore.start(this, configJson)
@@ -83,10 +94,18 @@ class NukefyVpnService : VpnService() {
         return startProcess(binary, configPath)
     }
 
-    private fun startProcess(binary: File, configPath: String): String? {
+    private fun startProcess(binary: File, configPath: String, xray: Boolean = false): String? {
         return try {
             val work = File(configPath).parentFile ?: filesDir
-            val proc = ProcessBuilder(binary.absolutePath, "run", "-c", configPath, "-D", work.absolutePath)
+            val builder = if (xray) {
+                ProcessBuilder(binary.absolutePath, "run", "-c", configPath)
+            } else {
+                ProcessBuilder(binary.absolutePath, "run", "-c", configPath, "-D", work.absolutePath)
+            }
+            if (xray) {
+                builder.environment()["XRAY_LOCATION_ASSET"] = binary.parentFile?.absolutePath ?: filesDir.absolutePath
+            }
+            val proc = builder
                 .directory(binary.parentFile)
                 .redirectErrorStream(true)
                 .start()
@@ -131,7 +150,7 @@ class NukefyVpnService : VpnService() {
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java)
-        val channel = NotificationChannel(CHANNEL_ID, "Nukefy VPN", NotificationManager.IMPORTANCE_LOW)
+        val channel = NotificationChannel(CHANNEL_ID, "Nukefy Client", NotificationManager.IMPORTANCE_LOW)
         manager.createNotificationChannel(channel)
     }
 
@@ -159,7 +178,7 @@ class NukefyVpnService : VpnService() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_vpn)
-            .setContentTitle("Nukefy VPN")
+            .setContentTitle("Nukefy Client")
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)
@@ -194,6 +213,7 @@ class NukefyVpnService : VpnService() {
             configPath: String,
             configJson: String,
             preferTun: Boolean,
+            engine: String,
             callback: (Map<String, Any?>) -> Unit,
         ) {
             pending = callback
@@ -202,6 +222,7 @@ class NukefyVpnService : VpnService() {
                 .putExtra("configPath", configPath)
                 .putExtra("configJson", configJson)
                 .putExtra("preferTun", preferTun)
+                .putExtra("engine", engine)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
@@ -216,12 +237,23 @@ class NukefyVpnService : VpnService() {
 
         fun coreInfo(context: Context): Map<String, Any?> {
             val binary = binaryFile(context)
+            val xray = xrayFile(context)
             return mapOf(
                 "libbox" to NukefyCore.hasLibbox,
                 "binary" to (binary?.exists() == true),
                 "binaryPath" to binary?.absolutePath,
                 "version" to NukefyCore.version(),
+                "xray" to (xray?.exists() == true),
+                "xrayPath" to xray?.absolutePath,
             )
+        }
+
+        fun xrayFile(context: Context): File? {
+            val stored = context.getSharedPreferences(MainActivity.PREFS, MODE_PRIVATE)
+                .getString(MainActivity.KEY_XRAY, null)
+            if (!stored.isNullOrEmpty()) return File(stored)
+            val candidate = File(context.filesDir, "core/xray")
+            return if (candidate.exists()) candidate else null
         }
 
         fun binaryFile(context: Context): File? {

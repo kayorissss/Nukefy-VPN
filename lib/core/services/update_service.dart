@@ -87,6 +87,12 @@ class UpdateService {
           );
     }
     if (Platform.isWindows) {
+      // Prefer the installer: it replaces the previous version in place.
+      final installer = maps.cast<Map<String, dynamic>?>().firstWhere(
+            (asset) => nameHas(asset!, 'setup') && nameHas(asset, '.exe'),
+            orElse: () => null,
+          );
+      if (installer != null) return installer;
       return maps.cast<Map<String, dynamic>?>().firstWhere(
             (asset) =>
                 nameHas(asset!, '.exe') ||

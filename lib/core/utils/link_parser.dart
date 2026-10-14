@@ -974,9 +974,36 @@ class LinkParser {
         };
       case 'quic':
         return {'type': 'quic'};
+      case 'xhttp':
+      case 'splithttp':
+      case 'split-http':
+      case 'split_http':
+        // XHTTP/SplitHTTP (Xray). sing-box cannot run it, but we keep every
+        // parameter so the Xray engine can. `extra` arrives as a JSON string.
+        final extra = _xhttpExtra(q['extra']);
+        return {
+          'type': 'xhttp',
+          'path': _path(q['path']),
+          if ((q['host'] ?? '').isNotEmpty) 'host': q['host'],
+          'mode': (q['mode'] ?? 'auto').isEmpty ? 'auto' : q['mode']!,
+          if (extra != null) 'extra': extra,
+        };
       default:
         return null;
     }
+  }
+
+  static Map<String, dynamic>? _xhttpExtra(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return decoded.map((k, v) => MapEntry(k.toString(), v));
+      }
+    } catch (_) {
+      // A malformed extra must not kill the whole server entry.
+    }
+    return null;
   }
 
   static String _path(String? path) {
