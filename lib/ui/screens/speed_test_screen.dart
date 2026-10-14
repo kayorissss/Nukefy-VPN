@@ -196,7 +196,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
           child: ResponsiveFrame(
             maxWidth: 1200,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.paddingOf(context).bottom + 100),
               children: [
                 // One hero card: the dial on the left, the four numbers on the
                 // right. The old layout glued a bare gauge, a flat row of

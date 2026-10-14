@@ -551,8 +551,8 @@ class _UpdateBannerState extends State<_UpdateBanner> {
       ),
       child: Row(
         children: [
-          Container(width: 44, height: 44, decoration: BoxDecoration(color: p.accent.withValues(alpha: .14), borderRadius: BorderRadius.circular(12)), child: Icon(info == null ? Icons.system_update_alt_rounded : Icons.download_rounded, color: p.accent)),
-          const SizedBox(width: 12),
+          Container(width: kRowLead, height: kRowLead, decoration: BoxDecoration(color: p.accent.withValues(alpha: .14), borderRadius: kRowLeadRadius), child: Icon(info == null ? Icons.system_update_alt_rounded : Icons.download_rounded, color: p.accent)),
+          const SizedBox(width: kRowGap),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -58,7 +58,7 @@ class ServersScreen extends StatelessWidget {
                         Expanded(
                           flex: 2,
                           child: SizedBox(
-                            height: 42,
+                            height: 40,
                             child: TextField(
                               onChanged: servers.setQuery,
                               decoration: InputDecoration(
@@ -241,15 +241,15 @@ class _BigAction extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: kRowLead,
+                height: kRowLead,
                 decoration: BoxDecoration(
                   color: p.accent.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: kRowLeadRadius,
                 ),
                 child: Icon(icon, size: 20, color: p.accent),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: kRowGap),
               Expanded(
                 child: Text(
                   label,

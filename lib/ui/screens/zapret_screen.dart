@@ -1137,15 +1137,15 @@ class _ZapretScreenState extends State<ZapretScreen> {
       child: Row(
         children: [
           Container(
-            width: 42,
-            height: 42,
+            width: kRowLead,
+            height: kRowLead,
             decoration: BoxDecoration(
               color: p.accent.withValues(alpha: .12),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: kRowLeadRadius,
             ),
             child: Icon(Icons.alt_route_rounded, color: p.accent),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: kRowGap),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1490,7 +1490,7 @@ class _ZapretFailureReport extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(error, style: TextStyle(color: AppColors.error, fontSize: 12.5)),
+          SelectableText(error, style: TextStyle(color: AppColors.error, fontSize: 12.5)),
           const SizedBox(height: 8),
           Container(
             width: double.infinity,

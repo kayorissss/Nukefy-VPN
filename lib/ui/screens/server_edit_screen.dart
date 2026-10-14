@@ -91,7 +91,7 @@ class _ServerEditScreenState extends State<ServerEditScreen> {
               ),
             ),
             if (_error != null)
-              Text(_error!, style: AppTextStyles.bodySecondary.copyWith(color: Colors.redAccent)),
+              SelectableText(_error!, style: AppTextStyles.bodySecondary.copyWith(color: Colors.redAccent)),
           ],
         ),
         ),

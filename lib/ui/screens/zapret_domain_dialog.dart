@@ -147,7 +147,7 @@ class _DomainManagerDialogState extends State<DomainManagerDialog> {
             IconButton(tooltip: s.t('zOpenFile'), onPressed: _busy ? null : () => _open(true), icon: const Icon(Icons.description_outlined)),
             IconButton(tooltip: s.t('zOpenFolder'), onPressed: _busy ? null : () => _open(false), icon: const Icon(Icons.folder_open_outlined)),
           ]),
-          if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.error))),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(_error!, maxLines: 2, style: TextStyle(color: p.error))),
           const SizedBox(height: 10),
           Expanded(
             child: DecoratedBox(

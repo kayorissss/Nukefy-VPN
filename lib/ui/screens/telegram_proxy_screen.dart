@@ -21,13 +21,16 @@ class TelegramProxyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final service = context.watch<TgWsProxyService>();
     final s = context.watch<SettingsProvider>().strings;
+    // Same page rhythm as the other shell screens: 16px sides, 16px top, and
+    // enough room at the bottom so the mobile bar never covers the last card.
+    final bottom = MediaQuery.paddingOf(context).bottom;
     return NukefyBackground(
       child: SafeArea(
         bottom: false,
         child: ResponsiveFrame(
           maxWidth: 1200,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 22, 20, 28),
+            padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Container(width: 48, height: 48, decoration: BoxDecoration(color: const Color(0xFF229ED9).withValues(alpha: .16), borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.send_rounded, color: Color(0xFF229ED9), size: 26)),
@@ -329,7 +332,7 @@ class _LogCard extends StatelessWidget {
         if (lines.isEmpty)
           Padding(padding: const EdgeInsets.symmetric(vertical: 58), child: Center(child: Text(s.t('tgProxyNoLogs'), style: p.secondaryStyle)))
         else
-          Container(width: double.infinity, constraints: const BoxConstraints(maxHeight: 340), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: p.background.withValues(alpha: .7), borderRadius: BorderRadius.circular(8)), child: SingleChildScrollView(reverse: true, child: SelectableText(lines.join('\n'), style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 11, height: 1.45, color: p.textSecondary)))),
+          Container(width: double.infinity, constraints: const BoxConstraints(maxHeight: 340), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: p.background.withValues(alpha: .7), borderRadius: BorderRadius.circular(10)), child: SingleChildScrollView(reverse: true, child: SelectableText(lines.join('\n'), style: TextStyle(fontFamily: 'JetBrainsMono', fontSize: 11, height: 1.45, color: p.textSecondary)))),
       ]),
     );
   }

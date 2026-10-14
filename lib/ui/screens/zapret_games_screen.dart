@@ -133,7 +133,7 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
     final p = context.palette;
     final catalog = _catalog.where((g) => g.name.toLowerCase().contains(_query.toLowerCase())).toList();
     final content = SafeArea(bottom: false, child: LayoutBuilder(builder: (context, constraints) => SingleChildScrollView(
-      controller: _scroll, key: const PageStorageKey('zapret-games'), padding: const EdgeInsets.fromLTRB(24, 20, 24, 100),
+      controller: _scroll, key: const PageStorageKey('zapret-games'), padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.paddingOf(context).bottom + 100),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
           if (widget.embedded)
@@ -166,7 +166,7 @@ class _ZapretGamesScreenState extends State<ZapretGamesScreen> {
         Text(s.t('zCatalogHint'), style: p.secondaryStyle),
         const SizedBox(height: 6),
         Text('medvedeff-true/ru-gaming-blocklist • games/*.txt', style: p.captionStyle),
-        SizedBox(height: 40, child: _loading ? const Center(child: LinearProgressIndicator()) : _error != null ? Text(_error!, maxLines: 2, style: TextStyle(color: p.error)) : _notice != null ? Text(_notice!, maxLines: 3, style: p.secondaryStyle) : _zapret.busy ? Text(s.t('zBusy')) : const SizedBox()),
+        SizedBox(height: 40, child: _loading ? const Center(child: LinearProgressIndicator()) : _error != null ? SelectableText(_error!, maxLines: 2, style: TextStyle(color: p.error)) : _notice != null ? Text(_notice!, maxLines: 3, style: p.secondaryStyle) : _zapret.busy ? Text(s.t('zBusy')) : const SizedBox()),
         if (catalog.isEmpty && !_loading) Text(s.t('zNoGames')),
         LayoutBuilder(builder: (context, box) {
           final count = _grid ? (box.maxWidth / 270).floor().clamp(1, 8) : 1;

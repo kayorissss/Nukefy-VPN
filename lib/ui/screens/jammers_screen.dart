@@ -12,6 +12,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/services/game_icon_service.dart';
 import '../../core/utils/ping_utils.dart';
 import '../../l10n/strings.dart';
+import '../widgets/section_card.dart';
 
 enum JammerVerdict { idle, none, whitelist, partial, dead }
 
@@ -406,11 +407,11 @@ class _ServiceIconState extends State<_ServiceIcon> {
     final p = context.palette;
     final bytes = _bytes;
     return Container(
-      width: 38,
-      height: 38,
+      width: kRowLead,
+      height: kRowLead,
       decoration: BoxDecoration(
         color: widget.color.withValues(alpha: p.isDark ? 0.16 : 0.12),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: kRowLeadRadius,
       ),
       child: bytes == null
           ? Icon(widget.fallback, size: 20, color: widget.color)
