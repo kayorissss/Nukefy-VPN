@@ -56,6 +56,9 @@ class MainShell extends StatelessWidget {
       _TabSpec(Icons.speed_rounded, Icons.speed_outlined, s.t('speedTest'), NavDestination.speedTest),
       if (zapret) _TabSpec(Icons.send_rounded, Icons.send_outlined, s.t('tgProxy'), NavDestination.telegramProxy),
       _TabSpec(Icons.radar_rounded, Icons.radar_outlined, s.t('jammers'), NavDestination.jammers),
+      // Without an entry here the analyzer had no page slot at all: every
+      // tap on «Анализ соединения» landed on index -1 and painted nothing.
+      _TabSpec(Icons.health_and_safety_rounded, Icons.health_and_safety_outlined, s.t('diagTitle'), NavDestination.diagnostics),
       _TabSpec(Icons.insights_rounded, Icons.insights_outlined, s.t('stats'), NavDestination.stats),
       _TabSpec(Icons.extension_rounded, Icons.extension_outlined, s.t('tabAddons'), NavDestination.addons),
       _TabSpec(Icons.auto_awesome_rounded, Icons.auto_awesome_outlined, s.t('tabAuto'), NavDestination.autotune),
@@ -461,12 +464,15 @@ class _RailLeaf {
 }
 
 class _RailGroup {
-  const _RailGroup({required this.key, required this.icon, required this.label, this.destination, required this.leaves});
+  const _RailGroup({required this.key, required this.icon, required this.label, this.destination, required this.leaves, this.alwaysOpen = false});
   final String key;
   final IconData icon;
   final String label;
   final NavDestination? destination;
   final List<_RailLeaf> leaves;
+
+  /// Home is a permanent section: it has no chevron and never folds away.
+  final bool alwaysOpen;
 }
 
 /// Grouped navigation: four sections with sub-pages, plus a fixed bottom
@@ -491,7 +497,7 @@ class _SideRailState extends State<_SideRail> {
     final destination = widget.destination;
 
     final groups = <_RailGroup>[
-      _RailGroup(key: 'home', icon: Icons.home_rounded, label: s.t('home'), destination: NavDestination.home, leaves: [
+      _RailGroup(key: 'home', alwaysOpen: true, icon: Icons.home_rounded, label: s.t('home'), destination: NavDestination.home, leaves: [
         _RailLeaf(icon: Icons.public_rounded, label: s.t('servers'), destination: NavDestination.servers),
         _RailLeaf(icon: Icons.insights_rounded, label: s.t('stats'), destination: NavDestination.stats),
       ]),
@@ -514,8 +520,9 @@ class _SideRailState extends State<_SideRail> {
       ]),
     ];
 
-    bool openOf(_RailGroup g) =>
-        _open[g.key] ?? (g.destination == destination || g.leaves.any((l) => l.destination == destination));
+    // Every section starts open so the whole map is visible at once; the
+    // chevron folds the ones the user does not need. Home never folds.
+    bool openOf(_RailGroup g) => g.alwaysOpen || (_open[g.key] ?? true);
 
     bool segSelected(NavDestination dest) =>
         dest == destination ||
@@ -591,18 +598,16 @@ class _SideRailState extends State<_SideRail> {
                 children: [
                   const SizedBox(width: 4),
                   const NukefyLogo(size: 18, glow: false),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text('NUKEFY',
-                        style: AppTextStyles.headline.copyWith(
-                            fontSize: 11.5, letterSpacing: 2.2, color: p.textSecondary)),
-                  ),
+                  // The spelled-out brand caption is gone: it pushed «ГЛАВНАЯ»
+                  // down and read as a second title. The rail starts with the
+                  // sections, and the three lines on the right fold it.
+                  const Spacer(),
                   IconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(width: 30, height: 30),
                     tooltip: s.t('zCollapseMenu'),
                     onPressed: nav.toggleRail,
-                    icon: const Icon(Icons.menu_open_rounded, size: 19),
+                    icon: const Icon(Icons.menu_rounded, size: 19),
                   ),
                 ],
               ),
@@ -626,8 +631,7 @@ class _SideRailState extends State<_SideRail> {
                       InkWell(
                         borderRadius: BorderRadius.circular(12),
                         onTap: () => setState(() {
-                          final next = !openOf(g);
-                          _open[g.key] = next;
+                          if (!g.alwaysOpen) _open[g.key] = !openOf(g);
                           if (g.destination != null) nav.go(g.destination!);
                         }),
                         child: Container(
@@ -645,7 +649,8 @@ class _SideRailState extends State<_SideRail> {
                                     style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: .8,
                                         color: g.destination == destination ? p.accent : p.text)),
                               ),
-                              Icon(Icons.expand_more_rounded, size: 18, color: p.textSecondary),
+                              if (!g.alwaysOpen)
+                                Icon(Icons.expand_more_rounded, size: 18, color: p.textSecondary),
                             ],
                           ),
                         ),
