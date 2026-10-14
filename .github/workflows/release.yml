@@ -295,6 +295,28 @@ jobs:
           pattern: NukefyClient-*
           merge-multiple: true
           path: release-assets
+      - name: Resolve the tag from the build version
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(sed -n 's/^version: \([0-9][0-9.]*\).*/\1/p' pubspec.yaml | head -n 1)"
+          if ! printf '%s' "$app" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::pubspec.yaml carries no plain version (got '$app')"
+            exit 1
+          fi
+          tag="${RELEASE_TAG#v}"
+          if ! printf '%s' "$tag" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            # A manual run or the one-shot marker has no version tag: publish
+            # the build under the version it actually contains instead of a
+            # fallback number that belongs to an older release.
+            echo "No version tag on the trigger ('$RELEASE_TAG'): publishing v$app"
+            tag="$app"
+          elif [ "$tag" != "$app" ]; then
+            echo "::error::the tag says $tag but pubspec.yaml says $app"
+            exit 1
+          fi
+          echo "RELEASE_TAG=v$tag" >> "$GITHUB_ENV"
+          echo "Publishing v$tag"
       - name: Name the Android build after its version
         working-directory: release-assets
         run: |
@@ -319,6 +341,25 @@ jobs:
           echo "APP_VERSION=${ver}" >> "$GITHUB_ENV"
           sed "s/__VERSION__/${ver}/g" tool/release_notes.md > RELEASE_NOTES.md
           cat RELEASE_NOTES.md
+      - name: Refuse to replace a newer published release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current="${RELEASE_TAG#v}"
+          latest="$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null || true)"
+          latest="${latest#v}"
+          if [ -z "$latest" ]; then
+            echo "No published release page yet."
+            exit 0
+          fi
+          newest="$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -n 1)"
+          if [ "$newest" != "$current" ]; then
+            echo "::error::v$current would replace the newer published v$latest"
+            exit 1
+          fi
+          echo "Publishing v$current over the published v$latest"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
