@@ -883,39 +883,39 @@ class _ZapretScreenState extends State<ZapretScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                // "DNS does nothing" used to be true: the field took winws
-                // arguments verbatim, but there was no hint which flags the
-                // engine actually understands. These presets write the real
-                // --dns-addr/--dns-port pair and apply it immediately.
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(s.t('zDnsPreset'), style: p.captionStyle),
-                    for (final preset in const [
-                      ('zDnsCloudflare', '--dns-addr=1.1.1.1 --dns-port=53'),
-                      ('zDnsGoogle', '--dns-addr=8.8.8.8 --dns-port=53'),
-                    ])
-                      ActionChip(
-                        label: Text(s.t(preset.$1), style: const TextStyle(fontSize: 11.5)),
-                        onPressed: busy
-                            ? null
-                            : () => _run(() async {
-                                  final current = _extraArgs.text.trim();
-                                  final already = current.contains(preset.$2.split(' ').first);
-                                  _extraArgs.text = already ? current : (current.isEmpty ? preset.$2 : '$current ${preset.$2}');
-                                  await settings.update((a) => a.zapretExtraArgs = _extraArgs.text.trim());
-                                  _zapret.configure(settings.settings);
-                                  await _restart();
-                                  if (mounted) showNukefySnack(context, s.t('applied'));
-                                }),
-                      ),
-                    Tooltip(message: s.t('zDnsNote'), child: Icon(Icons.help_outline_rounded, size: 15, color: p.textSecondary)),
-                  ],
-                ),
               ),
+              const SizedBox(height: 10),
+              // "DNS does nothing" used to be true: the field took winws
+              // arguments verbatim, but there was no hint which flags the
+              // engine actually understands. These presets write the real
+              // --dns-addr/--dns-port pair and apply it immediately.
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(s.t('zDnsPreset'), style: p.captionStyle),
+                  for (final preset in const [
+                    ('zDnsCloudflare', '--dns-addr=1.1.1.1 --dns-port=53'),
+                    ('zDnsGoogle', '--dns-addr=8.8.8.8 --dns-port=53'),
+                  ])
+                    ActionChip(
+                      label: Text(s.t(preset.$1), style: const TextStyle(fontSize: 11.5)),
+                      onPressed: busy
+                          ? null
+                          : () => _run(() async {
+                                final current = _extraArgs.text.trim();
+                                final already = current.contains(preset.$2.split(' ').first);
+                                _extraArgs.text = already ? current : (current.isEmpty ? preset.$2 : '$current ${preset.$2}');
+                                await settings.update((a) => a.zapretExtraArgs = _extraArgs.text.trim());
+                                _zapret.configure(settings.settings);
+                                await _restart();
+                                if (mounted) showNukefySnack(context, s.t('applied'));
+                              }),
+                    ),
+                  Tooltip(message: s.t('zDnsNote'), child: Icon(Icons.help_outline_rounded, size: 15, color: p.textSecondary)),
+                ],
+            ),
               const SizedBox(height: 6),
               Wrap(
                 spacing: 8,
