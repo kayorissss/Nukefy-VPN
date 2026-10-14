@@ -130,7 +130,7 @@ object NukefyCore {
 
         private fun openTun(options: Any?): Int {
             val builder = service.Builder()
-            builder.setSession("Nukefy VPN")
+            builder.setSession("Nukefy Client")
             builder.setMtu(intProp(options, "getMTU", "mtu") ?: 9000)
             val added = addPrefixes(builder, options, "getInet4Address") +
                 addPrefixes(builder, options, "getInet6Address")

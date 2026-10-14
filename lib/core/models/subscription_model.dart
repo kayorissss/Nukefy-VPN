@@ -15,6 +15,8 @@ class SubscriptionModel {
     this.totalBytes,
     this.expireAt,
     this.lastError,
+    this.mirrors = const [],
+    this.lastUsedUrl,
   });
 
   final String id;
@@ -30,6 +32,13 @@ class SubscriptionModel {
   int? totalBytes;
   DateTime? expireAt;
   String? lastError;
+
+  /// Fallback URLs of the same subscription ("mirrors"). They are tried in
+  /// order when the main URL fails.
+  List<String> mirrors;
+
+  /// URL that actually served the last successful refresh (main or mirror).
+  String? lastUsedUrl;
 
   bool get isDue {
     if (!enabled || autoUpdateInterval == UpdateInterval.manual) return false;
@@ -53,6 +62,8 @@ class SubscriptionModel {
         'totalBytes': totalBytes,
         'expireAt': expireAt?.toIso8601String(),
         'lastError': lastError,
+        'mirrors': mirrors,
+        'lastUsedUrl': lastUsedUrl,
       };
 
   factory SubscriptionModel.fromJson(Map<String, dynamic> json) {
@@ -72,6 +83,12 @@ class SubscriptionModel {
       totalBytes: (json['totalBytes'] as num?)?.toInt(),
       expireAt: _date(json['expireAt']),
       lastError: json['lastError'] as String?,
+      mirrors: (json['mirrors'] as List?)
+              ?.map((e) => e.toString())
+              .where((e) => e.trim().isNotEmpty)
+              .toList() ??
+          const [],
+      lastUsedUrl: json['lastUsedUrl'] as String?,
     );
   }
 

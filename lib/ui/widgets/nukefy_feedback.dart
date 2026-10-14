@@ -38,3 +38,20 @@ Future<bool> confirmDialog(
   );
   return result ?? false;
 }
+
+/// Turns internal engine error codes into text a human can act on.
+/// Raw core output is kept (truncated) — errors are never hidden.
+String humanVpnError(dynamic strings, String? raw) {
+  final s = strings;
+  final value = (raw ?? '').trim();
+  if (value.isEmpty || value == 'core-failed' || value == 'core-exited') {
+    return s.t('errCoreFailed');
+  }
+  if (value == 'CORE_MISSING') return s.t('errCoreMissing');
+  if (value == 'XRAY_MISSING' || value.contains('xhttp-requires-xray')) {
+    return s.t('errXrayMissing');
+  }
+  if (value == 'need-server') return s.t('errNeedServer');
+  if (value.length > 320) return '${value.substring(0, 320)}…';
+  return value;
+}

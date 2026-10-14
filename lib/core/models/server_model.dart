@@ -44,6 +44,17 @@ class ServerModel {
   bool get isWireGuard =>
       protocol == 'wireguard' || protocol == 'amneziawg';
 
+  /// V2Ray transport type stored in the outbound ('ws', 'grpc', 'xhttp', ...).
+  String get transportType {
+    final transport = outbound?['transport'];
+    if (transport is Map) return (transport['type'] ?? '').toString().toLowerCase();
+    return '';
+  }
+
+  /// XHTTP (SplitHTTP) is an Xray-only transport: sing-box has no support
+  /// for it, so these servers are served by the bundled Xray engine.
+  bool get isXhttp => transportType == 'xhttp' || transportType == 'splithttp';
+
   String get fingerprint =>
       '$protocol|${address.toLowerCase()}|$port|${name.toLowerCase()}';
 

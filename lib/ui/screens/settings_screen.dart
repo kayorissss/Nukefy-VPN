@@ -174,18 +174,18 @@ class SettingsScreen extends StatelessWidget {
                   value: value.blockIpv6,
                   onChanged: (next) => settings.update((item) => item.blockIpv6 = next),
                 ),
-                TextField(
-                  key: ValueKey('proxy-${value.proxyDns}'),
-                  controller: TextEditingController(text: value.proxyDns),
-                  decoration: InputDecoration(labelText: s.t('proxyDns')),
-                  onSubmitted: (text) => settings.update((item) => item.proxyDns = text.trim()),
+                _DnsField(
+                  initial: value.proxyDns,
+                  label: s.t('proxyDns'),
+                  onSubmit: (text) =>
+                      settings.update((item) => item.proxyDns = text),
                 ),
                 const SizedBox(height: 8),
-                TextField(
-                  key: ValueKey('direct-${value.directDns}'),
-                  controller: TextEditingController(text: value.directDns),
-                  decoration: InputDecoration(labelText: s.t('directDns')),
-                  onSubmitted: (text) => settings.update((item) => item.directDns = text.trim()),
+                _DnsField(
+                  initial: value.directDns,
+                  label: s.t('directDns'),
+                  onSubmit: (text) =>
+                      settings.update((item) => item.directDns = text),
                 ),
                 const SizedBox(height: 8),
               ],
@@ -345,6 +345,22 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Text(
+                  vpn.core == null
+                      ? s.t('checking')
+                      : vpn.core!.xray
+                          ? s.t('xrayReady')
+                          : s.t('xrayMissing'),
+                  style: AppTextStyles.bodyRegular,
+                ),
+                const SizedBox(height: 6),
+                Text(s.t('xrayCoreBody'), style: AppTextStyles.bodySecondary),
+                const SizedBox(height: 8),
+                FilledButton.tonal(
+                  onPressed: vpn.coreBusy ? null : () => _downloadXray(context),
+                  child: Text(s.t('downloadXray')),
+                ),
               ],
             ),
           ),
@@ -474,15 +490,12 @@ class SettingsScreen extends StatelessWidget {
 Future<void> _downloadCore(BuildContext context) async {
   final s = context.read<SettingsProvider>().strings;
   final vpn = context.read<VpnProvider>();
-  final result = await showDialog<Object>(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => _TaskProgressDialog(
-      title: s.t('downloadCore'),
-      subtitle: s.t('downloading'),
-      strings: s,
-      task: (onProgress) => vpn.downloadCore(onProgress),
-    ),
+  final result = await showTaskProgressDialog<String>(
+    context,
+    title: s.t('downloadCore'),
+    subtitle: s.t('downloading'),
+    strings: s,
+    task: (onProgress) => vpn.downloadCore(onProgress),
   );
   if (!context.mounted) return;
   final failed = result is String;
@@ -491,6 +504,63 @@ Future<void> _downloadCore(BuildContext context) async {
     failed ? result : s.t('coreInstalled'),
     error: failed,
   );
+}
+
+Future<void> _downloadXray(BuildContext context) async {
+  final s = context.read<SettingsProvider>().strings;
+  final vpn = context.read<VpnProvider>();
+  final result = await showTaskProgressDialog<String>(
+    context,
+    title: s.t('downloadXray'),
+    subtitle: s.t('downloading'),
+    strings: s,
+    task: (onProgress) => vpn.downloadXray(onProgress),
+  );
+  if (!context.mounted) return;
+  final failed = result is String;
+  showNukefySnack(
+    context,
+    failed ? result : s.t('xrayReady'),
+    error: failed,
+  );
+}
+
+/// A text field that owns its controller: previously controllers were
+/// created inside build(), which reset the cursor and overlapped text on
+/// every rebuild ("settings are broken, everything is layered").
+class _DnsField extends StatefulWidget {
+  const _DnsField({
+    required this.initial,
+    required this.label,
+    required this.onSubmit,
+  });
+
+  final String initial;
+  final String label;
+  final ValueChanged<String> onSubmit;
+
+  @override
+  State<_DnsField> createState() => _DnsFieldState();
+}
+
+class _DnsFieldState extends State<_DnsField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      decoration: InputDecoration(labelText: widget.label),
+      onSubmitted: (text) => widget.onSubmit(text.trim()),
+    );
+  }
 }
 
 Future<void> checkUpdatesFlow(BuildContext context, {bool silentIfCurrent = false}) async {
@@ -525,15 +595,12 @@ Future<void> checkUpdatesFlow(BuildContext context, {bool silentIfCurrent = fals
       ),
     );
     if (start != true || !context.mounted) return;
-    final file = await showDialog<Object>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _TaskProgressDialog(
-        title: s.t('updateTitle'),
-        subtitle: '${s.t('newVersion')} ${info.version}',
-        strings: s,
-        task: (onProgress) => UpdateService().download(info, onProgress: onProgress),
-      ),
+    final file = await showTaskProgressDialog<File>(
+      context,
+      title: s.t('updateTitle'),
+      subtitle: '${s.t('newVersion')} ${info.version} · ${s.t('updateNote')}',
+      strings: s,
+      task: (onProgress) => UpdateService().download(info, onProgress: onProgress),
     );
     if (file is! File || !context.mounted) {
       if (file is String && context.mounted) {
@@ -542,7 +609,15 @@ Future<void> checkUpdatesFlow(BuildContext context, {bool silentIfCurrent = fals
       return;
     }
     if (Platform.isAndroid && file.path.endsWith('.apk')) {
+      // Same applicationId and signature: installs over the old version.
       await VpnPlatform().installApk(file.path);
+    } else if (Platform.isWindows && file.path.toLowerCase().endsWith('.exe')) {
+      // The installer kills this process, removes the previous
+      // "Nukefy VPN" install and replaces it with Nukefy Client.
+      if (context.mounted) showNukefySnack(context, s.t('installing'));
+      await Process.start(file.path, const [], mode: ProcessStartMode.detached);
+      await context.read<VpnProvider>().disconnect();
+      exit(0);
     } else {
       await VpnPlatform().revealFile(file.path);
     }
@@ -551,48 +626,5 @@ Future<void> checkUpdatesFlow(BuildContext context, {bool silentIfCurrent = fals
     if (silentIfCurrent || !context.mounted) return;
     final message = '$error'.contains('404') ? s.t('noReleases') : s.t('networkError');
     showNukefySnack(context, message, error: true);
-  }
-}
-
-class _TaskProgressDialog<T> extends StatefulWidget {
-  const _TaskProgressDialog({
-    required this.title,
-    required this.subtitle,
-    required this.strings,
-    required this.task,
-  });
-
-  final String title;
-  final String subtitle;
-  final S strings;
-  final Future<T> Function(void Function(DownloadProgress) onProgress) task;
-
-  @override
-  State<_TaskProgressDialog<T>> createState() => _TaskProgressDialogState<T>();
-}
-
-class _TaskProgressDialogState<T> extends State<_TaskProgressDialog<T>> {
-  DownloadProgress? _progress;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.task((next) {
-      if (mounted) setState(() => _progress = next);
-    }).then((value) {
-      if (mounted) Navigator.pop(context, value);
-    }).catchError((Object error) {
-      if (mounted) Navigator.pop(context, '$error');
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return NukefyProgressDialog(
-      title: widget.title,
-      subtitle: widget.subtitle,
-      progress: _progress,
-      strings: widget.strings,
-    );
   }
 }

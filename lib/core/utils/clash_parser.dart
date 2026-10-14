@@ -315,6 +315,31 @@ class ClashParser {
           : '';
       return {'type': 'grpc', 'service_name': service.toString()};
     }
+    if (network == 'xhttp' || network == 'splithttp' || network == 'split-http') {
+      final opts = proxy['xhttp-opts'] ?? proxy['xhttpOpts'];
+      final path = opts is Map ? (opts['path'] ?? '/') : '/';
+      final host = opts is Map ? (opts['host'] ?? '') : '';
+      final mode = opts is Map ? (opts['mode'] ?? 'auto') : 'auto';
+      final extra = opts is Map ? opts['extra'] : null;
+      return {
+        'type': 'xhttp',
+        'path': path.toString(),
+        if (host.toString().isNotEmpty) 'host': host.toString(),
+        'mode': mode.toString().isEmpty ? 'auto' : mode.toString(),
+        if (extra is Map)
+          'extra': extra.map((k, v) => MapEntry(k.toString(), v)),
+      };
+    }
+    if (network == 'httpupgrade') {
+      final opts = proxy['httpupgrade-opts'] ?? proxy['ws-opts'];
+      final path = opts is Map ? (opts['path'] ?? '/') : '/';
+      final host = opts is Map ? (opts['host'] ?? '') : '';
+      return {
+        'type': 'httpupgrade',
+        'host': host.toString(),
+        'path': path.toString(),
+      };
+    }
     if (network == 'h2' || network == 'http') {
       final opts = proxy['h2-opts'] ?? proxy['http-opts'];
       final path = opts is Map ? (opts['path'] ?? '/') : '/';

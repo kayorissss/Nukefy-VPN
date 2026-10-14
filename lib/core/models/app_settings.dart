@@ -36,6 +36,7 @@ class AppSettings {
     this.theme = ThemePreference.dark,
     this.language = LanguagePreference.ru,
     this.seenWelcome = false,
+    this.guideHidden = false,
     this.autoConnect = false,
     this.launchOnBoot = false,
     this.notifications = true,
@@ -78,6 +79,7 @@ class AppSettings {
   ThemePreference theme;
   LanguagePreference language;
   bool seenWelcome;
+  bool guideHidden;
   bool autoConnect;
   bool launchOnBoot;
   bool notifications;
@@ -120,6 +122,7 @@ class AppSettings {
         'theme': theme.name,
         'language': language.name,
         'seenWelcome': seenWelcome,
+        'guideHidden': guideHidden,
         'autoConnect': autoConnect,
         'launchOnBoot': launchOnBoot,
         'notifications': notifications,
@@ -168,6 +171,7 @@ class AppSettings {
         LanguagePreference.ru,
       ),
       seenWelcome: json['seenWelcome'] == true,
+      guideHidden: json['guideHidden'] == true,
       autoConnect: json['autoConnect'] == true,
       launchOnBoot: json['launchOnBoot'] == true,
       notifications: json['notifications'] != false,

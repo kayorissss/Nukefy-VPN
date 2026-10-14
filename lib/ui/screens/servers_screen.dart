@@ -215,6 +215,41 @@ class _Action extends StatelessWidget {
   }
 }
 
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: AppColors.textSecondary),
+          const SizedBox(width: 5),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 210),
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.bodySecondary.copyWith(fontSize: 11.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SubscriptionBlock extends StatelessWidget {
   const _SubscriptionBlock({
     required this.subscription,
@@ -241,12 +276,49 @@ class _SubscriptionBlock extends StatelessWidget {
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
             initiallyExpanded: true,
-            title: Text(subscription.name, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
-            subtitle: Text(
-              '${subscription.url}\n${s.t('updated')}: ${subscription.lastUpdated == null ? '—' : FormatUtils.timeAgo(subscription.lastUpdated!, ru: s.code == 'ru')} · ${s.t('serversCount')}: ${servers.length}',
-              maxLines: 2,
+            title: Text(
+              subscription.name,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.bodySecondary,
+              style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700),
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _MetaChip(
+                    icon: Icons.update_rounded,
+                    text: '${s.t('updated')}: ${subscription.lastUpdated == null ? '—' : FormatUtils.timeAgo(subscription.lastUpdated!, ru: s.code == 'ru')}',
+                  ),
+                  _MetaChip(
+                    icon: Icons.dns_rounded,
+                    text: '${s.t('serversCount')}: ${servers.length}',
+                  ),
+                  if (subscription.totalBytes != null && subscription.totalBytes! > 0)
+                    _MetaChip(
+                      icon: Icons.data_usage_rounded,
+                      text: '${FormatUtils.bytes((subscription.uploadBytes ?? 0) + (subscription.downloadBytes ?? 0))} ${s.t('of')} ${FormatUtils.bytes(subscription.totalBytes!)}',
+                    ),
+                  if (subscription.expireAt != null)
+                    _MetaChip(
+                      icon: Icons.event_rounded,
+                      text: '${s.t('expire')}: ${subscription.expireAt!.toLocal().toString().split(' ').first}',
+                    ),
+                  if (subscription.lastUsedUrl != null &&
+                      subscription.lastUsedUrl != subscription.url)
+                    _MetaChip(
+                      icon: Icons.alt_route_rounded,
+                      text: s.t('mirrorUsed'),
+                    ),
+                  if (subscription.mirrors.isNotEmpty)
+                    _MetaChip(
+                      icon: Icons.content_copy_rounded,
+                      text: '${s.t('mirrors')}: ${subscription.mirrors.length}',
+                    ),
+                ],
+              ),
             ),
             trailing: IconButton(
               icon: const Icon(Icons.more_horiz_rounded),
@@ -347,8 +419,11 @@ class ServerTile extends StatelessWidget {
         subtitle: Text(
           [
             FormatUtils.protocolLabel(server.protocol),
+            if (server.isXhttp) 'XHTTP · ${s.t('viaXray')}',
             if (label != null) label,
           ].join(' · '),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: AppTextStyles.bodySecondary,
         ),
         trailing: PingBadge(pingMs: server.pingMs, compact: true),
@@ -457,6 +532,11 @@ Future<void> _editSubscription(BuildContext context, SubscriptionModel sub) asyn
   final name = TextEditingController(text: sub.name);
   final url = TextEditingController(text: sub.url);
   final ua = TextEditingController(text: sub.userAgent ?? '');
+  // One controller per mirror so "add mirror" really appends an editable,
+  // savable row (previously adding a mirror did nothing and just closed).
+  final mirrorCtrls = [
+    for (final mirror in sub.mirrors) TextEditingController(text: mirror),
+  ];
   var interval = sub.autoUpdateInterval;
   final saved = await showDialog<bool>(
     context: context,
@@ -464,24 +544,71 @@ Future<void> _editSubscription(BuildContext context, SubscriptionModel sub) asyn
       builder: (context, setState) => AlertDialog(
         title: Text(s.t('edit')),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: name, decoration: InputDecoration(labelText: s.t('name'))),
-              const SizedBox(height: 8),
-              TextField(controller: url, decoration: InputDecoration(labelText: s.t('url'))),
-              const SizedBox(height: 8),
-              TextField(controller: ua, decoration: InputDecoration(labelText: s.t('userAgent'))),
-              const SizedBox(height: 8),
-              DropdownButton<UpdateInterval>(
-                value: interval,
-                isExpanded: true,
-                items: UpdateInterval.values
-                    .map((e) => DropdownMenuItem(value: e, child: Text(_intervalLabel(s, e))))
-                    .toList(),
-                onChanged: (value) => setState(() => interval = value ?? interval),
-              ),
-            ],
+          child: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(controller: name, decoration: InputDecoration(labelText: s.t('name'))),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: url,
+                  decoration: InputDecoration(labelText: s.t('mainUrl')),
+                  style: AppTextStyles.monoValue.copyWith(fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                TextField(controller: ua, decoration: InputDecoration(labelText: s.t('userAgent'))),
+                const SizedBox(height: 8),
+                DropdownButton<UpdateInterval>(
+                  value: interval,
+                  isExpanded: true,
+                  items: UpdateInterval.values
+                      .map((e) => DropdownMenuItem(value: e, child: Text(_intervalLabel(s, e))))
+                      .toList(),
+                  onChanged: (value) => setState(() => interval = value ?? interval),
+                ),
+                const SizedBox(height: 14),
+                Text(s.t('mirrors'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(s.t('mirrorsHint'), style: AppTextStyles.bodySecondary),
+                const SizedBox(height: 8),
+                for (var i = 0; i < mirrorCtrls.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: mirrorCtrls[i],
+                            decoration: InputDecoration(
+                              labelText: '${s.t('mirrorUrl')} ${i + 1}',
+                            ),
+                            style: AppTextStyles.monoValue.copyWith(fontSize: 12),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          onPressed: () => setState(() {
+                            mirrorCtrls[i].dispose();
+                            mirrorCtrls.removeAt(i);
+                          }),
+                        ),
+                      ],
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: () => setState(() {
+                      mirrorCtrls.add(TextEditingController());
+                    }),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: Text(s.t('addMirror')),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -498,11 +625,21 @@ Future<void> _editSubscription(BuildContext context, SubscriptionModel sub) asyn
           url: url.text.trim(),
           interval: interval,
           userAgent: ua.text.trim(),
+          mirrors: [
+            for (final ctrl in mirrorCtrls)
+              if (ctrl.text.trim().isNotEmpty) ctrl.text.trim(),
+          ],
         );
+    if (context.mounted) {
+      showNukefySnack(context, s.t('saved'));
+    }
   }
   name.dispose();
   url.dispose();
   ua.dispose();
+  for (final ctrl in mirrorCtrls) {
+    ctrl.dispose();
+  }
 }
 
 String _intervalLabel(dynamic s, UpdateInterval interval) {

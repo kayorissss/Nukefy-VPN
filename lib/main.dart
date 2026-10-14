@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
 import 'core/providers/nav_provider.dart';
+import 'core/providers/notifications_provider.dart';
 import 'core/providers/servers_provider.dart';
 import 'core/providers/settings_provider.dart';
 import 'core/providers/stats_provider.dart';
@@ -23,13 +24,18 @@ Future<void> main() async {
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
     const options = WindowOptions(
-      size: Size(1100, 760),
-      minimumSize: Size(860, 640),
+      size: Size(1280, 820),
+      minimumSize: Size(1024, 700),
       center: true,
-      title: 'Nukefy VPN',
+      title: 'Nukefy Client',
       backgroundColor: Color(0xFF0D0D0D),
+      titleBarStyle: TitleBarStyle.hidden,
+      windowButtonVisibility: false,
     );
     windowManager.waitUntilReadyToShow(options, () async {
+      // Always open large: maximize before the first visible frame so the
+      // window never flashes small and then grows.
+      await windowManager.maximize();
       await windowManager.show();
       await windowManager.focus();
     });
@@ -56,6 +62,7 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: stats),
         ChangeNotifierProvider.value(value: vpn),
         ChangeNotifierProvider(create: (_) => NavProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationsProvider()),
       ],
       child: DesktopShell(child: NukefyApp(navigatorKey: navigatorKey)),
     ),

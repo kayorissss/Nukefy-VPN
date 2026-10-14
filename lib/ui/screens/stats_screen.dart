@@ -23,10 +23,31 @@ class StatsScreen extends StatelessWidget {
           const SizedBox(height: 14),
           SizedBox(
             height: 180,
-            child: CustomPaint(
-              painter: _SpeedChartPainter(samples: stats.samples),
-              child: const SizedBox.expand(),
-            ),
+            child: stats.samples.isEmpty
+                ? Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                    ),
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(
+                          s.t('statNoData'),
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.bodySecondary,
+                        ),
+                      ),
+                    ),
+                  )
+                : CustomPaint(
+                    painter: _SpeedChartPainter(
+                      samples: stats.samples,
+                      dark: Theme.of(context).brightness == Brightness.dark,
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
           ),
           const SizedBox(height: 14),
           Row(
@@ -111,13 +132,14 @@ class _StatCard extends StatelessWidget {
 }
 
 class _SpeedChartPainter extends CustomPainter {
-  _SpeedChartPainter({required this.samples});
+  _SpeedChartPainter({required this.samples, required this.dark});
   final List samples;
+  final bool dark;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(16));
-    canvas.drawRRect(rect, Paint()..color = const Color(0xFF141414));
+    canvas.drawRRect(rect, Paint()..color = dark ? const Color(0xFF141414) : const Color(0xFFFFFFFF));
     canvas.drawRRect(
       rect,
       Paint()

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
+
+import '../../core/providers/settings_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 
@@ -11,12 +14,13 @@ class PingBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ru = context.watch<SettingsProvider>().strings.code == 'ru';
     final color = AppColors.pingColor(pingMs);
     final text = pingMs == null
         ? '—'
         : pingMs! < 0
             ? '✕'
-            : '${pingMs}ms';
+            : '$pingMs ${ru ? 'мс' : 'ms'}';
     return Container(
       padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10, vertical: 4),
       decoration: BoxDecoration(

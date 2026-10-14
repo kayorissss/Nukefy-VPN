@@ -14,6 +14,7 @@ class SingboxConfigBuilder {
     required String cachePath,
     required bool desktopTun,
     required bool forceProxyOnly,
+    bool remoteRuleSets = true,
   }) {
     final config = build(
       server: server,
@@ -23,6 +24,7 @@ class SingboxConfigBuilder {
       cachePath: cachePath,
       desktopTun: desktopTun,
       forceProxyOnly: forceProxyOnly,
+      remoteRuleSets: remoteRuleSets,
     );
     return const JsonEncoder.withIndent('  ').convert(config);
   }
@@ -35,7 +37,14 @@ class SingboxConfigBuilder {
     required String cachePath,
     required bool desktopTun,
     required bool forceProxyOnly,
+    bool remoteRuleSets = true,
   }) {
+    if (server.isXhttp || (detour?.isXhttp ?? false)) {
+      // sing-box has no XHTTP transport (still true in v1.14). The Xray
+      // engine handles these servers; never emit a config sing-box would
+      // reject or silently degrade to raw TCP.
+      throw ArgumentError('xhttp-requires-xray');
+    }
     final useTun = settings.tunEnabled && !forceProxyOnly;
     final proxy = _tagged(_cloneOutbound(server), 'proxy');
     _applyMuxAndFragment(proxy, settings);
@@ -107,7 +116,7 @@ class SingboxConfigBuilder {
       {'ip_is_private': true, 'action': 'route', 'outbound': 'direct'},
     ];
 
-    if (settings.blockAds) {
+    if (settings.blockAds && remoteRuleSets) {
       ruleSets.add(_remoteSet('geosite-ads', AppConstants.ruleSetAds));
       rules.add({
         'rule_set': 'geosite-ads',
@@ -165,18 +174,22 @@ class SingboxConfigBuilder {
           });
         }
       case RoutingMode.bypassRu:
-        ruleSets.add(_remoteSet('geosite-ru', AppConstants.ruleSetGeositeRu));
-        ruleSets.add(_remoteSet('geoip-ru', AppConstants.ruleSetGeoipRu));
+        if (remoteRuleSets) {
+          ruleSets.add(_remoteSet('geosite-ru', AppConstants.ruleSetGeositeRu));
+          ruleSets.add(_remoteSet('geoip-ru', AppConstants.ruleSetGeoipRu));
+        }
         rules.add({
           'domain_suffix': ['.ru', '.su', '.рф', ...directDomains],
           'action': 'route',
           'outbound': 'direct',
         });
-        rules.add({
-          'rule_set': ['geosite-ru', 'geoip-ru'],
-          'action': 'route',
-          'outbound': 'direct',
-        });
+        if (remoteRuleSets) {
+          rules.add({
+            'rule_set': ['geosite-ru', 'geoip-ru'],
+            'action': 'route',
+            'outbound': 'direct',
+          });
+        }
       case RoutingMode.custom:
         if (directDomains.isNotEmpty) {
           rules.add({
@@ -255,13 +268,6 @@ class SingboxConfigBuilder {
         'server': 'direct-dns',
       });
     }
-    if (settings.routingMode == RoutingMode.bypassRu) {
-      rules.add({
-        'rule_set': 'geosite-ru',
-        'action': 'route',
-        'server': 'direct-dns',
-      });
-    }
     return {
       'servers': [proxy, direct],
       'rules': rules,
@@ -326,7 +332,11 @@ class SingboxConfigBuilder {
       'tag': tag,
       'format': 'binary',
       'url': url,
-      'download_detour': 'proxy',
+      // Downloaded directly: via 'proxy' the download deadlocks on first
+      // start (the proxy needs the rule sets before it can come up) and a
+      // dead server then breaks the whole "white list" mode.
+      'download_detour': 'direct',
+      'update_interval': '24h',
     };
   }
 

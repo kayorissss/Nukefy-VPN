@@ -63,11 +63,11 @@ jobs:
             echo '```'
           } > comment.md
           gh pr comment 1 --body-file comment.md || true
-      - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyVPN-android.apk
+      - run: cp build/app/outputs/flutter-apk/app-release.apk NukefyClient-android.apk
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
-          files: NukefyVPN-android.apk
+          files: NukefyClient-android.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -124,10 +124,21 @@ jobs:
           gh pr comment 1 --body-file comment.md
       - name: Zip Windows build
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath NukefyVPN-windows-x64.zip
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath NukefyClient-windows-x64.zip
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { $iscc = 'C:\Program Files\Inno Setup 6\ISCC.exe' }
+          & $iscc installer\NukefyClient.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Move-Item installer\Output\NukefyClient-Setup.exe NukefyClient-Setup.exe
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
-          files: NukefyVPN-windows-x64.zip
+          files: |
+            NukefyClient-windows-x64.zip
+            NukefyClient-Setup.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

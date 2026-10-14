@@ -54,7 +54,7 @@ class _GridPainter extends CustomPainter {
       ..color = dark ? AppColors.background : AppColors.lightBackground;
     canvas.drawRect(Offset.zero & size, bg);
     final grid = Paint()
-      ..color = (dark ? AppColors.cyan : AppColors.violet).withValues(alpha: dark ? 0.035 : 0.05)
+      ..color = (dark ? Colors.white : Colors.black).withValues(alpha: dark ? 0.03 : 0.04)
       ..strokeWidth = 1;
     const step = 28.0;
     for (var x = 0.0; x < size.width; x += step) {
@@ -64,14 +64,15 @@ class _GridPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
     }
     final t = progress * math.pi * 2;
-    _orb(canvas, size, Offset(size.width * (0.82 + math.sin(t) * 0.04), size.height * 0.12), AppColors.cyan, 180);
-    _orb(canvas, size, Offset(size.width * (0.1 + math.cos(t) * 0.03), size.height * 0.78), AppColors.violet, 220);
+    // Monochrome glow only: the app is black-and-white by design.
+    _orb(canvas, size, Offset(size.width * (0.82 + math.sin(t) * 0.04), size.height * 0.12), dark ? Colors.white : Colors.black, 180);
+    _orb(canvas, size, Offset(size.width * (0.1 + math.cos(t) * 0.03), size.height * 0.78), dark ? Colors.white : Colors.black, 220);
   }
 
   void _orb(Canvas canvas, Size size, Offset center, Color color, double radius) {
     final paint = Paint()
       ..shader = RadialGradient(
-        colors: [color.withValues(alpha: 0.16), color.withValues(alpha: 0)],
+        colors: [color.withValues(alpha: 0.07), color.withValues(alpha: 0)],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius, paint);
   }

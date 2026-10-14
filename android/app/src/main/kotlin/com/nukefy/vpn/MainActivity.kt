@@ -38,7 +38,8 @@ class MainActivity : FlutterActivity() {
                         val configPath = call.argument<String>("configPath") ?: ""
                         val configJson = call.argument<String>("configJson") ?: ""
                         val preferTun = call.argument<Boolean>("preferTun") ?: false
-                        NukefyVpnService.requestStart(this, configPath, configJson, preferTun) { payload ->
+                        val engine = call.argument<String>("engine") ?: "singbox"
+                        NukefyVpnService.requestStart(this, configPath, configJson, preferTun, engine) { payload ->
                             runOnUiThread { result.success(payload) }
                         }
                     }
@@ -70,6 +71,14 @@ class MainActivity : FlutterActivity() {
                     "installApk" -> {
                         val path = call.argument<String>("path")
                         result.success(if (path == null) false else installApk(path))
+                    }
+                    "registerXray" -> {
+                        val path = call.argument<String>("path")
+                        getSharedPreferences(PREFS, MODE_PRIVATE)
+                            .edit()
+                            .putString(KEY_XRAY, path)
+                            .apply()
+                        result.success(null)
                     }
                     "registerBinary" -> {
                         val path = call.argument<String>("path")
@@ -138,6 +147,7 @@ class MainActivity : FlutterActivity() {
         const val PREFS = "nukefy_native"
         const val KEY_AUTOSTART = "autostart"
         const val KEY_BINARY = "binary"
+        const val KEY_XRAY = "xray_binary"
         private const val REQ_VPN = 4101
     }
 }
