@@ -3,11 +3,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/providers/settings_provider.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../import_actions.dart';
 import '../widgets/nukefy_background.dart';
 import '../widgets/nukefy_logo.dart';
-import 'qr_scanner_screen.dart';
+
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -34,25 +35,13 @@ class WelcomeScreen extends StatelessWidget {
                     .animate()
                     .fadeIn(delay: 120.ms),
                 const SizedBox(height: 10),
-                Text(s.t('welcomeBody'), textAlign: TextAlign.center, style: AppTextStyles.bodySecondary),
+                Text(s.t('welcomeBody'), textAlign: TextAlign.center, style: context.palette.secondaryStyle),
                 const Spacer(),
                 _WelcomeButton(icon: Icons.content_paste_rounded, label: s.t('paste'), onTap: () => ImportActions.paste(context)),
                 const SizedBox(height: 10),
-                _WelcomeButton(icon: Icons.edit_rounded, label: s.t('manual'), onTap: () => ImportActions.manual(context)),
+                _WelcomeButton(icon: Icons.edit_rounded, label: s.t('enterManually'), onTap: () => ImportActions.manual(context)),
                 const SizedBox(height: 10),
-                _WelcomeButton(
-                  icon: Icons.qr_code_scanner_rounded,
-                  label: s.t('qr'),
-                  onTap: () async {
-                    final text = await Navigator.push<String>(
-                      context,
-                      MaterialPageRoute(builder: (_) => const QrScannerScreen()),
-                    );
-                    if (text != null && context.mounted) {
-                      await ImportActions.handleText(context, text);
-                    }
-                  },
-                ),
+                _WelcomeButton(icon: Icons.folder_open_outlined, label: s.t('importFile'), onTap: () => ImportActions.fromFile(context)),
                 const SizedBox(height: 18),
                 TextButton(
                   onPressed: () => settings.update((value) => value.seenWelcome = true),

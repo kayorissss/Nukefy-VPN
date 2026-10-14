@@ -1,0 +1,70 @@
+# Fast syntax check for the C# installer/launcher. A full release build takes
+# minutes before it ever reaches csc, so a typo there used to cost a whole
+# release cycle.
+name: Installer check
+on:
+  push:
+    branches: ['arena/**']
+    paths:
+      - 'windows/installer/**'
+      - 'windows/portable/**'
+      - '.github/workflows/installer-check.yml'
+  workflow_dispatch:
+
+jobs:
+  csc:
+    name: Compile setup and launcher
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build a dummy payload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dummy | Out-Null
+          Set-Content -Path dummy/readme.txt -Value 'payload placeholder'
+          Compress-Archive -Path dummy/* -DestinationPath payload.zip -Force
+      - name: Compile both executables
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          $lines = @(
+            'using System.Reflection;',
+            '[assembly: AssemblyTitle("Nukefy Client")]',
+            '[assembly: AssemblyProduct("Nukefy Client")]',
+            '[assembly: AssemblyCompany("@kayorisan")]',
+            '[assembly: AssemblyVersion("1.0.0.0")]',
+            '[assembly: AssemblyFileVersion("1.0.0.0")]'
+          )
+          Set-Content -Path AssemblyInfo.cs -Value $lines
+          $common = @('/nologo','/target:winexe','/platform:anycpu','/optimize+','/resource:payload.zip,payload.zip',
+                      '/reference:System.IO.Compression.dll','/reference:System.IO.Compression.FileSystem.dll',
+                      '/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Core.dll')
+          $setup = & $csc @common /out:setup-test.exe /win32manifest:windows/installer/setup.manifest windows/installer/NukefyInstaller.cs AssemblyInfo.cs 2>&1
+          $setupCode = $LASTEXITCODE
+          $portable = & $csc @common /out:portable-test.exe /win32manifest:windows/portable/launcher.manifest windows/portable/Launcher.cs AssemblyInfo.cs 2>&1
+          $portableCode = $LASTEXITCODE
+          $all = @()
+          $all += '=== setup ==='
+          $all += $setup
+          $all += '=== portable ==='
+          $all += $portable
+          $all | Set-Content -Path csc-output.txt
+          $all | ForEach-Object { Write-Host $_ }
+          if ($setupCode -ne 0 -or $portableCode -ne 0) {
+            $fence = '```'
+            $body = "installer-check failed (setup $setupCode, portable $portableCode):`n`n$fence`n" +
+                    ((($setup + $portable) | Select-Object -Last 40) -join "`n") + "`n$fence"
+            gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" | Out-Null
+            throw "csc failed: setup=$setupCode portable=$portableCode"
+          }
+          Write-Host 'both compiled'
+      - name: Upload compiler output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csc-output
+          path: csc-output.txt
+          if-no-files-found: ignore

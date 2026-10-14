@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 
 import '../constants/app_constants.dart';
@@ -5,7 +6,54 @@ import '../models/app_settings.dart';
 import '../models/server_model.dart';
 import '../models/vpn_status.dart';
 
+/// Resolved local inbound ports. Windows reserves unpredictable port
+/// ranges (Hyper-V/NAT), so a configured 10808 can be unbindable; the
+/// provider probes and substitutes a free port per session.
+class LocalPorts {
+  const LocalPorts({required this.socks, required this.http, required this.clash, this.probe});
+
+  final int socks;
+  final int http;
+  final int clash;
+  /// Loopback-only HTTP inbound used by the app's real-through-tunnel probes
+  /// when the user has disabled the public/local proxy feature.
+  final int? probe;
+}
+
 class SingboxConfigBuilder {
+  /// Outbound types that are intentionally routed through sing-box.  Keeping
+  /// this list next to the config builder prevents a parser-only "support"
+  /// from reaching the UI as a green connection.
+  static const supportedTypes = <String>{
+    'vless',
+    'vmess',
+    'trojan',
+    'shadowsocks',
+    'ss',
+    'hysteria2',
+    'tuic',
+    'anytls',
+  };
+
+  static String? validationError(ServerModel server) {
+    if (server.isWireGuard) {
+      return server.endpoint == null ? 'CORE_ENDPOINT_MISSING' : null;
+    }
+    final type = '${server.outbound?['type'] ?? server.protocol}'.toLowerCase();
+    // The release core is official SagerNet sing-box; MIERU is not an
+    // outbound in that core. Keep parsing/import support, but stop before a
+    // misleading "connected" state and explain the limitation in the UI.
+    if (type == 'mieru') return 'CORE_MIERU_UNSUPPORTED';
+    // XHTTP is encoded in the transport map for VLESS/VMess/Trojan, not as
+    // the outbound protocol name. Keep a builder-level guard as well as the
+    // provider's Xray core selection so it cannot silently fall through to
+    // sing-box from another call site.
+    if (type == 'xhttp' || type == 'splithttp' || server.usesXhttp) return 'XRAY_TRANSPORT_REQUIRED';
+    if (!supportedTypes.contains(type)) return 'CORE_PROTOCOL_UNSUPPORTED';
+    if (server.outbound == null) return 'CORE_OUTBOUND_MISSING';
+    return null;
+  }
+
   static String buildJson({
     required ServerModel server,
     ServerModel? detour,
@@ -14,6 +62,8 @@ class SingboxConfigBuilder {
     required String cachePath,
     required bool desktopTun,
     required bool forceProxyOnly,
+    List<ServerModel> balancerPool = const [],
+    LocalPorts? ports,
   }) {
     final config = build(
       server: server,
@@ -23,6 +73,8 @@ class SingboxConfigBuilder {
       cachePath: cachePath,
       desktopTun: desktopTun,
       forceProxyOnly: forceProxyOnly,
+      balancerPool: balancerPool,
+      ports: ports,
     );
     return const JsonEncoder.withIndent('  ').convert(config);
   }
@@ -35,20 +87,48 @@ class SingboxConfigBuilder {
     required String cachePath,
     required bool desktopTun,
     required bool forceProxyOnly,
+    List<ServerModel> balancerPool = const [],
+    LocalPorts? ports,
   }) {
-    final useTun = settings.tunEnabled && !forceProxyOnly;
+    final socksPort = ports?.socks ?? settings.socksPort;
+    final httpPort = ports?.http ?? settings.httpPort;
+    final clashPort = ports?.clash ?? AppConstants.clashApiPort;
+    // The caller decides whether TUN is possible; `forceProxyOnly` is the
+    // single switch (Android always has TUN via VpnService, desktop follows
+    // the user setting).
+    final useTun = !forceProxyOnly;
+    // Karing-style latency balancer: every node of the whitelist subscription
+    // becomes its own outbound and a urltest group tagged `proxy` keeps the
+    // fastest one active, switching over seamlessly when a node dies.
+    final pool = detour == null
+        ? balancerPool.where((item) => !item.isWireGuard).toList()
+        : const <ServerModel>[];
+    final useBalancer = pool.length > 1 && pool.any((item) => item.id == server.id);
     final proxy = _tagged(_cloneOutbound(server), 'proxy');
     _applyMuxAndFragment(proxy, settings);
+    if (settings.karingEnabled && settings.karingAllowInsecure) _allowInsecure(proxy);
     if (detour != null) {
       proxy['detour'] = 'bridge';
     }
 
     final outbounds = <Map<String, dynamic>>[
-      if (!server.isWireGuard) proxy,
+      if (useBalancer)
+        for (var i = 0; i < pool.length; i++) _poolOutbound(pool[i], 'kb$i', settings),
+      if (useBalancer)
+        {
+          'type': 'urltest',
+          'tag': 'proxy',
+          'outbounds': [for (var i = 0; i < pool.length; i++) 'kb$i'],
+          'url': _balancerUrl,
+          'interval': _balancerInterval,
+          'tolerance': 100,
+        },
+      if (!useBalancer && !server.isWireGuard) proxy,
       if (detour != null && !detour.isWireGuard)
         _tagged(_cloneOutbound(detour), 'bridge'),
       {'type': 'direct', 'tag': 'direct'},
-      {'type': 'block', 'tag': 'block'},
+      // The legacy `block` outbound was removed in sing-box 1.13; blocking
+      // is done with `"action": "reject"` rules instead.
     ];
 
     final endpoints = <Map<String, dynamic>>[];
@@ -75,8 +155,6 @@ class SingboxConfigBuilder {
         'auto_route': true,
         'strict_route': true,
         'stack': _stack(settings.tunStack),
-        'sniff': true,
-        'sniff_override_destination': true,
         if (settings.perAppMode == PerAppMode.include &&
             settings.perAppPackages.isNotEmpty)
           'include_package': settings.perAppPackages,
@@ -91,20 +169,43 @@ class SingboxConfigBuilder {
         'type': 'socks',
         'tag': 'socks-in',
         'listen': listen,
-        'listen_port': settings.socksPort,
+        'listen_port': socksPort,
       });
       inbounds.add({
         'type': 'http',
         'tag': 'http-in',
         'listen': listen,
-        'listen_port': settings.httpPort,
+        'listen_port': httpPort,
+      });
+    } else if (useTun) {
+      // A private, loopback-only health-check inbound lets the app verify
+      // packets through the tunnel even when the user-facing proxy is off.
+      inbounds.add({
+        'type': 'http',
+        'tag': 'probe-in',
+        'listen': '127.0.0.1',
+        'listen_port': ports?.probe ?? httpPort,
       });
     }
 
     final ruleSets = <Map<String, dynamic>>[];
     final rules = <Map<String, dynamic>>[
+      // sing-box ≥ 1.11: sniffing / DNS hijack are rule actions, the legacy
+      // inbound fields (`sniff`, `sniff_override_destination`) were removed
+      // in 1.13 and make the core exit with "legacy inbound fields".
+      {'action': 'sniff'},
       {'protocol': 'dns', 'action': 'hijack-dns'},
       {'ip_is_private': true, 'action': 'route', 'outbound': 'direct'},
+      // The app's own traffic (ping checks, subscription refresh, update
+      // check) must not loop through the tunnel — on desktop sing-box knows
+      // the process path, so route it direct.
+      if (!Platform.isAndroid)
+        {
+          'process_path': [Platform.resolvedExecutable],
+          'inbound': ['tun-in'],
+          'action': 'route',
+          'outbound': 'direct',
+        },
     ];
 
     if (settings.blockAds) {
@@ -227,12 +328,16 @@ class SingboxConfigBuilder {
         'rules': rules,
         if (ruleSets.isNotEmpty) 'rule_set': ruleSets,
         'final': finalOutbound,
-        'auto_detect_interface': desktopTun && useTun,
+        // Must be on whenever TUN is on. On Android this is what makes
+        // libbox call VpnService.protect() for every outbound socket — without
+        // it the proxy connection itself is routed back into the tunnel and
+        // nothing loads while the VPN icon is happily lit.
+        'auto_detect_interface': useTun,
         'default_domain_resolver': 'direct-dns',
       },
       'experimental': {
         'clash_api': {
-          'external_controller': '127.0.0.1:${AppConstants.clashApiPort}',
+          'external_controller': '127.0.0.1:$clashPort',
           'secret': '',
         },
         'cache_file': {
@@ -278,11 +383,10 @@ class SingboxConfigBuilder {
     String? detour,
   }) {
     final value = raw.trim();
-    if (value.isEmpty || value == 'local' || value == 'system') {
+    if (value.isEmpty || value == 'local' || value == 'system' || value == 'dhcp') {
       return {
-        'type': 'udp',
+        'type': 'local',
         'tag': tag,
-        'server': '77.88.8.8',
         if (detour != null) 'detour': detour,
       };
     }
@@ -320,14 +424,47 @@ class SingboxConfigBuilder {
     }
   }
 
+  /// Rule sets ship inside the app (assets/rules) and are copied next to the
+  /// config: downloading them from GitHub at start-up fails on networks where
+  /// raw.githubusercontent.com is blocked, and the core refused to start.
+  static String rulesDir = '';
+
   static Map<String, dynamic> _remoteSet(String tag, String url) {
+    final file = url.split('/').last;
+    if (rulesDir.isNotEmpty) {
+      return {
+        'type': 'local',
+        'tag': tag,
+        'format': 'binary',
+        'path': '$rulesDir/$file',
+      };
+    }
     return {
       'type': 'remote',
       'tag': tag,
       'format': 'binary',
       'url': url,
-      'download_detour': 'proxy',
+      'download_detour': 'direct',
     };
+  }
+
+  static const String _balancerUrl = 'https://cp.cloudflare.com/generate_204';
+  static const String _balancerInterval = '4m';
+
+  static Map<String, dynamic> _poolOutbound(ServerModel server, String tag, AppSettings settings) {
+    final outbound = _tagged(_cloneOutbound(server), tag);
+    _applyMuxAndFragment(outbound, settings);
+    if (settings.karingAllowInsecure) _allowInsecure(outbound);
+    return outbound;
+  }
+
+  /// Karing's "allow insecure": accept self-signed certificates on plain TLS
+  /// outbounds. Reality carries its own verification and is left untouched.
+  static void _allowInsecure(Map<String, dynamic> outbound) {
+    final tls = outbound['tls'];
+    if (tls is Map && tls['reality'] != true) {
+      outbound['tls'] = {...Map<String, dynamic>.from(tls), 'insecure': true};
+    }
   }
 
   static Map<String, dynamic> _cloneOutbound(ServerModel server) {
@@ -363,7 +500,7 @@ class SingboxConfigBuilder {
     final flow = (outbound['flow'] ?? '').toString();
     final vision = flow.contains('vision');
     final type = (outbound['type'] ?? '').toString();
-    final muxSafe = type != 'hysteria2' && type != 'tuic' && type != 'wireguard';
+    final muxSafe = type != 'hysteria2' && type != 'tuic' && type != 'wireguard' && type != 'anytls' && type != 'mieru';
     if (settings.muxEnabled && !vision && muxSafe) {
       outbound['multiplex'] = {
         'enabled': true,
