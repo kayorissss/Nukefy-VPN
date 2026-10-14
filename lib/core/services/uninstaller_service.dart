@@ -143,8 +143,15 @@ class UninstallerService {
       ..writeln(r'$exeDir = ' + _psQuote(exeDir))
       ..writeln(r'$support = ' + _psQuote(support))
       ..writeln(r'"Nukefy uninstall start $(Get-Date -Format o)" | Out-File -Encoding utf8 $log')
-      // Wait for the app to close so nothing is locked while we work.
-      ..writeln('Wait-Process -Id $pid -Timeout 90 -ErrorAction SilentlyContinue')
+      // Wait for the app to close so nothing is locked while we work. The
+      // target id must be written out as a variable: in PowerShell `$pid` is
+      // the helper's own process, so `Wait-Process -Id $pid` waited for itself
+      // (PowerShell 7: forever) or did nothing at all (5.1 has no -Timeout).
+      // Either way the folder was deleted while the app still held its files.
+      ..writeln(r'$appPid = ' + '$pid')
+      ..writeln(r'$deadline = (Get-Date).AddSeconds(90)')
+      ..writeln(r'while ((Get-Process -Id $appPid -ErrorAction SilentlyContinue) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Milliseconds 400 }')
+      ..writeln(r'"app closed or 90s timeout reached" | Out-File -Append -Encoding utf8 $log')
       ..writeln('Start-Sleep -Milliseconds 900')
       ..writeln(r'"target exe: ' + exe + r'" | Out-File -Append -Encoding utf8 $log');
 
