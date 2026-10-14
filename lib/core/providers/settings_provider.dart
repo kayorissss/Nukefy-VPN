@@ -92,6 +92,21 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Puts a whole settings snapshot back in place (used by the auto-setup
+  /// undo). Goes through the same persistence path as [update] so boot flags
+  /// and the mirrors stay consistent.
+  Future<void> restore(AppSettings snapshot) async {
+    settings = AppSettings.fromJson(snapshot.toJson());
+    _mirror();
+    await _storage.writeJson('settings', settings.toJson());
+    await _storage.setBootFlags(
+      launchOnBoot: settings.launchOnBoot,
+      autoConnect: settings.autoConnect,
+      startInTray: settings.startInTray,
+    );
+    notifyListeners();
+  }
+
   Future<void> addTraffic(int up, int down) async {
     settings.allTimeUp += up;
     settings.allTimeDown += down;

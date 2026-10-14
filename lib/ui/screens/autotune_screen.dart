@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/models/app_settings.dart';
 import '../../core/models/vpn_status.dart';
 import '../../core/providers/nav_provider.dart';
 import '../../core/providers/servers_provider.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/vpn_provider.dart';
+import '../../core/services/autotune_undo.dart';
 import '../../core/services/karing_service.dart';
 import '../../core/services/vpn_platform.dart';
 import '../../core/services/system_diagnostic_service.dart';
@@ -54,7 +58,20 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
   bool _restartNeeded = false;
   String? _failure;
 
+  /// Snapshot of everything the run may touch, written before it is applied and
+  /// kept on disk so «Вернуть как было» still works after a restart.
+  AutoTuneUndoRecord? _undo;
+  final Set<String> _appliedIds = {};
+
   S get s => context.read<SettingsProvider>().strings;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(AutoTuneUndo.instance.load().then((record) {
+      if (mounted && record != null) setState(() => _undo = record);
+    }));
+  }
 
   Future<void> _goto(_Stage next) async {
     setState(() => _stage = next);
@@ -126,6 +143,14 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
     final vpn = context.read<VpnProvider>();
     setState(() { _busy = true; _failure = null; });
     final chosen = _plan.where((item) => item.checked).map((item) => item.id).toSet();
+    // Written before the first change so the run can always be reversed.
+    final record = AutoTuneUndoRecord(
+      at: DateTime.now(),
+      settings: settings.settings.toJson(),
+      ids: chosen.toList()..sort(),
+    );
+    var zapretStarted = false;
+    String? addedSubscriptionId;
     try {
       if (chosen.contains('proxy-off')) {
         final confirmed = await confirmDialog(
@@ -145,6 +170,9 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
       _applied
         ..clear()
         ..addAll(_plan.where((item) => chosen.contains(item.id)).map((item) => item.label));
+      _appliedIds
+        ..clear()
+        ..addAll(chosen);
       await settings.update((value) {
         if (chosen.contains('gamefilter')) {
           value.zapretGameFilter = true;
@@ -187,7 +215,8 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
         final existing = servers.subscriptions.where((sub) => WhitelistCatalog.isWhitelistUrl(sub.url)).firstOrNull;
         if (existing == null) {
           final mirror = await KaringService.instance.firstReachable();
-          await servers.addSubscription(mirror?.url ?? WhitelistCatalog.mirrors.first.url, name: WhitelistCatalog.defaultName);
+          final created = await servers.addSubscription(mirror?.url ?? WhitelistCatalog.mirrors.first.url, name: WhitelistCatalog.defaultName);
+          addedSubscriptionId = created.id;
         }
       }
       if (chosen.contains('proxy-off')) {
@@ -202,14 +231,86 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
         if (strategy == null) throw StateError('No bundled zapret strategies were found.');
         zapret.configure(settings.settings);
         if (!await zapret.start(strategy)) throw StateError(zapret.lastError ?? 'winws failed');
+        zapretStarted = true;
         if (chosen.contains('zapret')) {
           await settings.update((value) => value.zapretAutoStart = true);
         }
       }
       if (vpn.status == VpnStatus.connected) _restartNeeded = true;
-      if (mounted) setState(() => _stage = _Stage.done);
+      final saved = AutoTuneUndoRecord(
+        at: record.at,
+        settings: record.settings,
+        ids: record.ids,
+        subscriptionId: addedSubscriptionId,
+        zapretStarted: zapretStarted,
+        proxyDisabled: chosen.contains('proxy-off'),
+      );
+      await AutoTuneUndo.instance.save(saved);
+      if (mounted) setState(() { _undo = saved; _stage = _Stage.done; });
     } catch (error) {
-      if (mounted) setState(() => _failure = '${s.t('autoPartialApply')}\n$error');
+      // Even a partial run stays reversible: keep what we know it touched.
+      final partial = AutoTuneUndoRecord(
+        at: record.at,
+        settings: record.settings,
+        ids: chosen.toList()..sort(),
+        subscriptionId: addedSubscriptionId,
+        zapretStarted: zapretStarted,
+        proxyDisabled: chosen.contains('proxy-off'),
+      );
+      await AutoTuneUndo.instance.save(partial);
+      if (mounted) {
+        setState(() {
+          _undo = partial;
+          _failure = '${s.t('autoPartialApply')}\n$error';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Puts the machine back the way it was before the run: settings come from
+  /// the snapshot, the system proxy from its own backup file, autostart from the
+  /// snapshot too, and only the things this run actually started are stopped.
+  /// Nothing is deleted and no foreign software is touched.
+  Future<void> _undo() async {
+    final record = _undo;
+    if (record == null || _busy) return;
+    final settings = context.read<SettingsProvider>();
+    final servers = context.read<ServersProvider>();
+    setState(() { _busy = true; _failure = null; });
+    try {
+      final previous = record.snapshot;
+      final autostartChanged = previous.launchOnBoot != settings.settings.launchOnBoot ||
+          previous.startInTray != settings.settings.startInTray;
+      await settings.restore(previous);
+      if (record.ids.contains('boot') || (record.ids.contains('tray') && autostartChanged)) {
+        await VpnPlatform().setAutoStart(previous.launchOnBoot, startInTray: previous.startInTray);
+      }
+      final subscriptionId = record.subscriptionId;
+      if (subscriptionId != null && servers.subscriptions.any((sub) => sub.id == subscriptionId)) {
+        await servers.deleteSubscription(subscriptionId);
+      }
+      if (record.zapretStarted) {
+        final zapret = ZapretService.instance;
+        if (zapret.isSupported) await zapret.stop();
+      }
+      if (record.proxyDisabled) {
+        await VpnPlatform().restoreSystemProxy();
+      }
+      await AutoTuneUndo.instance.clear();
+      if (!mounted) return;
+      setState(() {
+        _undo = null;
+        _applied.clear();
+        _appliedIds.clear();
+        _restartNeeded = false;
+        _findings = [];
+        _stage = _Stage.intro;
+      });
+      showNukefySnack(context, s.t('autoUndoDone'));
+    } catch (error) {
+      if (mounted) setState(() => _failure = '${s.t('autoUndoFailed')}\n$error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -239,13 +340,22 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 760),
-              child: switch (_stage) {
-                _Stage.intro => _intro(s, p),
-                _Stage.purpose => _purposeView(s, p),
-                _Stage.analysis => _analysisView(s, p),
-                _Stage.plan => _planView(s, p),
-                _Stage.done => _doneView(s, p),
-              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_failure != null) ...[
+                    CopyableError(message: _failure!, strings: s, title: s.t('autoApplyError')),
+                    const SizedBox(height: 12),
+                  ],
+                  switch (_stage) {
+                    _Stage.intro => _intro(s, p),
+                    _Stage.purpose => _purposeView(s, p),
+                    _Stage.analysis => _analysisView(s, p),
+                    _Stage.plan => _planView(s, p),
+                    _Stage.done => _doneView(s, p),
+                  },
+                ],
+              ),
             ),
           ),
         ),
@@ -286,6 +396,10 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
           const SizedBox(height: 10),
           Text(s.t('autoSafeNote'), style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12), textAlign: TextAlign.center),
           const SizedBox(height: 26),
+          if (_undo != null) ...[
+            _UndoCard(s: s, record: _undo!, busy: _busy, onUndo: _undo),
+            const SizedBox(height: 18),
+          ],
           FilledButton.icon(
             onPressed: () => _goto(_Stage.purpose),
             icon: const Icon(Icons.auto_awesome_rounded),
@@ -380,10 +494,6 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _header(s, p, 'autoStagePlan'),
-          if (_failure != null) ...[
-            CopyableError(message: _failure!, strings: s, title: s.t('autoApplyError')),
-            const SizedBox(height: 12),
-          ],
           SectionCard(
             title: s.t('autoPlan'),
             icon: Icons.checklist_rounded,
@@ -396,12 +506,11 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
                     controlAffinity: ListTileControlAffinity.leading,
                     value: item.checked,
                     title: Text(item.label),
-                    subtitle: item.detail == null && !item.destructive
-                        ? null
-                        : Text([
-                            if (item.detail != null) item.detail!,
-                            if (item.destructive) s.t('autoSystemChangeConsent'),
-                          ].join('\n')),
+                    subtitle: Text([
+                      if (item.detail != null) item.detail!,
+                      if (item.destructive) s.t('autoSystemChangeConsent'),
+                      s.t(item.destructive ? 'autoRevertSystem' : 'autoRevertApp'),
+                    ].join('\n')),
                     secondary: item.destructive
                         ? Icon(Icons.admin_panel_settings_outlined, color: p.warning, size: 19)
                         : null,
@@ -469,8 +578,63 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
               FilledButton(onPressed: () => _goto(_Stage.intro), child: Text(s.t('autoStart'))),
             ],
           ),
+          if (_undo != null) ...[
+            const SizedBox(height: 14),
+            TextButton.icon(
+              onPressed: _busy ? null : _undo,
+              icon: const Icon(Icons.undo_rounded, size: 17),
+              label: Text(s.t('autoUndo')),
+            ),
+          ],
         ],
       );
+}
+
+/// Shown while an auto-setup run is still reversible: one button, the rules in
+/// plain words, and the date of the run it undoes.
+class _UndoCard extends StatelessWidget {
+  const _UndoCard({required this.s, required this.record, required this.busy, required this.onUndo});
+
+  final S s;
+  final AutoTuneUndoRecord record;
+  final bool busy;
+  final Future<void> Function() onUndo;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final at = record.at;
+    final stamp = '${at.day.toString().padLeft(2, '0')}.${at.month.toString().padLeft(2, '0')} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: p.surface.withValues(alpha: .5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: p.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(Icons.history_rounded, size: 18, color: p.accent),
+              const SizedBox(width: 8),
+              Expanded(child: Text(s.t('autoUndoHint'), style: p.secondaryStyle)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text('${s.t('autoUndoWhen')}: $stamp', style: p.captionStyle),
+          const SizedBox(height: 4),
+          Text(s.t('autoUndoRules'), style: p.captionStyle),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: busy ? null : () => unawaited(onUndo()),
+            icon: const Icon(Icons.undo_rounded, size: 17),
+            label: Text(s.t('autoUndo')),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ChoiceTile extends StatelessWidget {
