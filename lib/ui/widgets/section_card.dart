@@ -290,6 +290,14 @@ class NukefyDropdown<T> extends StatelessWidget {
       style: MenuStyle(
         backgroundColor: WidgetStatePropertyAll(p.card),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        // Explicit foreground: with several palettes the framework default
+        // resolved to a colour too close to the card, and menu items
+        // looked invisible until hovered.
+        foregroundColor: WidgetStatePropertyAll(p.text),
+        iconColor: WidgetStatePropertyAll(p.textSecondary),
+        textStyle: WidgetStatePropertyAll(
+          AppTextStyles.bodyRegular.copyWith(color: p.text, fontSize: 13.5),
+        ),
         elevation: const WidgetStatePropertyAll(10),
         padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 5)),
         shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: p.border))),

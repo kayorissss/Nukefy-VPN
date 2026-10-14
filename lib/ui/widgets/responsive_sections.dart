@@ -79,7 +79,6 @@ class ResponsiveSections extends StatelessWidget {
                               ],
                             ],
                           ),
-                        ),
                 ),
             ],
           );
