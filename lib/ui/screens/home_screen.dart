@@ -648,6 +648,13 @@ class _ErrorCard extends StatelessWidget {
               },
               icon: Icon(Icons.copy_rounded, size: 15, color: p.error),
             ),
+            IconButton(
+              tooltip: s.t('diagnostics'),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+              onPressed: () => DiagnosticsScreen.open(context),
+              icon: Icon(Icons.health_and_safety_outlined, size: 15, color: p.error),
+            ),
           ],
         ),
       ),
