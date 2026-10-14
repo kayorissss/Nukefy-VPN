@@ -184,7 +184,7 @@ class ConnectionAnalyzer {
         level: CheckLevel.warn,
         title: 'Проверка сертификатов',
         detail: 'В системе есть перехватывающие корневые сертификаты: ${hits.join(', ')}',
-        hint: 'Антивирус или прокси подменяет сертификаты. Добавьте nukefy_vpn.exe и sing-box.exe в исключения HTTPS-проверки, либо отключите «сканирование HTTPS» в антивирусе.',
+        hint: 'Антивирус или прокси подменяет сертификаты. Добавьте NukefyClient.exe и sing-box.exe в исключения HTTPS-проверки, либо отключите «сканирование HTTPS» в антивирусе.',
       );
     }
     return AnalyzerCheck(id: 'mitm', level: CheckLevel.ok, title: 'Проверка сертификатов', detail: 'Посторонних перехватывающих сертификатов не найдено');

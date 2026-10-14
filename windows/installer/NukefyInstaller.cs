@@ -112,14 +112,27 @@ namespace NukefySetup
     class SetupForm : Form
     {
         // palette, mirroring lib/core/theme/app_colors.dart
-        static readonly Color Bg = Color.FromArgb(0x0B, 0x0E, 0x13);
-        static readonly Color Card = Color.FromArgb(0x16, 0x1B, 0x24);
-        static readonly Color Border = Color.FromArgb(0x24, 0x2B, 0x36);
+        /// <summary>The layout below is authored for 96 dpi. On a scaled display
+        /// GDI+ kept enlarging the point-sized text while every coordinate stayed
+        /// put, which is what pushed the subtitle onto the install-path line.</summary>
+        float _scale = 1f;
+
+        /// <summary>Window size in layout units (see <see cref="_scale"/>).</summary>
+        int W { get { return (int)Math.Round(ClientSize.Width / _scale); } }
+        int H { get { return (int)Math.Round(ClientSize.Height / _scale); } }
+
+        /// <summary>File name of the client inside the install folder.</summary>
+        const string AppExe = "NukefyClient.exe";
+        const string AppExeName = "NukefyClient";
+
+        static readonly Color Bg = Color.FromArgb(0x05, 0x05, 0x05);
+        static readonly Color Card = Color.FromArgb(0x0D, 0x0D, 0x0D);
+        static readonly Color Border = Color.FromArgb(0x30, 0x30, 0x30);
         // Named Fg, not Text: Form already owns a Text property and the
         // clash used to break the compile (CS0198/CS0029).
-        static readonly Color Fg = Color.FromArgb(0xF3, 0xF6, 0xFA);
-        static readonly Color Muted = Color.FromArgb(0x8B, 0x95, 0xA5);
-        static readonly Color Accent = Color.FromArgb(0x2E, 0xE5, 0x9D);
+        static readonly Color Fg = Color.FromArgb(0xF7, 0xF7, 0xF7);
+        static readonly Color Muted = Color.FromArgb(0xAA, 0xAA, 0xAA);
+        static readonly Color Accent = Color.FromArgb(0xF1, 0xF1, 0xF1);
         static readonly Color Danger = Color.FromArgb(0xFF, 0x4D, 0x6D);
 
         bool _desktop = true;
@@ -148,6 +161,16 @@ namespace NukefySetup
             Icon = LoadIcon();
         }
 
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            using (var g = Graphics.FromHwnd(Handle)) _scale = g.DpiY / 96f;
+            if (_scale < 0.75f || _scale > 4f) _scale = 1f;
+            // The window grows with the display so text and boxes keep the same
+            // proportions instead of colliding.
+            ClientSize = new Size((int)Math.Round(660 * _scale), (int)Math.Round(460 * _scale));
+        }
+
         static Icon LoadIcon()
         {
             try
@@ -174,19 +197,19 @@ namespace NukefySetup
         }
 
         // ---------------------------------------------------------------- paint
-        Rectangle TitleBar { get { return new Rectangle(0, 0, ClientSize.Width, 46); } }
-        Rectangle CloseButton { get { return new Rectangle(ClientSize.Width - 44, 0, 44, 46); } }
-        Rectangle RuChip { get { return new Rectangle(ClientSize.Width - 150, 12, 44, 22); } }
-        Rectangle EnChip { get { return new Rectangle(ClientSize.Width - 102, 12, 44, 22); } }
+        Rectangle TitleBar { get { return new Rectangle(0, 0, W, 46); } }
+        Rectangle CloseButton { get { return new Rectangle(W - 44, 0, 44, 46); } }
+        Rectangle RuChip { get { return new Rectangle(W - 150, 12, 44, 22); } }
+        Rectangle EnChip { get { return new Rectangle(W - 102, 12, 44, 22); } }
 
         Rectangle PrimaryButton
         {
-            get { return new Rectangle(ClientSize.Width - 230, ClientSize.Height - 76, 196, 46); }
+            get { return new Rectangle(W - 230, H - 76, 196, 46); }
         }
 
         Rectangle SecondaryButton
         {
-            get { return new Rectangle(ClientSize.Width - 230 - 120, ClientSize.Height - 76, 110, 46); }
+            get { return new Rectangle(W - 230 - 120, H - 76, 110, 46); }
         }
 
         Rectangle[] OptionRows
@@ -195,7 +218,7 @@ namespace NukefySetup
             {
                 var rows = new Rectangle[3];
                 for (int i = 0; i < 3; i++)
-                    rows[i] = new Rectangle(44, 208 + i * 42, ClientSize.Width - 88, 34);
+                    rows[i] = new Rectangle(44, 208 + i * 42, W - 88, 34);
                 return rows;
             }
         }
@@ -205,8 +228,17 @@ namespace NukefySetup
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-            using (var brush = new LinearGradientBrush(ClientRectangle, Color.FromArgb(0x0B, 0x0E, 0x13), Color.FromArgb(0x10, 0x16, 0x1F), 90f))
-                g.FillRectangle(brush, ClientRectangle);
+            // The window frame is cut in real pixels, before the transform that
+            // turns every coordinate below into a DPI-scaled one.
+            int realWidth = ClientSize.Width;
+            int realHeight = ClientSize.Height;
+            using (var region = Round(new Rectangle(0, 0, realWidth, realHeight), (int)Math.Round(14 * _scale)))
+            {
+                Region = new Region(region);
+            }
+            g.ScaleTransform(_scale, _scale);
+            using (var brush = new LinearGradientBrush(new Rectangle(0, 0, W, H), Color.FromArgb(0x05, 0x05, 0x05), Color.FromArgb(0x0D, 0x0D, 0x0D), 90f))
+                g.FillRectangle(brush, new Rectangle(0, 0, W, H));
             // accent glow in the top-left corner, same idea as the app background
             using (var glow = new GraphicsPath())
             {
@@ -219,18 +251,12 @@ namespace NukefySetup
                 }
             }
 
-            // rounded window
-            using (var region = Round(new Rectangle(0, 0, ClientSize.Width, ClientSize.Height), 14))
-            {
-                Region = new Region(region);
-            }
-
             // title row
             using (var dot = new SolidBrush(Accent)) g.FillEllipse(dot, 20, 19, 8, 8);
             DrawText(g, L.T(0), new Rectangle(36, 14, 300, 20), 9.5f, Muted, FontStyle.Bold, 2f);
             using (var icon = LoadIcon())
             {
-                if (icon != null) g.DrawIcon(icon, new Rectangle(ClientSize.Width - 236, 13, 20, 20));
+                if (icon != null) g.DrawIcon(icon, new Rectangle(W - 236, 13, 20, 20));
             }
             DrawChip(g, RuChip, "RU", L.Lang == 0);
             DrawChip(g, EnChip, "EN", L.Lang == 1);
@@ -244,11 +270,16 @@ namespace NukefySetup
 
         void PaintOptions(Graphics g)
         {
-            DrawText(g, L.T(1), new Rectangle(40, 74, ClientSize.Width - 80, 40), 24f, Fg, FontStyle.Bold, 0f);
-            DrawText(g, L.T(2), new Rectangle(40, 124, ClientSize.Width - 80, 40), 10f, Muted, FontStyle.Regular, 0f);
-            DrawText(g, L.T(13) + " " + AppDir, new Rectangle(40, 158, ClientSize.Width - 80, 20), 9f, Color.FromArgb(0x4F, 0x58, 0x66), FontStyle.Regular, 0f);
+            DrawText(g, L.T(1), new Rectangle(40, 74, W - 80, 40), 24f, Fg, FontStyle.Bold, 0f);
+            // The subtitle is measured instead of assumed: a longer translation
+            // or a scaled display must never push it onto the path line.
+            int subTop = 124;
+            int subLines = Math.Min(2, Math.Max(1, (int)Math.Round(TextHeight(g, L.T(2), W - 80, 10f) / 18.0)));
+            DrawText(g, L.T(2), new Rectangle(40, subTop, W - 80, 36), 10f, Muted, FontStyle.Regular, 0f, false, false, true);
+            int pathTop = Math.Min(subTop + subLines * 18 + 4, 166);
+            DrawText(g, L.T(13) + " " + AppDir, new Rectangle(40, pathTop, W - 80, 20), 9f, Color.FromArgb(0x62, 0x62, 0x62), FontStyle.Regular, 0f);
 
-            var card = new Rectangle(32, 190, ClientSize.Width - 64, 3 * 42 + 22);
+            var card = new Rectangle(32, 190, W - 64, 3 * 42 + 22);
             using (var path = Round(card, 16))
             {
                 using (var fill = new SolidBrush(Card)) g.FillPath(fill, path);
@@ -258,32 +289,35 @@ namespace NukefySetup
             for (int i = 0; i < 3; i++)
                 DrawCheck(g, rows[i], i == 0 ? _desktop : i == 1 ? _autostart : _launch, L.T(3 + i));
 
-            DrawText(g, L.T(23), new Rectangle(40, ClientSize.Height - 110, ClientSize.Width - 300, 20), 9f, Muted, FontStyle.Regular, 0f);
+            DrawText(g, L.T(23), new Rectangle(40, H - 110, W - 300, 20), 9f, Muted, FontStyle.Regular, 0f);
             DrawButton(g, PrimaryButton, L.T(6), true);
             DrawButton(g, SecondaryButton, L.T(7), false);
         }
 
         void PaintProgress(Graphics g)
         {
-            DrawText(g, L.T(1), new Rectangle(40, 74, ClientSize.Width - 80, 40), 24f, Fg, FontStyle.Bold, 0f);
-            DrawText(g, _status, new Rectangle(40, 150, ClientSize.Width - 80, 24), 11f, Muted, FontStyle.Regular, 0f);
-            var track = new Rectangle(40, 196, ClientSize.Width - 80, 10);
+            DrawText(g, L.T(1), new Rectangle(40, 74, W - 80, 40), 24f, Fg, FontStyle.Bold, 0f);
+            // One block, centred under the title: the old fixed rows left the
+            // whole lower half of the window empty while the bar sat on top of it.
+            int blockTop = H / 2 - 46;
+            DrawText(g, _status, new Rectangle(40, blockTop, W - 80, 24), 11f, Muted, FontStyle.Regular, 0f);
+            var track = new Rectangle(40, blockTop + 46, W - 80, 10);
             using (var path = Round(track, 5))
-            using (var fill = new SolidBrush(Color.FromArgb(0x22, 0x28, 0x33)))
+            using (var fill = new SolidBrush(Color.FromArgb(0x1A, 0x1A, 0x1A)))
                 g.FillPath(fill, path);
             int w = (int)(track.Width * Math.Max(0.02, Math.Min(1, _progress)));
             if (w > 12)
             {
                 using (var path = Round(new Rectangle(track.X, track.Y, w, track.Height), 5))
-                using (var fill = new LinearGradientBrush(new Rectangle(track.X, track.Y, w, track.Height), Accent, Color.FromArgb(0x00, 0xE5, 0xFF), 0f))
+                using (var fill = new LinearGradientBrush(new Rectangle(track.X, track.Y, w, track.Height), Color.FromArgb(0xFF, 0xFF, 0xFF), Color.FromArgb(0xC8, 0xC8, 0xC8), 0f))
                     g.FillPath(fill, path);
             }
-            DrawText(g, (int)(_progress * 100) + "%", new Rectangle(40, 216, ClientSize.Width - 80, 22), 10f, Fg, FontStyle.Bold, 0f);
+            DrawText(g, (int)(_progress * 100) + "%", new Rectangle(40, blockTop + 66, W - 80, 22), 10f, Fg, FontStyle.Bold, 0f);
         }
 
         void PaintDone(Graphics g)
         {
-            var circle = new Rectangle(ClientSize.Width / 2 - 34, 96, 68, 68);
+            var circle = new Rectangle(W / 2 - 34, 96, 68, 68);
             using (var b = new SolidBrush(Color.FromArgb(40, Accent))) g.FillEllipse(b, circle);
             using (var pen = new Pen(Accent, 4f))
             {
@@ -294,17 +328,17 @@ namespace NukefySetup
                     new Point(circle.X + 51, circle.Y + 22),
                 });
             }
-            DrawText(g, L.T(9), new Rectangle(40, 180, ClientSize.Width - 80, 40), 22f, Fg, FontStyle.Bold, 0f, false, true);
-            DrawText(g, L.T(10), new Rectangle(40, 226, ClientSize.Width - 80, 40), 10.5f, Muted, FontStyle.Regular, 0f, false, true);
+            DrawText(g, L.T(9), new Rectangle(40, 180, W - 80, 40), 22f, Fg, FontStyle.Bold, 0f, false, true);
+            DrawText(g, L.T(10), new Rectangle(40, 226, W - 80, 40), 10.5f, Muted, FontStyle.Regular, 0f, false, true);
             DrawButton(g, PrimaryButton, L.T(11), true);
             DrawButton(g, SecondaryButton, L.T(12), false);
         }
 
         void PaintFailed(Graphics g)
         {
-            DrawText(g, L.T(19), new Rectangle(40, 100, ClientSize.Width - 80, 40), 20f, Danger, FontStyle.Bold, 0f);
-            DrawText(g, L.T(20), new Rectangle(40, 150, ClientSize.Width - 80, 24), 10f, Muted, FontStyle.Regular, 0f);
-            var box = new Rectangle(40, 180, ClientSize.Width - 80, 150);
+            DrawText(g, L.T(19), new Rectangle(40, 100, W - 80, 40), 20f, Danger, FontStyle.Bold, 0f);
+            DrawText(g, L.T(20), new Rectangle(40, 150, W - 80, 24), 10f, Muted, FontStyle.Regular, 0f);
+            var box = new Rectangle(40, 180, W - 80, 150);
             using (var path = Round(box, 14))
             {
                 using (var fill = new SolidBrush(Card)) g.FillPath(fill, path);
@@ -320,15 +354,30 @@ namespace NukefySetup
             return text.Length <= max ? text : text.Substring(0, max) + "…";
         }
 
-        void DrawText(Graphics g, string text, Rectangle box, float size, Color color, FontStyle style, float spacing, bool center = false, bool middle = false)
+        /// <summary>Height a wrapped string needs at the given width, in layout units.</summary>
+        static float TextHeight(Graphics g, string text, int width, float size)
         {
-            using (var font = new Font("Segoe UI", size, style, GraphicsUnit.Point))
+            using (var font = new Font("Segoe UI", size * 96f / 72f, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var format = new StringFormat())
+            {
+                format.Trimming = StringTrimming.EllipsisCharacter;
+                format.FormatFlags = StringFormatFlags.LineLimit;
+                return g.MeasureString(text, font, new SizeF(width, 1000f), format).Height;
+            }
+        }
+
+        void DrawText(Graphics g, string text, Rectangle box, float size, Color color, FontStyle style, float spacing, bool center = false, bool middle = false, bool limitLines = false)
+        {
+            using (var font = new Font("Segoe UI", size * 96f / 72f, style, GraphicsUnit.Pixel))
             using (var brush = new SolidBrush(color))
             using (var format = new StringFormat())
             {
                 format.Alignment = center ? StringAlignment.Center : StringAlignment.Near;
                 format.LineAlignment = middle ? StringAlignment.Center : StringAlignment.Near;
                 format.Trimming = StringTrimming.EllipsisCharacter;
+                // A height-limited box must not paint extra lines over whatever
+                // sits underneath it.
+                if (limitLines) format.FormatFlags |= StringFormatFlags.LineLimit;
                 if (spacing > 0)
                 {
                     // letter-spacing by hand: GDI+ has no tracking
@@ -362,16 +411,16 @@ namespace NukefySetup
             {
                 if (primary)
                 {
-                    using (var fill = new LinearGradientBrush(r, Accent, Color.FromArgb(0x00, 0xE5, 0xFF), 0f))
+                    using (var fill = new LinearGradientBrush(r, Color.FromArgb(0xFF, 0xFF, 0xFF), Color.FromArgb(0xD6, 0xD6, 0xD6), 90f))
                         g.FillPath(fill, path);
                 }
                 else
                 {
-                    using (var fill = new SolidBrush(Color.FromArgb(0x1A, 0x1F, 0x28))) g.FillPath(fill, path);
+                    using (var fill = new SolidBrush(Color.FromArgb(0x17, 0x17, 0x17))) g.FillPath(fill, path);
                     using (var pen = new Pen(Border)) g.DrawPath(pen, path);
                 }
             }
-            DrawText(g, label, r, 11f, primary ? Color.FromArgb(0x0B, 0x0E, 0x13) : Fg, FontStyle.Bold, 0f, true, true);
+            DrawText(g, label, r, 11f, primary ? Color.FromArgb(0x0B, 0x0B, 0x0B) : Fg, FontStyle.Bold, 0f, true, true);
         }
 
         void DrawCheck(Graphics g, Rectangle row, bool value, string label)
@@ -402,9 +451,18 @@ namespace NukefySetup
         }
 
         // ---------------------------------------------------------------- input
+        /// <summary>The hit boxes are laid out in layout units, the mouse arrives
+        /// in real pixels: convert once, here.</summary>
+        Point LayoutPoint(MouseEventArgs e)
+        {
+            return new Point((int)Math.Round(e.X / _scale), (int)Math.Round(e.Y / _scale));
+        }
+
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
+            // kept in real pixels: it is only compared against the title-row
+            // height and used for window deltas
             _drag = e.Location;
         }
 
@@ -414,24 +472,25 @@ namespace NukefySetup
             if (e.Button == MouseButtons.Left)
             {
                 // the window has no system frame: dragging the title row moves it
-                if (_drag.Y < 46)
+                if (_drag.Y < 46 * _scale)
                 {
                     Left += e.X - _drag.X;
                     Top += e.Y - _drag.Y;
                 }
                 return;
             }
+            var at = LayoutPoint(e);
             int hover = -1;
-            if (CloseButton.Contains(e.Location)) hover = 9;
-            else if (RuChip.Contains(e.Location)) hover = 10;
-            else if (EnChip.Contains(e.Location)) hover = 11;
+            if (CloseButton.Contains(at)) hover = 9;
+            else if (RuChip.Contains(at)) hover = 10;
+            else if (EnChip.Contains(at)) hover = 11;
             if (hover != _hover) { _hover = hover; Invalidate(); }
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
-            var point = e.Location;
+            var point = LayoutPoint(e);
             if (_page == Page.Options)
             {
                 if (CloseButton.Contains(point)) { Close(); return; }
@@ -478,7 +537,7 @@ namespace NukefySetup
         /// <summary>"Close Nukefy and retry": the app itself stays installed.</summary>
         void Launch()
         {
-            var exe = Path.Combine(AppDir, "nukefy_vpn.exe");
+            var exe = Path.Combine(AppDir, AppExe);
             if (!File.Exists(exe)) return;
             try
             {
@@ -572,7 +631,7 @@ namespace NukefySetup
 
         void CreateShortcuts()
         {
-            var exe = Path.Combine(AppDir, "nukefy_vpn.exe");
+            var exe = Path.Combine(AppDir, AppExe);
             var startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
                 "Programs", "Nukefy Client.lnk");
             Shortcut(startMenu, exe);
@@ -611,7 +670,7 @@ namespace NukefySetup
 
         void WriteUninstallEntry()
         {
-            var exe = Path.Combine(AppDir, "nukefy_vpn.exe");
+            var exe = Path.Combine(AppDir, AppExe);
             var version = Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
             using (var key = Registry.LocalMachine.CreateSubKey(UninstallKey))
             {
@@ -673,6 +732,9 @@ namespace NukefySetup
         static void StopOwnStack()
         {
             Run("sc.exe", "stop nukefy-zapret");
+            // Upgrades arrive with the old process still running under its
+            // previous file name, so both are stopped by name.
+            KillByName(AppExeName);
             KillByName("nukefy_vpn");
             KillOwnedByPath("winws", "*nukefy*");
             KillOwnedByPath("sing-box", "*nukefy*");

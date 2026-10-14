@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -23,8 +24,10 @@ import '../widgets/country_badge.dart';
 import '../widgets/nukefy_logo.dart';
 import '../widgets/ping_badge.dart';
 import '../../core/services/vpn_platform.dart';
+import '../../core/services/update_service.dart';
 import 'diagnostics_screen.dart';
 import 'main_shell.dart';
+import 'update_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -186,6 +189,7 @@ class HomeScreen extends StatelessWidget {
                       children: [
                         hero,
                         const SizedBox(height: 28),
+                        const _UpdateBanner(),
                         serverCard,
                       ],
                     ),
@@ -203,6 +207,7 @@ class HomeScreen extends StatelessWidget {
                         children: [
                           hero,
                           const SizedBox(height: 26),
+                          const _UpdateBanner(),
                           serverCard,
                         ],
                       ),
@@ -603,6 +608,84 @@ class _WarpHintCardState extends State<_WarpHintCard> {
                 onPressed: _toggle,
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A quiet line under the hero when a newer release exists. It replaces a
+/// settings-only check that people understandably never opened: an installed
+/// build silently stayed old, and fixed bugs were reported all over again.
+class _UpdateBanner extends StatefulWidget {
+  const _UpdateBanner();
+
+  @override
+  State<_UpdateBanner> createState() => _UpdateBannerState();
+}
+
+class _UpdateBannerState extends State<_UpdateBanner> {
+  UpdateInfo? _info;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_check()));
+  }
+
+  Future<void> _check() async {
+    if (!mounted) return;
+    final skipped = context.read<SettingsProvider>().settings.skippedVersion;
+    try {
+      final info = await UpdateService().check();
+      if (!mounted || info == null || info.version == skipped) return;
+      setState(() => _info = info);
+    } catch (_) {
+      // A failed check is not worth a card on the home screen.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final info = _info;
+    if (info == null) return const SizedBox.shrink();
+    final p = context.palette;
+    final s = context.read<SettingsProvider>().strings;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+          decoration: BoxDecoration(
+            color: p.accent.withValues(alpha: .10),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: p.accent.withValues(alpha: .38)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.system_update_alt_rounded, size: 17, color: p.accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('${s.t('updateAvailable')} · ${info.version}',
+                    style: AppTextStyles.bodySecondary.copyWith(fontWeight: FontWeight.w700, color: p.text)),
+              ),
+              TextButton(
+                onPressed: () => UpdateScreen.open(context, info),
+                child: Text(s.t('updateNow')),
+              ),
+              IconButton(
+                tooltip: s.t('later'),
+                visualDensity: VisualDensity.compact,
+                onPressed: () async {
+                  final settings = context.read<SettingsProvider>();
+                  await settings.update((value) => value.skippedVersion = info.version);
+                  if (mounted) setState(() => _info = null);
+                },
+                icon: Icon(Icons.close_rounded, size: 15, color: p.textSecondary),
+              ),
+            ],
+          ),
         ),
       ),
     );

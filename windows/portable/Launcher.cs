@@ -1,7 +1,7 @@
 // Portable single-file launcher for Nukefy VPN.
 // The whole Flutter build (exe + dlls + data + zapret) is embedded as
 // payload.zip. On start it is unpacked to %LOCALAPPDATA%\NukefyVPN\app
-// (only when the embedded version differs) and nukefy_vpn.exe is launched.
+// (only when the embedded version differs) and NukefyClient.exe is launched.
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -25,7 +25,7 @@ static class Launcher
             var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppName);
             var appDir = Path.Combine(root, "app");
             var marker = Path.Combine(root, "version.txt");
-            var exe = Path.Combine(appDir, "nukefy_vpn.exe");
+            var exe = Path.Combine(appDir, "NukefyClient.exe");
 
             // --uninstall is deliberately passed through to the branded app.
             // It owns confirmation, scope checkboxes and the path-filtered
@@ -92,7 +92,7 @@ static class Launcher
         // sing-box/winws and must never be killed by process name alone.
         var root = Path.GetFullPath(appDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
-        foreach (var name in new[] { "nukefy_vpn", "winws", "sing-box", "xray" })
+        foreach (var name in new[] { "NukefyClient", "nukefy_vpn", "winws", "sing-box", "xray" })
         {
             foreach (var process in Process.GetProcessesByName(name))
             {
