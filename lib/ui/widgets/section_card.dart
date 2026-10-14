@@ -305,6 +305,16 @@ class NukefyDropdown<T> extends StatelessWidget {
       menuChildren: [
         for (final entry in items.entries)
           MenuItemButton(
+            // Explicit foreground: with several palettes the framework
+            // default resolved to a colour too close to the card, and menu
+            // items looked invisible until hovered.
+            style: ButtonStyle(
+              foregroundColor: WidgetStatePropertyAll(p.text),
+              iconColor: WidgetStatePropertyAll(p.textSecondary),
+              textStyle: WidgetStatePropertyAll(
+                AppTextStyles.bodyRegular.copyWith(color: p.text, fontSize: 13.5),
+              ),
+            ),
             onPressed: () => onChanged(entry.key),
             child: SizedBox(
               width: compact ? 230 : 290,
