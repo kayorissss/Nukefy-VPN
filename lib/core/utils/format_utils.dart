@@ -1,12 +1,13 @@
 class FormatUtils {
-  /// Unit language follows the UI language (set once from NukefyApp).
-  static bool ruUnits = true;
+  /// Set by SettingsProvider whenever the UI language resolves, so byte and
+  /// speed units follow the interface language ('0 Б/с', not '0 B/s').
+  static bool russian = false;
+
+  static String get mbpsUnit => russian ? 'Мбит/с' : 'Mbit/s';
 
   static String bytes(int value) {
     if (value < 0) value = 0;
-    final units = ruUnits
-        ? const ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
-        : const ['B', 'KB', 'MB', 'GB', 'TB'];
+    final units = russian ? const ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'] : const ['B', 'KB', 'MB', 'GB', 'TB'];
     var size = value.toDouble();
     var unit = 0;
     while (size >= 1024 && unit < units.length - 1) {
@@ -18,13 +19,7 @@ class FormatUtils {
   }
 
   static String speed(int bytesPerSecond) {
-    return '${bytes(bytesPerSecond)}${ruUnits ? '/с' : '/s'}';
-  }
-
-  static String ping(int? ms) {
-    if (ms == null) return '—';
-    if (ms < 0) return ruUnits ? 'недоступен' : 'unreachable';
-    return '$ms ${ruUnits ? 'мс' : 'ms'}';
+    return '${bytes(bytesPerSecond)}${russian ? '/с' : '/s'}';
   }
 
   static String duration(Duration value) {
@@ -85,6 +80,10 @@ class FormatUtils {
         return 'VMess';
       case 'trojan':
         return 'Trojan';
+      case 'anytls':
+        return 'AnyTLS';
+      case 'mieru':
+        return 'Mieru';
       case 'shadowsocks':
         return 'SS';
       case 'hysteria2':

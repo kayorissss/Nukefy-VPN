@@ -15,9 +15,11 @@ class SubscriptionModel {
     this.totalBytes,
     this.expireAt,
     this.lastError,
-    this.mirrors = const [],
-    this.lastUsedUrl,
-  });
+    this.hideNotices = false,
+    this.receivedCount = 0,
+    this.rejectedCount = 0,
+    List<String>? suppressedFingerprints,
+  }) : suppressedFingerprints = List<String>.from(suppressedFingerprints ?? const []);
 
   final String id;
   String name;
@@ -32,13 +34,12 @@ class SubscriptionModel {
   int? totalBytes;
   DateTime? expireAt;
   String? lastError;
-
-  /// Fallback URLs of the same subscription ("mirrors"). They are tried in
-  /// order when the main URL fails.
-  List<String> mirrors;
-
-  /// URL that actually served the last successful refresh (main or mirror).
-  String? lastUsedUrl;
+  bool hideNotices;
+  int receivedCount;
+  int rejectedCount;
+  /// Subscription entries removed by the user stay hidden after refresh.
+  /// Fingerprints are used instead of names because panel names can change.
+  List<String> suppressedFingerprints;
 
   bool get isDue {
     if (!enabled || autoUpdateInterval == UpdateInterval.manual) return false;
@@ -62,8 +63,10 @@ class SubscriptionModel {
         'totalBytes': totalBytes,
         'expireAt': expireAt?.toIso8601String(),
         'lastError': lastError,
-        'mirrors': mirrors,
-        'lastUsedUrl': lastUsedUrl,
+        'hideNotices': hideNotices,
+        'receivedCount': receivedCount,
+        'rejectedCount': rejectedCount,
+        'suppressedFingerprints': suppressedFingerprints,
       };
 
   factory SubscriptionModel.fromJson(Map<String, dynamic> json) {
@@ -83,12 +86,15 @@ class SubscriptionModel {
       totalBytes: (json['totalBytes'] as num?)?.toInt(),
       expireAt: _date(json['expireAt']),
       lastError: json['lastError'] as String?,
-      mirrors: (json['mirrors'] as List?)
-              ?.map((e) => e.toString())
-              .where((e) => e.trim().isNotEmpty)
+      hideNotices: json['hideNotices'] == true,
+      receivedCount: (json['receivedCount'] as num?)?.toInt() ?? 0,
+      rejectedCount: (json['rejectedCount'] as num?)?.toInt() ?? 0,
+      suppressedFingerprints: (json['suppressedFingerprints'] as List?)
+              ?.map((item) => '$item')
+              .where((item) => item.isNotEmpty)
+              .toSet()
               .toList() ??
-          const [],
-      lastUsedUrl: json['lastUsedUrl'] as String?,
+          <String>[],
     );
   }
 

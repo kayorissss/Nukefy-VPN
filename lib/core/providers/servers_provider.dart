@@ -113,13 +113,83 @@ class ServersProvider extends ChangeNotifier {
     return list;
   }
 
+  /// Pinned subscriptions first, everything else in the order the user set
+  /// with «Выше» / «Ниже». `List.sort` is not stable, so the stored index is
+  /// compared explicitly.
   List<SubscriptionModel> get orderedSubscriptions {
     final list = List<SubscriptionModel>.from(subscriptions);
+    final stored = <String, int>{
+      for (var i = 0; i < list.length; i++) list[i].id: i,
+    };
     list.sort((a, b) {
       if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      return (stored[a.id] ?? 0).compareTo(stored[b.id] ?? 0);
     });
     return list;
+  }
+
+  bool canMoveSubscriptionUp(String id) {
+    final list = orderedSubscriptions;
+    return list.indexWhere((e) => e.id == id) > 0;
+  }
+
+  bool canMoveSubscriptionDown(String id) {
+    final list = orderedSubscriptions;
+    final index = list.indexWhere((e) => e.id == id);
+    return index >= 0 && index < list.length - 1;
+  }
+
+  /// Swaps the subscription with its neighbour. Moving across the pinned
+  /// boundary swaps the pinned flag too, otherwise the sort would put the row
+  /// straight back where it was.
+  Future<void> moveSubscription(String id, {required bool up}) async {
+    final list = orderedSubscriptions;
+    final index = list.indexWhere((e) => e.id == id);
+    if (index < 0) return;
+    final target = up ? index - 1 : index + 1;
+    if (target < 0 || target >= list.length) return;
+    final moving = list[index];
+    final neighbour = list[target];
+    final pinned = moving.isPinned;
+    moving.isPinned = neighbour.isPinned;
+    neighbour.isPinned = pinned;
+    list.removeAt(index);
+    list.insert(target, moving);
+    subscriptions = list;
+    await _persist();
+    notifyListeners();
+  }
+
+  /// Pings only the servers of one subscription.
+  Future<void> pingSubscription(String id) async {
+    final targets = serversOf(id).where((server) => !server.isInformational).toList();
+    if (targets.isEmpty) return;
+    await PingUtils.pingAll(
+      targets.map((s) => (id: s.id, host: s.address, port: s.port)).toList(),
+      onEach: (serverId, ms) {
+        final server = byId(serverId);
+        if (server == null) return;
+        server
+          ..pingMs = ms
+          ..lastPingAt = DateTime.now()
+          ..isNew = false;
+        _notifyThrottled();
+      },
+    );
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> setInformational(ServerModel server, bool value) async {
+    server.informational = value;
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> toggleNotices(SubscriptionModel sub) async {
+    sub.hideNotices = !sub.hideNotices;
+    await _persist();
+    notifyListeners();
   }
 
   Future<int> addDrafts(
@@ -128,12 +198,9 @@ class ServersProvider extends ChangeNotifier {
     bool markNew = false,
   }) async {
     var added = 0;
+    final existingByKey = {for (final server in servers.where((s) => s.subscriptionId == subscriptionId)) server.fingerprint: server};
     for (final draft in drafts) {
-      final existing = servers.where((server) {
-        return server.subscriptionId == subscriptionId &&
-            server.fingerprint ==
-                '${draft.protocol}|${draft.address.toLowerCase()}|${draft.port}|${draft.name.toLowerCase()}';
-      }).firstOrNull;
+      final existing = existingByKey[draft.fingerprint];
       if (existing != null) {
         existing
           ..rawLink = draft.rawLink ?? existing.rawLink
@@ -158,6 +225,7 @@ class ServersProvider extends ChangeNotifier {
         isNew: markNew,
         createdAt: DateTime.now(),
       ));
+      existingByKey[draft.fingerprint] = servers.last;
       added++;
     }
     await _persist();
@@ -187,26 +255,40 @@ class ServersProvider extends ChangeNotifier {
     try {
       final fetched = await _subscriptions.fetch(sub);
       final previous = serversOf(id).map((e) => e.fingerprint).toSet();
+      // A subscription refresh must not resurrect an entry the user removed.
+      // Keep the raw count for diagnostics, but feed only visible drafts into
+      // the reconciliation pass.
+      final visibleDrafts = fetched.servers
+          .where((draft) => !sub.suppressedFingerprints.contains(draft.fingerprint))
+          .toList(growable: false);
+      final fetchedKeys = visibleDrafts.map((e) => e.fingerprint).toSet();
+      sub.receivedCount = fetched.servers.length;
+      sub.rejectedCount = fetched.warnings.length;
+      if (fetched.servers.isEmpty && fetched.warnings.isNotEmpty) {
+        throw SubscriptionException('subscription-parse-failed');
+      }
       servers.removeWhere(
         (server) =>
             server.subscriptionId == id &&
             !server.isPinned &&
-            !fetched.servers.any((draft) =>
-                '${draft.protocol}|${draft.address.toLowerCase()}|${draft.port}|${draft.name.toLowerCase()}' ==
-                server.fingerprint),
+            !fetchedKeys.contains(server.fingerprint),
       );
       await addDrafts(
-        fetched.servers,
+        visibleDrafts,
         subscriptionId: id,
         markNew: previous.isNotEmpty,
       );
       for (final server in serversOf(id)) {
         if (previous.contains(server.fingerprint)) server.isNew = false;
       }
+      // A mirror that answered becomes the stored URL: the next refresh
+      // starts from a host that is known to work on this network.
+      if (fetched.sourceUrl != null && fetched.sourceUrl!.isNotEmpty) {
+        sub.url = fetched.sourceUrl!;
+      }
       sub
         ..lastUpdated = DateTime.now()
         ..lastError = null
-        ..lastUsedUrl = fetched.usedUrl
         ..uploadBytes = fetched.uploadBytes ?? sub.uploadBytes
         ..downloadBytes = fetched.downloadBytes ?? sub.downloadBytes
         ..totalBytes = fetched.totalBytes ?? sub.totalBytes
@@ -248,7 +330,6 @@ class ServersProvider extends ChangeNotifier {
     UpdateInterval? interval,
     String? userAgent,
     bool? pinned,
-    List<String>? mirrors,
   }) async {
     final sub = subscriptions.where((s) => s.id == id).firstOrNull;
     if (sub == null) return;
@@ -257,13 +338,6 @@ class ServersProvider extends ChangeNotifier {
     if (interval != null) sub.autoUpdateInterval = interval;
     if (userAgent != null) sub.userAgent = userAgent;
     if (pinned != null) sub.isPinned = pinned;
-    if (mirrors != null) {
-      sub.mirrors = mirrors
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty && e != sub.url)
-          .toSet()
-          .toList();
-    }
     await _persist();
     notifyListeners();
   }
@@ -276,7 +350,15 @@ class ServersProvider extends ChangeNotifier {
   }
 
   Future<void> deleteServer(String id) async {
-    servers.removeWhere((s) => s.id == id);
+    final server = byId(id);
+    if (server == null) return;
+    final subscription = server.subscriptionId == null
+        ? null
+        : subscriptions.where((item) => item.id == server.subscriptionId).firstOrNull;
+    if (subscription != null && !subscription.suppressedFingerprints.contains(server.fingerprint)) {
+      subscription.suppressedFingerprints.add(server.fingerprint);
+    }
+    servers.removeWhere((item) => item.id == id);
     await _persist();
     notifyListeners();
   }
@@ -297,6 +379,20 @@ class ServersProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Records that a real connection to this server just failed. The row then
+  /// stops advertising a latency as if the server were usable: -1 renders the
+  /// "no answer" state everywhere pings are shown.
+  Future<void> markUnreachable(String id) async {
+    final server = byId(id);
+    if (server == null) return;
+    server
+      ..pingMs = -1
+      ..lastPingAt = DateTime.now()
+      ..isNew = false;
+    notifyListeners();
+    await _persist();
+  }
+
   Future<void> setPing(String id, int ms) async {
     final server = byId(id);
     if (server == null) return;
@@ -305,6 +401,14 @@ class ServersProvider extends ChangeNotifier {
       ..lastPingAt = DateTime.now()
       ..isNew = false;
     notifyListeners();
+  }
+
+  // Mass ping produces hundreds of updates per second; coalesce them so the
+  // list repaints at most ~6 times a second instead of freezing.
+  Timer? _notifyTimer;
+  void _notifyThrottled() {
+    if (_notifyTimer?.isActive ?? false) return;
+    _notifyTimer = Timer(const Duration(milliseconds: 160), notifyListeners);
   }
 
   Future<void> pingAll({void Function(String id, int ms)? onEach}) async {
@@ -322,7 +426,7 @@ class ServersProvider extends ChangeNotifier {
           ..pingMs = ms
           ..lastPingAt = DateTime.now();
         onEach?.call(id, ms);
-        notifyListeners();
+        _notifyThrottled();
       },
     );
     pinging = false;

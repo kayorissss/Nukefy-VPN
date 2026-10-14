@@ -77,16 +77,19 @@ class StorageService {
   Future<void> setBootFlags({
     required bool launchOnBoot,
     required bool autoConnect,
+    bool startInTray = false,
   }) async {
     final prefs = _prefs ?? await SharedPreferences.getInstance();
     await prefs.setBool('flutter.launch_on_boot', launchOnBoot);
     await prefs.setBool('flutter.auto_connect', autoConnect);
+    await prefs.setBool('flutter.start_in_tray', startInTray);
     try {
       final dir = await getApplicationSupportDirectory();
       final file = File('${dir.path}/boot_flags.json');
       await file.writeAsString(jsonEncode({
         'launchOnBoot': launchOnBoot,
         'autoConnect': autoConnect,
+        'startInTray': startInTray,
       }));
     } catch (_) {}
   }

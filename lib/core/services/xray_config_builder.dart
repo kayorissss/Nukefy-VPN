@@ -1,207 +1,178 @@
+import 'dart:convert';
+import 'singbox_config_builder.dart' show LocalPorts;
+import 'dart:io';
+
 import '../constants/app_constants.dart';
 import '../models/app_settings.dart';
 import '../models/server_model.dart';
-import '../models/vpn_status.dart';
 
-/// Builds an Xray-core configuration.
-///
-/// sing-box (checked up to v1.14) has no XHTTP/SplitHTTP transport, so
-/// servers using it are served by the bundled Xray engine instead of being
-/// rejected or silently degraded to raw TCP. The local listeners reuse the
-/// same SOCKS/HTTP ports as the sing-box engine, and a stats API inbound is
-/// added so traffic numbers stay real (queried via `xray api statsquery`).
+class XrayConfigException implements Exception {
+  const XrayConfigException(this.code);
+  final String code;
+  @override
+  String toString() => code;
+}
+
+/// Builds native Xray JSON for transports that sing-box deliberately does not
+/// implement. It is intentionally separate from the sing-box builder: an
+/// XHTTP link must never be rewritten as TCP or reported as connected by the
+/// wrong core.
 class XrayConfigBuilder {
-  static Map<String, dynamic> build({
+  static bool supports(ServerModel server) {
+    if (!server.usesXhttp) return false;
+    return const {'vless', 'vmess', 'trojan'}.contains(server.protocol.toLowerCase());
+  }
+
+  static String buildJson({
     required ServerModel server,
     required AppSettings settings,
+    required String logPath,
+    required int inboundPort,
+    LocalPorts? ports,
   }) {
-    final outbound = _proxyOutbound(server);
+    if (!supports(server)) throw const XrayConfigException('XRAY_UNSUPPORTED_PROTOCOL');
+    final outbound = server.outbound ?? const <String, dynamic>{};
+    final transport = outbound['transport'];
+    if (transport is! Map || !const {'xhttp', 'splithttp'}.contains('${transport['type']}'.toLowerCase())) {
+      throw const XrayConfigException('XRAY_TRANSPORT_MISSING');
+    }
     final listen = settings.allowLan ? '0.0.0.0' : '127.0.0.1';
-    return {
-      'log': {'loglevel': 'warning'},
-      'stats': <String, dynamic>{},
-      'api': {
-        'tag': 'api',
-        'services': ['StatsService'],
-      },
-      'policy': {
-        'system': {
-          'statsInboundUplink': true,
-          'statsInboundDownlink': true,
-          'statsOutboundUplink': true,
-          'statsOutboundDownlink': true,
-        },
-      },
-      'dns': {
-        'servers': [
-          _dnsServer(settings.proxyDns),
-          _dnsServer(settings.directDns),
-        ],
-        'queryStrategy': 'UseIPv4',
-      },
-      'inbounds': [
-        {
-          'tag': 'socks-in',
-          'listen': listen,
-          'port': settings.socksPort,
-          'protocol': 'socks',
-          'settings': {'udp': true},
-          'sniffing': {'enabled': true, 'destOverride': ['http', 'tls']},
-        },
-        {
-          'tag': 'http-in',
-          'listen': listen,
-          'port': settings.httpPort,
-          'protocol': 'http',
-          'sniffing': {'enabled': true, 'destOverride': ['http', 'tls']},
-        },
-        {
-          'tag': 'api',
-          'listen': '127.0.0.1',
-          'port': AppConstants.xrayApiPort,
-          'protocol': 'dokodemo-door',
-          'settings': {'address': '127.0.0.1'},
-        },
-      ],
+    final inbounds = <Map<String, dynamic>>[];
+    // The SOCKS inbound is internal when the sing-box TUN front-end is
+    // active, and becomes the user-facing local proxy otherwise.
+    if (settings.tunEnabled || settings.localProxyEnabled) {
+      inbounds.add({
+        'tag': 'socks-in',
+        'listen': listen,
+        'port': inboundPort,
+        'protocol': 'socks',
+        'settings': {'udp': true},
+      });
+    }
+    final httpPort = ports?.http ?? settings.httpPort;
+    if (!settings.tunEnabled && settings.localProxyEnabled && httpPort != inboundPort) {
+      inbounds.add({
+        'tag': 'http-in',
+        'listen': listen,
+        'port': httpPort,
+        'protocol': 'http',
+        'settings': {},
+      });
+    }
+    final config = <String, dynamic>{
+      'log': {'loglevel': settings.logLevel, 'access': logPath, 'error': logPath},
+      'inbounds': inbounds,
       'outbounds': [
-        outbound,
-        {'tag': 'direct', 'protocol': 'freedom'},
-        {'tag': 'block', 'protocol': 'blackhole'},
+        _proxyOutbound(server, outbound, transport),
+        {'tag': 'direct', 'protocol': 'freedom', 'settings': {}},
+        {'tag': 'block', 'protocol': 'blackhole', 'settings': {}},
       ],
       'routing': {
         'domainStrategy': 'AsIs',
         'rules': [
-          {
-            'type': 'field',
-            'inboundTag': ['api'],
-            'outboundTag': 'api',
-          },
-          ..._routingRules(settings),
+          {'type': 'field', 'inboundTag': ['socks-in', 'http-in'], 'outboundTag': 'proxy'},
         ],
       },
     };
+    return const JsonEncoder.withIndent('  ').convert(config);
   }
 
-  static String _dnsServer(String raw) {
-    final value = raw.trim();
-    if (value.startsWith('https://')) return value;
-    if (value.startsWith('tls://')) return value;
-    // Plain IPs and udp://host are passed as bare addresses.
-    return value.replaceFirst('udp://', '');
-  }
-
-  static List<Map<String, dynamic>> _routingRules(AppSettings settings) {
-    final rules = <Map<String, dynamic>>[
-      {
-        'type': 'field',
-        'ip': ['geoip:private'],
-        'outboundTag': 'direct',
+  /// Optional sing-box front-end for desktop TUN. Xray remains the protocol
+  /// core; sing-box only provides the system TUN and forwards packets to the
+  /// Xray SOCKS inbound. This avoids falsely calling a local proxy a system
+  /// VPN.
+  static String buildSingboxFrontendJson({
+    required AppSettings settings,
+    required int xrayPort,
+    required String logPath,
+    required String cachePath,
+    required bool useTun,
+    LocalPorts? ports,
+  }) {
+    final listen = settings.allowLan ? '0.0.0.0' : '127.0.0.1';
+    final httpPort = ports?.http ?? settings.httpPort;
+    final inbounds = <Map<String, dynamic>>[];
+    if (useTun) {
+      inbounds.add({
+        'type': 'tun',
+        'tag': 'tun-in',
+        'interface_name': 'NukefyXray',
+        'address': ['172.19.0.1/30'],
+        'mtu': settings.mtu,
+        'auto_route': true,
+        'strict_route': true,
+        'stack': settings.tunStack == 'system' || settings.tunStack == 'gvisor' || settings.tunStack == 'mixed' ? settings.tunStack : 'mixed',
+      });
+    }
+    if (settings.localProxyEnabled) {
+      inbounds.addAll([
+        {'type': 'socks', 'tag': 'socks-in', 'listen': listen, 'listen_port': ports?.socks ?? settings.socksPort},
+        {'type': 'http', 'tag': 'http-in', 'listen': listen, 'listen_port': httpPort},
+      ]);
+    } else if (useTun) {
+      // Hidden loopback-only HTTP ingress for actual health probes; this does
+      // not turn on the user-facing SOCKS/HTTP proxy setting.
+      inbounds.add({
+        'type': 'http',
+        'tag': 'probe-in',
+        'listen': '127.0.0.1',
+        'listen_port': ports?.probe ?? httpPort,
+      });
+    }
+    final config = <String, dynamic>{
+      'log': {'level': settings.logLevel, 'timestamp': true, 'output': logPath},
+      'dns': {'servers': [{'type': 'local', 'tag': 'direct-dns'}], 'final': 'direct-dns'},
+      'inbounds': inbounds,
+      'outbounds': [
+        {'type': 'socks', 'tag': 'xray', 'server': '127.0.0.1', 'server_port': xrayPort},
+        {'type': 'direct', 'tag': 'direct'},
+      ],
+      'route': {
+        'rules': [
+          {'action': 'sniff'},
+          {'ip_is_private': true, 'action': 'route', 'outbound': 'direct'},
+          if (!Platform.isAndroid) {
+            'process_path': [Platform.resolvedExecutable],
+            'inbound': ['tun-in'],
+            'action': 'route',
+            'outbound': 'direct',
+          },
+        ],
+        'final': 'xray',
+        'auto_detect_interface': useTun,
       },
-    ];
-    switch (settings.routingMode) {
-      case RoutingMode.global:
-        rules.add({
-          'type': 'field',
-          'network': 'tcp,udp',
-          'outboundTag': 'proxy',
-        });
-      case RoutingMode.blockedOnly:
-        rules.add({
-          'type': 'field',
-          'domain': [
-            for (final suffix in AppConstants.blockedDomainSuffixes)
-              'domain:$suffix',
-          ],
-          'outboundTag': 'proxy',
-        });
-        for (final rule in settings.rules) {
-          rules.add(_customRule(rule));
-        }
-        rules.add({
-          'type': 'field',
-          'network': 'tcp,udp',
-          'outboundTag': 'direct',
-        });
-      case RoutingMode.bypassRu:
-        rules.addAll([
-          {
-            'type': 'field',
-            'domain': ['geosite:ru'],
-            'outboundTag': 'direct',
-          },
-          {
-            'type': 'field',
-            'ip': ['geoip:ru'],
-            'outboundTag': 'direct',
-          },
-          {
-            'type': 'field',
-            'network': 'tcp,udp',
-            'outboundTag': 'proxy',
-          },
-        ]);
-      case RoutingMode.custom:
-        for (final rule in settings.rules) {
-          rules.add(_customRule(rule));
-        }
-        rules.add({
-          'type': 'field',
-          'network': 'tcp,udp',
-          'outboundTag': 'proxy',
-        });
-    }
-    return rules;
+      'experimental': {
+        'clash_api': {'external_controller': '127.0.0.1:${ports?.clash ?? AppConstants.clashApiPort}', 'secret': ''},
+        'cache_file': {'enabled': true, 'path': cachePath},
+      },
+    };
+    return const JsonEncoder.withIndent('  ').convert(config);
   }
 
-  static Map<String, dynamic> _customRule(RoutingRule rule) {
-    final outbound = switch (rule.action) {
-      'direct' => 'direct',
-      'block' => 'block',
-      _ => 'proxy',
-    };
-    if (rule.kind == 'ip_cidr') {
-      return {
-        'type': 'field',
-        'ip': [rule.value.trim()],
-        'outboundTag': outbound,
-      };
-    }
-    return {
-      'type': 'field',
-      'domain': ['domain:${rule.value.trim()}'],
-      'outboundTag': outbound,
-    };
-  }
-
-  static Map<String, dynamic> _proxyOutbound(ServerModel server) {
-    final source = server.outbound ??
-        {
-          'type': server.protocol,
-          'server': server.address,
-          'server_port': server.port,
-        };
-    final type = (source['type'] ?? server.protocol).toString().toLowerCase();
-    final address = (source['server'] ?? server.address).toString();
-    final port = (source['server_port'] as num?)?.toInt() ?? server.port;
-    final stream = _streamSettings(source);
-    switch (type) {
+  static Map<String, dynamic> _proxyOutbound(
+    ServerModel server,
+    Map<String, dynamic> source,
+    Map<dynamic, dynamic> transport,
+  ) {
+    final protocol = server.protocol.toLowerCase();
+    final stream = _streamSettings(source, transport);
+    switch (protocol) {
       case 'vless':
-        final flow = (source['flow'] ?? '').toString();
-        final network = (stream['network'] ?? 'tcp').toString();
+        final uuid = '${source['uuid'] ?? ''}'.trim();
+        if (uuid.isEmpty) throw const XrayConfigException('XRAY_VLESS_UUID_MISSING');
         return {
           'tag': 'proxy',
           'protocol': 'vless',
           'settings': {
             'vnext': [
               {
-                'address': address,
-                'port': port,
+                'address': server.address,
+                'port': server.port,
                 'users': [
                   {
-                    'id': (source['uuid'] ?? '').toString(),
+                    'id': uuid,
                     'encryption': 'none',
-                    // Vision flow only exists on raw TCP in Xray.
-                    if (flow.isNotEmpty && network == 'tcp') 'flow': flow,
+                    if ('${source['flow'] ?? ''}'.isNotEmpty) 'flow': source['flow'],
                   },
                 ],
               },
@@ -210,19 +181,21 @@ class XrayConfigBuilder {
           'streamSettings': stream,
         };
       case 'vmess':
+        final uuid = '${source['uuid'] ?? ''}'.trim();
+        if (uuid.isEmpty) throw const XrayConfigException('XRAY_VMESS_UUID_MISSING');
         return {
           'tag': 'proxy',
           'protocol': 'vmess',
           'settings': {
             'vnext': [
               {
-                'address': address,
-                'port': port,
+                'address': server.address,
+                'port': server.port,
                 'users': [
                   {
-                    'id': (source['uuid'] ?? '').toString(),
+                    'id': uuid,
                     'alterId': (source['alter_id'] as num?)?.toInt() ?? 0,
-                    'security': (source['security'] ?? 'auto').toString(),
+                    'security': '${source['security'] ?? 'auto'}',
                   },
                 ],
               },
@@ -231,132 +204,57 @@ class XrayConfigBuilder {
           'streamSettings': stream,
         };
       case 'trojan':
+        final password = '${source['password'] ?? ''}';
+        if (password.isEmpty) throw const XrayConfigException('XRAY_TROJAN_PASSWORD_MISSING');
         return {
           'tag': 'proxy',
           'protocol': 'trojan',
           'settings': {
             'servers': [
-              {
-                'address': address,
-                'port': port,
-                'password': (source['password'] ?? '').toString(),
-              },
-            ],
-          },
-          'streamSettings': stream,
-        };
-      case 'shadowsocks':
-        if (server.isXhttp) {
-          throw ArgumentError('ss-xhttp-unsupported');
-        }
-        return {
-          'tag': 'proxy',
-          'protocol': 'shadowsocks',
-          'settings': {
-            'servers': [
-              {
-                'address': address,
-                'port': port,
-                'method': (source['method'] ?? '').toString(),
-                'password': (source['password'] ?? '').toString(),
-              },
+              {'address': server.address, 'port': server.port, 'password': password},
             ],
           },
           'streamSettings': stream,
         };
       default:
-        throw ArgumentError('xray-unsupported-protocol:$type');
+        throw const XrayConfigException('XRAY_UNSUPPORTED_PROTOCOL');
     }
   }
 
-  static Map<String, dynamic> _streamSettings(Map<String, dynamic> source) {
-    final transport = source['transport'];
-    final transportMap = transport is Map
-        ? transport.map((k, v) => MapEntry(k.toString(), v))
-        : const <String, dynamic>{};
-    final type = (transportMap['type'] ?? 'tcp').toString().toLowerCase();
-    final stream = <String, dynamic>{};
-    switch (type) {
-      case 'xhttp':
-      case 'splithttp':
-        stream['network'] = 'xhttp';
-        final settings = <String, dynamic>{
-          'path': (transportMap['path'] ?? '/').toString(),
-          'mode': (transportMap['mode'] ?? 'auto').toString(),
-        };
-        final host = (transportMap['host'] ?? '').toString();
-        if (host.isNotEmpty) settings['host'] = host;
-        final extra = transportMap['extra'];
-        if (extra is Map && extra.isNotEmpty) {
-          settings['extra'] = extra.map((k, v) => MapEntry(k.toString(), v));
-        }
-        stream['xhttpSettings'] = settings;
-      case 'ws':
-      case 'websocket':
-        stream['network'] = 'ws';
-        final headers = transportMap['headers'];
-        stream['wsSettings'] = {
-          'path': (transportMap['path'] ?? '/').toString(),
-          if (headers is Map && headers.isNotEmpty)
-            'headers': headers.map((k, v) => MapEntry(k.toString(), '$v')),
-        };
-      case 'grpc':
-        stream['network'] = 'grpc';
-        stream['grpcSettings'] = {
-          'serviceName': (transportMap['service_name'] ?? '').toString(),
-          'multiMode': false,
-        };
-      case 'http':
-      case 'h2':
-      case 'httpupgrade':
-        // Xray folded the old HTTP transports into XHTTP.
-        stream['network'] = 'xhttp';
-        final hosts = transportMap['host'];
-        stream['xhttpSettings'] = {
-          'path': (transportMap['path'] ?? '/').toString(),
-          if (hosts is List && hosts.isNotEmpty) 'host': hosts.first.toString(),
-          if (hosts is String && hosts.isNotEmpty) 'host': hosts,
-        };
-      default:
-        stream['network'] = 'tcp';
-    }
-
+  static Map<String, dynamic> _streamSettings(
+    Map<String, dynamic> source,
+    Map<dynamic, dynamic> transport,
+  ) {
     final tls = source['tls'];
-    if (tls is Map) {
-      final tlsMap = tls.map((k, v) => MapEntry(k.toString(), v));
-      final reality = tlsMap['reality'];
-      final realityMap = reality is Map
-          ? reality.map((k, v) => MapEntry(k.toString(), v))
-          : const <String, dynamic>{};
-      final utls = tlsMap['utls'];
-      final fingerprint = utls is Map
-          ? (utls['fingerprint'] ?? 'chrome').toString()
-          : 'chrome';
-      final serverName = (tlsMap['server_name'] ?? '').toString();
-      if (realityMap['enabled'] == true) {
-        stream['security'] = 'reality';
+    final security = tls is Map && tls['reality'] is Map ? 'reality' : (tls is Map && tls['enabled'] == true ? 'tls' : 'none');
+    final rawPath = '${transport['path'] ?? ''}'.trim();
+    final stream = <String, dynamic>{
+      'network': 'xhttp',
+      'security': security,
+      'xhttpSettings': {
+        'path': rawPath.isEmpty ? '/' : rawPath,
+        if ('${transport['host'] ?? ''}'.isNotEmpty) 'host': '${transport['host']}',
+        if ('${transport['mode'] ?? ''}'.isNotEmpty) 'mode': '${transport['mode']}',
+        if (transport['extra'] is Map) 'extra': transport['extra'],
+      },
+    };
+    if (tls is Map && tls['enabled'] == true) {
+      final reality = tls['reality'];
+      if (security == 'reality' && reality is Map) {
         stream['realitySettings'] = {
-          'serverName': serverName,
-          'fingerprint': fingerprint,
-          'publicKey': (realityMap['public_key'] ?? '').toString(),
-          'shortId': (realityMap['short_id'] ?? '').toString(),
-          'spiderX': '',
-        };
-      } else if (tlsMap['enabled'] == true) {
-        stream['security'] = 'tls';
-        final alpn = tlsMap['alpn'];
-        stream['tlsSettings'] = {
-          'serverName': serverName,
-          'allowInsecure': tlsMap['insecure'] == true,
-          'fingerprint': fingerprint,
-          if (alpn is List && alpn.isNotEmpty)
-            'alpn': alpn.map((e) => e.toString()).toList(),
+          'serverName': '${tls['server_name'] ?? ''}',
+          'publicKey': '${reality['public_key'] ?? ''}',
+          'shortId': '${reality['short_id'] ?? ''}',
+          'fingerprint': '${(tls['utls'] as Map?)?['fingerprint'] ?? 'chrome'}',
         };
       } else {
-        stream['security'] = 'none';
+        stream['tlsSettings'] = {
+          'serverName': '${tls['server_name'] ?? ''}',
+          'allowInsecure': tls['insecure'] == true,
+          if (tls['alpn'] is List) 'alpn': tls['alpn'],
+          if (tls['utls'] is Map) 'fingerprint': '${(tls['utls'] as Map)['fingerprint'] ?? 'chrome'}',
+        };
       }
-    } else {
-      stream['security'] = 'none';
     }
     return stream;
   }

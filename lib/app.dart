@@ -1,121 +1,57 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'core/providers/servers_provider.dart';
 import 'core/providers/settings_provider.dart';
-import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
-import 'core/theme/app_text_styles.dart';
-import 'core/utils/format_utils.dart';
 import 'ui/screens/main_shell.dart';
 import 'ui/screens/welcome_screen.dart';
-import 'ui/widgets/nukefy_logo.dart';
+import 'ui/widgets/notification_overlay.dart';
+import 'ui/widgets/nukefy_feedback.dart';
+import 'ui/widgets/nukefy_splash.dart';
 
-class NukefyApp extends StatefulWidget {
+class NukefyApp extends StatelessWidget {
   const NukefyApp({super.key, required this.navigatorKey});
 
   final GlobalKey<NavigatorState> navigatorKey;
 
   @override
-  State<NukefyApp> createState() => _NukefyAppState();
-}
-
-class _NukefyAppState extends State<NukefyApp> {
-  bool _splashDone = false;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    // Short branded splash. Strictly monochrome: no coloured stripes or
-    // accents under the text, whatever theme the system uses.
-    _timer = Timer(const Duration(milliseconds: 950), () {
-      if (mounted) setState(() => _splashDone = true);
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final servers = context.watch<ServersProvider>();
-    FormatUtils.ruUnits = settings.strings.code == 'ru';
-    final empty = servers.servers.isEmpty && servers.subscriptions.isEmpty;
+    final empty = context.select<ServersProvider, bool>((servers) => servers.servers.isEmpty && servers.subscriptions.isEmpty);
     final welcome = !settings.settings.seenWelcome && empty;
-    return MaterialApp(
-      navigatorKey: widget.navigatorKey,
+    final brightness = switch (settings.themeMode) {
+      ThemeMode.light => Brightness.light,
+      ThemeMode.dark => Brightness.dark,
+      ThemeMode.system => MediaQuery.platformBrightnessOf(context),
+    };
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: AppTheme.overlay(brightness),
+      child: MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Nukefy Client',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      theme: AppTheme.light(settings.settings.accent, settings.settings.visualTheme),
+      darkTheme: AppTheme.dark(settings.settings.accent, settings.settings.visualTheme),
       themeMode: settings.themeMode,
+      // PrintScreen has to be handled inside the app: an elevated window is
+      // invisible to the shell's own screenshot keys.
       builder: (context, child) {
-        // Clamp system font scaling so layout never overlaps itself on
-        // phones with huge accessibility fonts.
+        // Phones with giant accessibility fonts used to stack every label
+        // onto its neighbour. Clamp the scale to a range the layouts were
+        // designed for; the app stays readable without breaking apart.
         final media = MediaQuery.of(context);
-        final scale = media.textScaler.scale(1).clamp(0.85, 1.15);
-        return MediaQuery(
-          data: media.copyWith(textScaler: TextScaler.linear(scale)),
-          child: child ?? const SizedBox.shrink(),
+        final clamped = media.copyWith(
+          textScaler: media.textScaler.clamp(minScaleFactor: 0.85, maxScaleFactor: 1.2),
+        );
+        return PrintScreenCatcher(
+          child: NotificationOverlay(
+            child: MediaQuery(data: clamped, child: child ?? const SizedBox.shrink()),
+          ),
         );
       },
-      home: !_splashDone
-          ? const _SplashScreen()
-          : welcome
-              ? const WelcomeScreen()
-              : const MainShell(),
-    );
-  }
-}
-
-/// Monochrome launch splash: black background, logo, name, one thin
-/// loading line. Nothing yellow, nothing coloured under the text.
-class _SplashScreen extends StatelessWidget {
-  const _SplashScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final strings = context.watch<SettingsProvider>().strings;
-    final background = dark ? AppColors.background : AppColors.lightBackground;
-    final text = dark ? AppColors.textPrimary : AppColors.lightText;
-    final secondary =
-        dark ? AppColors.textSecondary : AppColors.lightTextSecondary;
-    return Scaffold(
-      backgroundColor: background,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const NukefyLogo(size: 92, glow: false),
-            const SizedBox(height: 20),
-            Text(
-              'Nukefy Client',
-              style: AppTextStyles.title.copyWith(color: text, fontSize: 26),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              strings.t('splashTagline'),
-              style: AppTextStyles.bodySecondary.copyWith(color: secondary),
-            ),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: 168,
-              child: LinearProgressIndicator(
-                minHeight: 2,
-                backgroundColor: secondary.withValues(alpha: 0.18),
-                color: text,
-              ),
-            ),
-          ],
-        ),
+      home: NukefySplash(child: welcome ? const WelcomeScreen() : const MainShell()),
       ),
     );
   }

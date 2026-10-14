@@ -1,0 +1,915 @@
+﻿// Nukefy Client — собственный установщик.
+//
+// Окно полностью своё: тёмная карточка в стиле приложения, выбор языка,
+// галочки, прогресс и финальная страница. Никакого системного мастера Inno:
+// payload.zip (уже собранный Flutter-билд) лежит ресурсом внутри этого exe.
+//
+// Что делает установка:
+//   1. останавливает ТОЛЬКО наши процессы и нашу службу nukefy-zapret;
+//   2. распаковывает приложение в %ProgramFiles%\Nukefy Client;
+//   3. сохраняет пользовательские списки zapret и все данные в %APPDATA%;
+//   4. пишет запись «Удалить» так, чтобы открывалось своё окно удаления;
+//   5. создаёт ярлыки и, при желании, автозапуск;
+//   6. передаёт выбранные галочки приложению через install-options.json.
+//
+// Компилируется csc из .NET Framework (WinForms), поэтому никаких внешних
+// зависимостей у файла нет.
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Globalization;
+using System.IO;
+using System.IO.Compression;
+using System.Reflection;
+using System.Text;
+using System.Threading;
+using System.Windows.Forms;
+using Microsoft.Win32;
+
+namespace NukefySetup
+{
+    static class Program
+    {
+        [STAThread]
+        static void Main(string[] args)
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(new SetupForm());
+        }
+    }
+
+    /// <summary>Strings in both languages; index 0 = ru, 1 = en.</summary>
+    static class L
+    {
+        public static int Lang = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ru" ? 0 : 1;
+
+        static readonly string[][] S =
+        {
+            new[] // ru
+            {
+                "NUKEFY CLIENT",
+                "Установка Nukefy Client",
+                "Свой клиент sing-box и Zapret: без системного мастера и лишних вопросов.",
+                "Создать ярлык на рабочем столе",
+                "Запускать при входе в Windows",
+                "Открыть Nukefy после установки",
+                "Установить",
+                "Отмена",
+                "Подготовка…",
+                "Готово",
+                "Установка завершена. Приложение уже готово к запуску.",
+                "Открыть Nukefy",
+                "Закрыть",
+                "Устанавливается в",
+                "Распаковываю приложение…",
+                "Создаю ярлыки…",
+                "Прописываю удаление…",
+                "Останавливаю запущенные процессы…",
+                "Готовлю автозапуск…",
+                "Не удалось установить",
+                "Подробности",
+                "Закрыть приложение Nukefy и повторить",
+                "Повторить",
+                "Ваши подписки, настройки и журналы останутся на месте.",
+            },
+            new[] // en
+            {
+                "NUKEFY CLIENT",
+                "Nukefy Client setup",
+                "Our own sing-box and Zapret client: no system wizard, no extra questions.",
+                "Create a desktop shortcut",
+                "Start with Windows",
+                "Open Nukefy when done",
+                "Install",
+                "Cancel",
+                "Preparing…",
+                "Done",
+                "The installation is complete. The app is ready to start.",
+                "Open Nukefy",
+                "Close",
+                "Installing to",
+                "Unpacking the app…",
+                "Creating shortcuts…",
+                "Registering the uninstaller…",
+                "Stopping running processes…",
+                "Setting up autostart…",
+                "Installation failed",
+                "Details",
+                "Close Nukefy and try again",
+                "Retry",
+                "Your subscriptions, settings and logs stay untouched.",
+            },
+        };
+
+        public static string T(int i) { return S[Lang][i]; }
+    }
+
+    enum Page { Options, Progress, Done, Failed }
+
+    class SetupForm : Form
+    {
+        // palette, mirroring lib/core/theme/app_colors.dart
+        /// <summary>The layout below is authored for 96 dpi. On a scaled display
+        /// GDI+ kept enlarging the point-sized text while every coordinate stayed
+        /// put, which is what pushed the subtitle onto the install-path line.</summary>
+        float _scale = 1f;
+
+        /// <summary>Window size in layout units (see <see cref="_scale"/>).</summary>
+        int W { get { return (int)Math.Round(ClientSize.Width / _scale); } }
+        int H { get { return (int)Math.Round(ClientSize.Height / _scale); } }
+
+        /// <summary>File name of the client inside the install folder.</summary>
+        const string AppExe = "NukefyClient.exe";
+        const string AppExeName = "NukefyClient";
+
+        static readonly Color Bg = Color.FromArgb(0x05, 0x05, 0x05);
+        static readonly Color Card = Color.FromArgb(0x0D, 0x0D, 0x0D);
+        static readonly Color Border = Color.FromArgb(0x30, 0x30, 0x30);
+        // Named Fg, not Text: Form already owns a Text property and the
+        // clash used to break the compile (CS0198/CS0029).
+        static readonly Color Fg = Color.FromArgb(0xF7, 0xF7, 0xF7);
+        static readonly Color Muted = Color.FromArgb(0xAA, 0xAA, 0xAA);
+        static readonly Color Accent = Color.FromArgb(0xF1, 0xF1, 0xF1);
+        static readonly Color Danger = Color.FromArgb(0xFF, 0x4D, 0x6D);
+
+        bool _desktop = true;
+        bool _autostart = false;
+        bool _launch = true;
+        Page _page = Page.Options;
+        double _progress;
+        string _status = "";
+        string _detail = "";
+        volatile bool _cancel;
+        string _error = "";
+        Point _drag;
+        int _hover = -1;
+
+        static readonly string AppDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Nukefy Client");
+        const string UninstallKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1";
+
+        public SetupForm()
+        {
+            Text = "Nukefy Client";
+            FormBorderStyle = FormBorderStyle.None;
+            StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(660, 460);
+            BackColor = Bg;
+            DoubleBuffered = true;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+            Icon = LoadIcon();
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            using (var g = Graphics.FromHwnd(Handle)) _scale = g.DpiY / 96f;
+            if (_scale < 0.75f || _scale > 4f) _scale = 1f;
+            // The window grows with the display so text and boxes keep the same
+            // proportions instead of colliding.
+            ClientSize = new Size((int)Math.Round(660 * _scale), (int)Math.Round(460 * _scale));
+        }
+
+        static Icon LoadIcon()
+        {
+            try
+            {
+                using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("app_icon.ico"))
+                {
+                    if (s != null) return new Icon(s);
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        static GraphicsPath Round(Rectangle r, int radius)
+        {
+            var path = new GraphicsPath();
+            int d = radius * 2;
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        // ---------------------------------------------------------------- paint
+        Rectangle TitleBar { get { return new Rectangle(0, 0, W, 46); } }
+        Rectangle CloseButton { get { return new Rectangle(W - 44, 0, 44, 46); } }
+        Rectangle RuChip { get { return new Rectangle(W - 150, 12, 44, 22); } }
+        Rectangle EnChip { get { return new Rectangle(W - 102, 12, 44, 22); } }
+
+        Rectangle PrimaryButton
+        {
+            get { return new Rectangle(W - 230, H - 76, 196, 46); }
+        }
+
+        Rectangle SecondaryButton
+        {
+            get { return new Rectangle(W - 230 - 120, H - 76, 110, 46); }
+        }
+
+        Rectangle[] OptionRows
+        {
+            get
+            {
+                var rows = new Rectangle[3];
+                for (int i = 0; i < 3; i++)
+                    rows[i] = new Rectangle(44, 208 + i * 42, W - 88, 34);
+                return rows;
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            // The window frame is cut in real pixels, before the transform that
+            // turns every coordinate below into a DPI-scaled one.
+            int realWidth = ClientSize.Width;
+            int realHeight = ClientSize.Height;
+            using (var region = Round(new Rectangle(0, 0, realWidth, realHeight), (int)Math.Round(14 * _scale)))
+            {
+                Region = new Region(region);
+            }
+            g.ScaleTransform(_scale, _scale);
+            using (var brush = new LinearGradientBrush(new Rectangle(0, 0, W, H), Color.FromArgb(0x05, 0x05, 0x05), Color.FromArgb(0x0D, 0x0D, 0x0D), 90f))
+                g.FillRectangle(brush, new Rectangle(0, 0, W, H));
+            // accent glow in the top-left corner, same idea as the app background
+            using (var glow = new GraphicsPath())
+            {
+                glow.AddEllipse(-160, -220, 520, 420);
+                using (var b = new PathGradientBrush(glow))
+                {
+                    b.CenterColor = Color.FromArgb(38, Accent);
+                    b.SurroundColors = new[] { Color.FromArgb(0, Accent) };
+                    g.FillPath(b, glow);
+                }
+            }
+
+            // title row
+            using (var dot = new SolidBrush(Accent)) g.FillEllipse(dot, 20, 19, 8, 8);
+            DrawText(g, L.T(0), new Rectangle(36, 14, 300, 20), 9.5f, Muted, FontStyle.Bold, 2f);
+            using (var icon = LoadIcon())
+            {
+                if (icon != null) g.DrawIcon(icon, new Rectangle(W - 236, 13, 20, 20));
+            }
+            DrawChip(g, RuChip, "RU", L.Lang == 0);
+            DrawChip(g, EnChip, "EN", L.Lang == 1);
+            DrawText(g, "✕", CloseButton, 12f, _hover == 9 ? Danger : Muted, FontStyle.Regular, 0f, true);
+
+            if (_page == Page.Options) PaintOptions(g);
+            else if (_page == Page.Progress) PaintProgress(g);
+            else if (_page == Page.Done) PaintDone(g);
+            else PaintFailed(g);
+        }
+
+        void PaintOptions(Graphics g)
+        {
+            DrawText(g, L.T(1), new Rectangle(40, 74, W - 80, 40), 24f, Fg, FontStyle.Bold, 0f);
+            // The subtitle is measured instead of assumed: a longer translation
+            // or a scaled display must never push it onto the path line.
+            int subTop = 124;
+            int subLines = Math.Min(2, Math.Max(1, (int)Math.Round(TextHeight(g, L.T(2), W - 80, 10f) / 18.0)));
+            DrawText(g, L.T(2), new Rectangle(40, subTop, W - 80, 36), 10f, Muted, FontStyle.Regular, 0f, false, false, true);
+            int pathTop = Math.Min(subTop + subLines * 18 + 4, 166);
+            DrawText(g, L.T(13) + " " + AppDir, new Rectangle(40, pathTop, W - 80, 20), 9f, Color.FromArgb(0x62, 0x62, 0x62), FontStyle.Regular, 0f);
+
+            var card = new Rectangle(32, 190, W - 64, 3 * 42 + 22);
+            using (var path = Round(card, 16))
+            {
+                using (var fill = new SolidBrush(Card)) g.FillPath(fill, path);
+                using (var pen = new Pen(Border)) g.DrawPath(pen, path);
+            }
+            var rows = OptionRows;
+            for (int i = 0; i < 3; i++)
+                DrawCheck(g, rows[i], i == 0 ? _desktop : i == 1 ? _autostart : _launch, L.T(3 + i));
+
+            DrawText(g, L.T(23), new Rectangle(40, H - 110, W - 300, 20), 9f, Muted, FontStyle.Regular, 0f);
+            DrawButton(g, PrimaryButton, L.T(6), true);
+            DrawButton(g, SecondaryButton, L.T(7), false);
+        }
+
+        void PaintProgress(Graphics g)
+        {
+            DrawText(g, L.T(1), new Rectangle(40, 74, W - 80, 40), 24f, Fg, FontStyle.Bold, 0f);
+            // One block, centred under the title: the old fixed rows left the
+            // whole lower half of the window empty while the bar sat on top of it.
+            int blockTop = H / 2 - 46;
+            DrawText(g, _status, new Rectangle(40, blockTop, W - 80, 24), 11f, Muted, FontStyle.Regular, 0f);
+            var track = new Rectangle(40, blockTop + 46, W - 80, 10);
+            using (var path = Round(track, 5))
+            using (var fill = new SolidBrush(Color.FromArgb(0x1A, 0x1A, 0x1A)))
+                g.FillPath(fill, path);
+            int w = (int)(track.Width * Math.Max(0.02, Math.Min(1, _progress)));
+            if (w > 12)
+            {
+                using (var path = Round(new Rectangle(track.X, track.Y, w, track.Height), 5))
+                using (var fill = new LinearGradientBrush(new Rectangle(track.X, track.Y, w, track.Height), Color.FromArgb(0xFF, 0xFF, 0xFF), Color.FromArgb(0xC8, 0xC8, 0xC8), 0f))
+                    g.FillPath(fill, path);
+            }
+            DrawText(g, (int)(_progress * 100) + "%", new Rectangle(40, blockTop + 66, W - 80, 22), 10f, Fg, FontStyle.Bold, 0f);
+            // The file being written right now, so a long unpack never looks
+            // frozen at one stage percentage again.
+            if (_detail.Length > 0)
+                DrawText(g, _detail, new Rectangle(40, blockTop + 92, W - 80, 18), 8.5f, Color.FromArgb(0x62, 0x62, 0x62), FontStyle.Regular, 0f);
+            DrawButton(g, SecondaryButton, L.T(7), false);
+        }
+
+        void PaintDone(Graphics g)
+        {
+            var circle = new Rectangle(W / 2 - 34, 96, 68, 68);
+            using (var b = new SolidBrush(Color.FromArgb(40, Accent))) g.FillEllipse(b, circle);
+            using (var pen = new Pen(Accent, 4f))
+            {
+                g.DrawLines(pen, new[]
+                {
+                    new Point(circle.X + 18, circle.Y + 36),
+                    new Point(circle.X + 30, circle.Y + 47),
+                    new Point(circle.X + 51, circle.Y + 22),
+                });
+            }
+            DrawText(g, L.T(9), new Rectangle(40, 180, W - 80, 40), 22f, Fg, FontStyle.Bold, 0f, false, true);
+            DrawText(g, L.T(10), new Rectangle(40, 226, W - 80, 40), 10.5f, Muted, FontStyle.Regular, 0f, false, true);
+            DrawButton(g, PrimaryButton, L.T(11), true);
+            DrawButton(g, SecondaryButton, L.T(12), false);
+        }
+
+        void PaintFailed(Graphics g)
+        {
+            DrawText(g, L.T(19), new Rectangle(40, 100, W - 80, 40), 20f, Danger, FontStyle.Bold, 0f);
+            DrawText(g, L.T(20), new Rectangle(40, 150, W - 80, 24), 10f, Muted, FontStyle.Regular, 0f);
+            var box = new Rectangle(40, 180, W - 80, 150);
+            using (var path = Round(box, 14))
+            {
+                using (var fill = new SolidBrush(Card)) g.FillPath(fill, path);
+                using (var pen = new Pen(Border)) g.DrawPath(pen, path);
+            }
+            DrawText(g, Trim(_error, 420), new Rectangle(box.X + 14, box.Y + 12, box.Width - 28, box.Height - 24), 9f, Muted, FontStyle.Regular, 0f);
+            DrawButton(g, PrimaryButton, L.T(21), true);
+        }
+
+        static string Trim(string text, int max)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            return text.Length <= max ? text : text.Substring(0, max) + "…";
+        }
+
+        /// <summary>Height a wrapped string needs at the given width, in layout units.</summary>
+        static float TextHeight(Graphics g, string text, int width, float size)
+        {
+            using (var font = new Font("Segoe UI", size * 96f / 72f, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var format = new StringFormat())
+            {
+                format.Trimming = StringTrimming.EllipsisCharacter;
+                format.FormatFlags = StringFormatFlags.LineLimit;
+                return g.MeasureString(text, font, new SizeF(width, 1000f), format).Height;
+            }
+        }
+
+        void DrawText(Graphics g, string text, Rectangle box, float size, Color color, FontStyle style, float spacing, bool center = false, bool middle = false, bool limitLines = false)
+        {
+            using (var font = new Font("Segoe UI", size * 96f / 72f, style, GraphicsUnit.Pixel))
+            using (var brush = new SolidBrush(color))
+            using (var format = new StringFormat())
+            {
+                format.Alignment = center ? StringAlignment.Center : StringAlignment.Near;
+                format.LineAlignment = middle ? StringAlignment.Center : StringAlignment.Near;
+                format.Trimming = StringTrimming.EllipsisCharacter;
+                // A height-limited box must not paint extra lines over whatever
+                // sits underneath it.
+                if (limitLines) format.FormatFlags |= StringFormatFlags.LineLimit;
+                if (spacing > 0)
+                {
+                    // letter-spacing by hand: GDI+ has no tracking
+                    float x = box.X;
+                    foreach (char c in text)
+                    {
+                        g.DrawString(c.ToString(), font, brush, x, box.Y);
+                        x += g.MeasureString(c.ToString(), font).Width + spacing;
+                    }
+                    return;
+                }
+                g.DrawString(text, font, brush, box, format);
+            }
+        }
+
+        void DrawChip(Graphics g, Rectangle r, string label, bool active)
+        {
+            using (var path = Round(r, 8))
+            {
+                using (var fill = new SolidBrush(active ? Color.FromArgb(46, Accent) : Color.FromArgb(20, 255, 255, 255)))
+                    g.FillPath(fill, path);
+                using (var pen = new Pen(active ? Accent : Border))
+                    g.DrawPath(pen, path);
+            }
+            DrawText(g, label, r, 8.5f, active ? Accent : Muted, FontStyle.Bold, 0.5f, true, true);
+        }
+
+        void DrawButton(Graphics g, Rectangle r, string label, bool primary)
+        {
+            using (var path = Round(r, 12))
+            {
+                if (primary)
+                {
+                    using (var fill = new LinearGradientBrush(r, Color.FromArgb(0xFF, 0xFF, 0xFF), Color.FromArgb(0xD6, 0xD6, 0xD6), 90f))
+                        g.FillPath(fill, path);
+                }
+                else
+                {
+                    using (var fill = new SolidBrush(Color.FromArgb(0x17, 0x17, 0x17))) g.FillPath(fill, path);
+                    using (var pen = new Pen(Border)) g.DrawPath(pen, path);
+                }
+            }
+            DrawText(g, label, r, 11f, primary ? Color.FromArgb(0x0B, 0x0B, 0x0B) : Fg, FontStyle.Bold, 0f, true, true);
+        }
+
+        void DrawCheck(Graphics g, Rectangle row, bool value, string label)
+        {
+            var box = new Rectangle(row.X + 14, row.Y + 7, 20, 20);
+            using (var path = Round(box, 6))
+            {
+                using (var fill = new SolidBrush(value ? Color.FromArgb(46, Accent) : Color.FromArgb(20, 255, 255, 255)))
+                    g.FillPath(fill, path);
+                using (var pen = new Pen(value ? Accent : Border, 1.4f))
+                    g.DrawPath(pen, path);
+            }
+            if (value)
+            {
+                using (var pen = new Pen(Accent, 2.4f))
+                {
+                    pen.StartCap = LineCap.Round;
+                    pen.EndCap = LineCap.Round;
+                    g.DrawLines(pen, new[]
+                    {
+                        new Point(box.X + 5, box.Y + 10),
+                        new Point(box.X + 9, box.Y + 14),
+                        new Point(box.X + 15, box.Y + 6),
+                    });
+                }
+            }
+            DrawText(g, label, new Rectangle(row.X + 46, row.Y + 8, row.Width - 60, 22), 10.5f, Fg, FontStyle.Regular, 0f);
+        }
+
+        // ---------------------------------------------------------------- input
+        /// <summary>The hit boxes are laid out in layout units, the mouse arrives
+        /// in real pixels: convert once, here.</summary>
+        Point LayoutPoint(MouseEventArgs e)
+        {
+            return new Point((int)Math.Round(e.X / _scale), (int)Math.Round(e.Y / _scale));
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            // kept in real pixels: it is only compared against the title-row
+            // height and used for window deltas
+            _drag = e.Location;
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (e.Button == MouseButtons.Left)
+            {
+                // the window has no system frame: dragging the title row moves it
+                if (_drag.Y < 46 * _scale)
+                {
+                    Left += e.X - _drag.X;
+                    Top += e.Y - _drag.Y;
+                }
+                return;
+            }
+            var at = LayoutPoint(e);
+            int hover = -1;
+            if (CloseButton.Contains(at)) hover = 9;
+            else if (RuChip.Contains(at)) hover = 10;
+            else if (EnChip.Contains(at)) hover = 11;
+            if (hover != _hover) { _hover = hover; Invalidate(); }
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            var point = LayoutPoint(e);
+            if (_page == Page.Options)
+            {
+                if (CloseButton.Contains(point)) { Close(); return; }
+                if (RuChip.Contains(point)) { L.Lang = 0; Invalidate(); return; }
+                if (EnChip.Contains(point)) { L.Lang = 1; Invalidate(); return; }
+                var rows = OptionRows;
+                for (int i = 0; i < 3; i++)
+                {
+                    if (!rows[i].Contains(point)) continue;
+                    if (i == 0) _desktop = !_desktop;
+                    if (i == 1) _autostart = !_autostart;
+                    if (i == 2) _launch = !_launch;
+                    Invalidate();
+                    return;
+                }
+                if (PrimaryButton.Contains(point)) { Start(); return; }
+                if (SecondaryButton.Contains(point)) { Close(); return; }
+            }
+            else if (_page == Page.Progress)
+            {
+                // Cancel (or the cross) only arms the flag: the worker stops
+                // at its next checkpoint and returns to the options page
+                // instead of dying mid-copy.
+                if (SecondaryButton.Contains(point) || CloseButton.Contains(point))
+                {
+                    _cancel = true;
+                    _status = L.T(7) + "…";
+                    Invalidate();
+                    return;
+                }
+            }
+            else if (_page == Page.Done)
+            {
+                if (PrimaryButton.Contains(point)) { Launch(); Close(); return; }
+                if (SecondaryButton.Contains(point)) { Close(); return; }
+                if (CloseButton.Contains(point)) { Close(); return; }
+            }
+            else if (_page == Page.Failed)
+            {
+                if (PrimaryButton.Contains(point)) { Launch(); Close(); return; }
+                if (CloseButton.Contains(point)) { Close(); return; }
+            }
+        }
+
+        // --------------------------------------------------------------- logic
+        void Start()
+        {
+            _page = Page.Progress;
+            _progress = 0.02;
+            _status = L.T(8);
+            Invalidate();
+            var worker = new Thread(Install);
+            worker.IsBackground = true;
+            worker.Start();
+        }
+
+        /// <summary>"Close Nukefy and retry": the app itself stays installed.</summary>
+        void Launch()
+        {
+            var exe = Path.Combine(AppDir, AppExe);
+            if (!File.Exists(exe)) return;
+            try
+            {
+                Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = AppDir, UseShellExecute = true });
+            }
+            catch { }
+        }
+
+        void Report(double progress, string status) { Report(progress, status, ""); }
+
+        void Report(double progress, string status, string detail)
+        {
+            try
+            {
+                BeginInvoke((Action)(() => { _progress = progress; _status = status; _detail = detail; Invalidate(); }));
+            }
+            catch { }
+        }
+
+        void Install()
+        {
+            try
+            {
+                Report(0.05, L.T(17));
+                StopOwnStack();
+                RemoveLegacyInstall();
+                if (_cancel) throw new OperationCanceledException();
+                Report(0.15, L.T(14));
+                ExtractPayload();
+                if (_cancel) throw new OperationCanceledException();
+                Report(0.55, L.T(15));
+                CreateShortcuts();
+                Report(0.75, L.T(16));
+                WriteUninstallEntry();
+                WriteInstallOptions();
+                Report(0.9, L.T(18));
+                ApplyAutostart();
+                Report(1.0, L.T(9));
+                BeginInvoke((Action)(() =>
+                {
+                    _page = Page.Done;
+                    Invalidate();
+                }));
+                if (_launch)
+                {
+                    BeginInvoke((Action)(() => { Launch(); Close(); }));
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Back to the options page with nothing half-installed: the
+                // payload only ever lands in the staging folder until the
+                // atomic swap at the end of ExtractPayload.
+                try
+                {
+                    var staging = AppDir + ".new";
+                    if (Directory.Exists(staging)) Directory.Delete(staging, true);
+                }
+                catch { }
+                try
+                {
+                    BeginInvoke((Action)(() =>
+                    {
+                        _page = Page.Options;
+                        _cancel = false;
+                        _progress = 0;
+                        _status = "";
+                        _detail = "";
+                        Invalidate();
+                    }));
+                }
+                catch { }
+            }
+            catch (Exception error)
+            {
+                _error = error.ToString();
+                try
+                {
+                    BeginInvoke((Action)(() => { _page = Page.Failed; Invalidate(); }));
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>Removes the pre-rename "Nukefy VPN" program so an upgrade
+        /// never leaves two Nukefy entries installed side by side. Only the
+        /// old program files and its uninstall entry go; user data in
+        /// %APPDATA% is migrated by the app itself on first launch.</summary>
+        static void RemoveLegacyInstall()
+        {
+            try { KillByName("Nukefy VPN"); } catch { }
+            var legacyDirs = new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Nukefy VPN"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Nukefy VPN"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Nukefy VPN"),
+            };
+            foreach (var dir in legacyDirs)
+            {
+                try
+                {
+                    if (Directory.Exists(dir) && !string.Equals(dir, AppDir, StringComparison.OrdinalIgnoreCase))
+                        Directory.Delete(dir, true);
+                }
+                catch { }
+            }
+            foreach (var root in new[] { Registry.CurrentUser, Registry.LocalMachine })
+            {
+                try
+                {
+                    using (var uninstall = root.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", true))
+                    {
+                        if (uninstall == null) continue;
+                        foreach (var name in uninstall.GetSubKeyNames())
+                        {
+                            try
+                            {
+                                using (var entry = uninstall.OpenSubKey(name))
+                                {
+                                    var display = entry == null ? null : entry.GetValue("DisplayName") as string;
+                                    if (string.Equals(display, "Nukefy VPN", StringComparison.OrdinalIgnoreCase))
+                                        uninstall.DeleteSubKeyTree(name);
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>Reads payload.zip out of our own resources.</summary>
+        void ExtractPayload()
+        {
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("payload.zip"))
+            {
+                if (stream == null) throw new Exception("payload.zip is missing in the setup exe");
+                var incoming = AppDir + ".new";
+                if (Directory.Exists(incoming)) Directory.Delete(incoming, true);
+                Directory.CreateDirectory(Path.GetDirectoryName(AppDir));
+                using (var zip = new ZipArchive(stream, ZipArchiveMode.Read))
+                {
+                    // Entry-by-entry extraction: the progress page shows the
+                    // file being written instead of sitting at one stage for
+                    // the whole archive, and Cancel gets regular checkpoints.
+                    var entries = zip.Entries;
+                    long totalBytes = 0;
+                    foreach (var e in entries) totalBytes += e.Length;
+                    long doneBytes = 0;
+                    int fileCount = 0;
+                    var incomingFull = Path.GetFullPath(incoming);
+                    foreach (var entry in entries)
+                    {
+                        if (_cancel) throw new OperationCanceledException();
+                        var target = Path.GetFullPath(Path.Combine(incomingFull, entry.FullName));
+                        // Zip-slip guard: a crafted entry must never write
+                        // outside the staging folder.
+                        if (!target.StartsWith(incomingFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(target, incomingFull, StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidDataException("bad payload entry: " + entry.FullName);
+                        if (string.IsNullOrEmpty(entry.Name))
+                        {
+                            Directory.CreateDirectory(target);
+                            continue;
+                        }
+                        Directory.CreateDirectory(Path.GetDirectoryName(target));
+                        using (var src = entry.Open())
+                        using (var dst = File.Create(target)) src.CopyTo(dst);
+                        doneBytes += entry.Length;
+                        fileCount++;
+                        if (fileCount % 4 == 0 || entry.Length > (1 << 20))
+                            Report(0.15 + 0.40 * (totalBytes > 0 ? (double)doneBytes / totalBytes : 0), L.T(14), entry.FullName);
+                    }
+                }
+                // User-editable zapret lists must survive an upgrade.
+                var oldLists = Path.Combine(AppDir, "zapret", "lists");
+                var newLists = Path.Combine(incoming, "zapret", "lists");
+                if (Directory.Exists(oldLists) && Directory.Exists(newLists))
+                {
+                    foreach (var file in Directory.GetFiles(oldLists, "*-user.txt"))
+                        File.Copy(file, Path.Combine(newLists, Path.GetFileName(file)), true);
+                }
+                if (Directory.Exists(AppDir))
+                {
+                    try { Directory.Delete(AppDir, true); }
+                    catch
+                    {
+                        // A locked file (code 5) used to abort the whole setup:
+                        // move the folder aside instead and let the retry of the
+                        // uninstaller clean it later.
+                        var graveyard = AppDir + ".old-" + DateTime.Now.Ticks;
+                        Directory.Move(AppDir, graveyard);
+                    }
+                }
+                Directory.Move(incoming, AppDir);
+            }
+        }
+
+        void CreateShortcuts()
+        {
+            var exe = Path.Combine(AppDir, AppExe);
+            var startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
+                "Programs", "Nukefy Client.lnk");
+            Shortcut(startMenu, exe);
+            if (_desktop)
+            {
+                var desktop = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
+                    "Nukefy Client.lnk");
+                Shortcut(desktop, exe);
+            }
+        }
+
+        /// <summary>
+        /// WScript.Shell through reflection: no Microsoft.CSharp reference and
+        /// no dependency on the shell being registered at compile time.
+        /// </summary>
+        static void Shortcut(string path, string target)
+        {
+            try
+            {
+                var type = Type.GetTypeFromProgID("WScript.Shell");
+                if (type == null) return;
+                var shell = Activator.CreateInstance(type);
+                var link = type.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { path });
+                var linkType = link.GetType();
+                linkType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, link, new object[] { target });
+                linkType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, link, new object[] { AppDir });
+                linkType.InvokeMember("IconLocation", BindingFlags.SetProperty, null, link, new object[] { target + ",0" });
+                linkType.InvokeMember("Description", BindingFlags.SetProperty, null, link, new object[] { "Nukefy Client" });
+                linkType.InvokeMember("Save", BindingFlags.InvokeMethod, null, link, null);
+            }
+            catch
+            {
+                // A missing shortcut must not fail the installation.
+            }
+        }
+
+        void WriteUninstallEntry()
+        {
+            var exe = Path.Combine(AppDir, AppExe);
+            var version = Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
+            using (var key = Registry.LocalMachine.CreateSubKey(UninstallKey))
+            {
+                if (key == null) return;
+                var command = "\"" + exe + "\" --uninstall";
+                // Both commands point at the app's own branded uninstall window.
+                key.SetValue("DisplayName", "Nukefy Client");
+                key.SetValue("DisplayVersion", version);
+                key.SetValue("Publisher", "@kayorisan");
+                key.SetValue("DisplayIcon", exe + ",0");
+                key.SetValue("InstallLocation", AppDir);
+                key.SetValue("UninstallString", command);
+                key.SetValue("QuietUninstallString", command);
+                key.SetValue("NoModify", 1, RegistryValueKind.DWord);
+                key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
+                key.SetValue("EstimatedSize", (int)Math.Min(int.MaxValue, EstimateSize() / 1024), RegistryValueKind.DWord);
+            }
+        }
+
+        static long EstimateSize()
+        {
+            try
+            {
+                long total = 0;
+                foreach (var file in Directory.GetFiles(AppDir, "*", SearchOption.AllDirectories))
+                {
+                    try { total += new FileInfo(file).Length; } catch { }
+                }
+                return total;
+            }
+            catch { return 0; }
+        }
+
+        /// <summary>
+        /// The app applies these on its next start (autostart goes through its
+        /// own scheduled-task code, so there is exactly one implementation).
+        /// </summary>
+        void WriteInstallOptions()
+        {
+            var body = new StringBuilder();
+            body.Append("{\"version\":\"").Append(Assembly.GetExecutingAssembly().GetName().Version.ToString(3)).Append("\",");
+            body.Append("\"autostart\":").Append(_autostart ? "true" : "false").Append(",");
+            body.Append("\"desktopShortcut\":").Append(_desktop ? "true" : "false").Append(",");
+            body.Append("\"language\":\"").Append(L.Lang == 0 ? "ru" : "en").Append("\"}");
+            File.WriteAllText(Path.Combine(AppDir, "install-options.json"), body.ToString(), new UTF8Encoding(false));
+        }
+
+        void ApplyAutostart()
+        {
+            // Kept out of the installer on purpose: the app owns the scheduled
+            // task (name, --autostart/--tray arguments) so both stay in sync.
+        }
+
+        /// <summary>
+        /// Stops only what belongs to Nukefy: the app itself, our scheduled
+        /// task's process tree, and winws whose path is inside our folder.
+        /// A zapret the user installed themselves is never touched.
+        /// </summary>
+        static void StopOwnStack()
+        {
+            Run("sc.exe", "stop nukefy-zapret");
+            // Upgrades arrive with the old process still running under its
+            // previous file name, so both are stopped by name.
+            KillByName(AppExeName);
+            KillByName("nukefy_vpn");
+            KillOwnedByPath("winws", "*nukefy*");
+            KillOwnedByPath("sing-box", "*nukefy*");
+            KillOwnedByPath("xray", "*nukefy*");
+            Thread.Sleep(700);
+        }
+
+        static void KillByName(string name)
+        {
+            foreach (var process in Process.GetProcessesByName(name))
+            {
+                try { process.Kill(); process.WaitForExit(3000); } catch { }
+            }
+        }
+
+        static void KillOwnedByPath(string name, string pattern)
+        {
+            var script = "$p = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq '" + name +
+                         ".exe' -and $_.ExecutablePath -like '" + pattern +
+                         "' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }; 'done'";
+            Run("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -Command \"" + script + "\"");
+        }
+
+        static void Run(string file, string arguments)
+        {
+            try
+            {
+                var info = new ProcessStartInfo(file, arguments)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                };
+                using (var process = Process.Start(info))
+                {
+                    if (process == null) return;
+                    process.WaitForExit(15000);
+                }
+            }
+            catch { }
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (e.KeyCode == Keys.Escape && _page == Page.Options) Close();
+        }
+    }
+}

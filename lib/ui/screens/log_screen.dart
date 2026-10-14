@@ -8,6 +8,8 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers/settings_provider.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../widgets/nukefy_feedback.dart';
+import '../widgets/responsive_sections.dart';
 
 class LogScreen extends StatefulWidget {
   const LogScreen({super.key});
@@ -41,6 +43,21 @@ class _LogScreenState extends State<LogScreen> {
     });
   }
 
+  Future<void> _clear(BuildContext context) async {
+    final s = context.read<SettingsProvider>().strings;
+    final confirmed = await confirmDialog(
+      context,
+      title: s.t('clear'),
+      body: s.t('clearLogsBody'),
+      confirm: s.t('clear'),
+      cancel: s.t('cancel'),
+    );
+    if (!confirmed || !context.mounted) return;
+    final file = await _file();
+    if (file.existsSync()) await file.writeAsString('');
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsProvider>().strings;
@@ -49,28 +66,30 @@ class _LogScreenState extends State<LogScreen> {
         title: Text(s.t('showLog')),
         actions: [
           IconButton(
+            tooltip: s.t('copy'),
             onPressed: () => Clipboard.setData(ClipboardData(text: _text)),
             icon: const Icon(Icons.copy_rounded),
           ),
           IconButton(
+            tooltip: s.t('share'),
             onPressed: () => SharePlus.instance.share(ShareParams(text: _text)),
             icon: const Icon(Icons.share_rounded),
           ),
           IconButton(
-            onPressed: () async {
-              final file = await _file();
-              if (file.existsSync()) await file.writeAsString('');
-              await _load();
-            },
+            tooltip: s.t('clear'),
+            onPressed: () => _clear(context),
             icon: const Icon(Icons.delete_outline_rounded),
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: SelectableText(_text, style: AppTextStyles.monoValue),
+          : ResponsiveFrame(
+              maxWidth: 1400,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: SelectableText(_text, style: AppTextStyles.monoValue),
+              ),
             ),
     );
   }
