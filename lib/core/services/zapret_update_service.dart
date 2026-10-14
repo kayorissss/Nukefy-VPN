@@ -28,7 +28,7 @@ class ZapretUpdateService {
     receiveTimeout: Duration(minutes: 2),
     sendTimeout: Duration(seconds: 30),
   ));
-  static repo = 'Flowseal/zapret-discord-youtube';
+  static const repo = 'Flowseal/zapret-discord-youtube';
 
   Future<ZapretUpdateInfo?> check() async {
     final response = await _dio.get<Map<String, dynamic>>(
