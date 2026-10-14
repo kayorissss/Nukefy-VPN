@@ -64,7 +64,7 @@ class UpdateService {
       options: Options(
         headers: const {
           'Accept': 'application/vnd.github+json',
-          'User-Agent': AppConstants.userAgent,
+          'User-Agent': AppConstants.clientUserAgent,
         },
         validateStatus: (code) => code != null && code < 500,
         responseType: ResponseType.json,
@@ -153,7 +153,7 @@ class UpdateService {
     for (var attempt = 0; attempt < 5; attempt++) {
       try {
         final headers = <String, String>{
-          'User-Agent': AppConstants.userAgent,
+          'User-Agent': AppConstants.clientUserAgent,
           'Accept': 'application/octet-stream',
         };
         if (received > 0) headers['Range'] = 'bytes=$received-';

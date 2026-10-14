@@ -37,7 +37,7 @@ class KaringService extends ChangeNotifier {
         url,
         options: Options(
           responseType: ResponseType.plain,
-          headers: const {'User-Agent': AppConstants.userAgent},
+          headers: {'User-Agent': AppConstants.clientUserAgent},
           validateStatus: (code) => code != null && code < 500,
         ),
       );

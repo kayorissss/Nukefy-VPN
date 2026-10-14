@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../constants/app_constants.dart';
 import '../models/app_settings.dart';
 import '../models/vpn_status.dart';
 import '../services/storage_service.dart';
@@ -64,6 +65,15 @@ class SettingsProvider extends ChangeNotifier {
     if (!ThemePresets.all.containsKey(settings.visualTheme)) {
       settings.visualTheme = 'carbon';
       changed = true;
+    }
+    // Older builds wrote a pinned client version into the saved agent string.
+    // A user-chosen agent (Happ, v2rayNG, …) is kept exactly as it is.
+    if (settings.subscriptionUserAgent.startsWith('NukefyVPN/')) {
+      final current = AppConstants.clientUserAgent;
+      if (settings.subscriptionUserAgent != current) {
+        settings.subscriptionUserAgent = current;
+        changed = true;
+      }
     }
     if (changed) await _storage.writeJson('settings', settings.toJson());
     _mirror();

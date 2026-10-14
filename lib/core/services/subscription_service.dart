@@ -53,8 +53,10 @@ class SubscriptionService {
 
   /// User-Agent strings panels recognise. Some panels only serve clients
   /// from their whitelist, so the user can pick who we look like.
-  static const Map<String, String> clientUserAgents = {
-    'nukefy': AppConstants.userAgent,
+  /// Built on demand so the `nukefy` entry always carries the version of the
+  /// running build instead of a frozen constant.
+  static Map<String, String> get clientUserAgents => {
+    'nukefy': AppConstants.clientUserAgent,
     'happ': 'Happ/2.6.0',
     'v2rayng': 'v2rayNG/1.9.16',
     'hiddify': 'HiddifyNext/2.5.7',

@@ -93,7 +93,15 @@ class AppConstants {
 
   static const String defaultProxyDns = 'https://1.1.1.1/dns-query';
   static const String defaultDirectDns = '77.88.8.8';
+  /// Fallback for constant contexts. It used to be the only value, which meant
+  /// every server, mirror and GitHub call was told the client was 2.5.8 long
+  /// after that release. Prefer [clientUserAgent], which carries the real
+  /// installed version.
   static const String userAgent = 'NukefyVPN/2.5.8';
+
+  /// The User-Agent actually sent over the network: our name plus the version
+  /// baked into the build the user is running.
+  static String get clientUserAgent => 'NukefyVPN/$version';
 
   static const List<String> zapretGovernmentMediaHosts = [
     'rkn.gov.ru',

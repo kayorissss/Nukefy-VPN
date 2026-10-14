@@ -33,7 +33,7 @@ class ZapretUpdateService {
   Future<ZapretUpdateInfo?> check() async {
     final response = await _dio.get<Map<String, dynamic>>(
       'https://api.github.com/repos/$repo/releases/latest',
-      options: Options(headers: const {'Accept': 'application/vnd.github+json', 'User-Agent': AppConstants.userAgent}),
+      options: Options(headers: {'Accept': 'application/vnd.github+json', 'User-Agent': AppConstants.clientUserAgent}),
     );
     final data = response.data!;
     final tag = data['tag_name'] as String;

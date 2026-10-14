@@ -134,7 +134,7 @@ class AddonsService extends ChangeNotifier {
         options: Options(
           headers: const {
             'Accept': 'application/vnd.github+json',
-            'User-Agent': AppConstants.userAgent,
+            'User-Agent': AppConstants.clientUserAgent,
           },
           responseType: ResponseType.json,
         ),
@@ -173,7 +173,7 @@ class AddonsService extends ChangeNotifier {
         options: Options(
           headers: const {
             'Accept': 'application/vnd.github+json',
-            'User-Agent': AppConstants.userAgent,
+            'User-Agent': AppConstants.clientUserAgent,
           },
           responseType: ResponseType.json,
           validateStatus: (code) => code != null && code < 500,
@@ -221,7 +221,7 @@ class AddonsService extends ChangeNotifier {
         release.assetUrl,
         options: Options(
           responseType: ResponseType.stream,
-          headers: const {'User-Agent': AppConstants.userAgent},
+          headers: {'User-Agent': AppConstants.clientUserAgent},
           followRedirects: true,
           validateStatus: (status) => status != null && status >= 200 && status < 400,
         ),

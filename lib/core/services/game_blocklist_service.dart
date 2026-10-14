@@ -191,7 +191,7 @@ class GameBlocklistService {
         options: Options(
           headers: const {
             'Accept': 'application/vnd.github+json',
-            'User-Agent': AppConstants.userAgent,
+            'User-Agent': AppConstants.clientUserAgent,
           },
           responseType: ResponseType.json,
           validateStatus: (code) => code != null && code < 500,
