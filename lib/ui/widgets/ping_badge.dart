@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/providers/settings_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../l10n/strings.dart';
@@ -12,6 +14,14 @@ class PingBadge extends StatelessWidget {
   final int? pingMs;
   final bool compact;
   final S? strings;
+
+  /// The badge used to read the MaterialApp locale — which the app never
+  /// sets — so Russian users kept seeing "ms". The app language lives in
+  /// SettingsProvider; explicit strings win when a caller passes them.
+  String _unit(BuildContext context) {
+    final code = strings?.code ?? context.read<SettingsProvider>().strings.code;
+    return code == 'ru' ? 'мс' : 'ms';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +68,7 @@ class PingBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        '$pingMs ${Localizations.localeOf(context).languageCode == 'ru' ? 'мс' : 'ms'}',
+        '$pingMs ${_unit(context)}',
         style: AppTextStyles.number.copyWith(color: color, fontSize: compact ? 11 : 12),
       ),
     );

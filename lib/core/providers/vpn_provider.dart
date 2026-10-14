@@ -36,6 +36,35 @@ class VpnProvider extends ChangeNotifier {
   StatsProvider? _stats;
   ServersProvider? _servers;
   SettingsProvider? _settings;
+
+  /// Monotonic dial generation. Disconnect (or a newer dial) increments it;
+  /// an in-flight connect that finishes afterwards must not resurrect the
+  /// session — that race is exactly why the button "did not disconnect":
+  /// the slow start completed after the stop and set status back to
+  /// connected while the stop itself only flipped the state at its end.
+  int _connectSeq = 0;
+  Timer? _connectWatchdog;
+
+  bool _aborted(int seq) => seq != _connectSeq;
+
+  /// A dial that never lands is worse than a failed one: after 30 s the
+  /// watchdog tears the attempt down and says so, instead of spinning on
+  /// "ПОДКЛЮЧЕНИЕ..." forever.
+  void _armConnectWatchdog(int seq) {
+    _connectWatchdog?.cancel();
+    _connectWatchdog = Timer(const Duration(seconds: 30), () async {
+      if (_aborted(seq) || status != VpnStatus.connecting) return;
+      _connectSeq++;
+      status = VpnStatus.error;
+      errorMessage = 'CONNECT_TIMEOUT';
+      mode = 'timeout';
+      notifyListeners();
+      await _platform.stop();
+      await _platform.stopXray();
+      final server = activeServer;
+      if (server != null) await _servers?.markUnreachable(server.id);
+    });
+  }
   Timer? _ticker;
   WebSocketChannel? _traffic;
   int _sessionUp = 0;
@@ -143,6 +172,49 @@ class VpnProvider extends ChangeNotifier {
   /// so the UI can say what exactly does not work instead of a wall of text.
   Map<String, bool> trafficTargets = const {};
 
+  int _xrayStatsPort = 0;
+  int _lastXrayUp = -1;
+  int _lastXrayDown = -1;
+  bool _pollingXrayStats = false;
+
+  /// Polls the Xray stats API (xray-proxy sessions have no sing-box
+  /// front-end and therefore no Clash traffic socket). Cumulative core
+  /// counters become per-second rates and session totals — real numbers
+  /// measured by the core, never estimates.
+  Future<void> _pollXrayStats() async {
+    if (_pollingXrayStats || status != VpnStatus.connected || mode != 'xray-proxy' || _xrayStatsPort <= 0) return;
+    _pollingXrayStats = true;
+    try {
+      final totals = await _platform.xrayStatsTotals(_xrayStatsPort);
+      if (totals == null || status != VpnStatus.connected || mode != 'xray-proxy') return;
+      if (_lastXrayUp < 0) {
+        _lastXrayUp = totals.up;
+        _lastXrayDown = totals.down;
+        return;
+      }
+      final upDelta = (totals.up - _lastXrayUp).clamp(0, 1 << 62);
+      final downDelta = (totals.down - _lastXrayDown).clamp(0, 1 << 62);
+      _lastXrayUp = totals.up;
+      _lastXrayDown = totals.down;
+      _sessionUp += upDelta;
+      _sessionDown += downDelta;
+      _stats?.applyTraffic(
+        upBytesPerSecond: upDelta,
+        downBytesPerSecond: downDelta,
+        totalUp: _sessionUp,
+        totalDown: _sessionDown,
+      );
+      notifyListeners();
+    } finally {
+      _pollingXrayStats = false;
+    }
+  }
+
+  /// Real through-tunnel delay of the last control probe, in milliseconds.
+  /// This is the number Happ-style clients show; the list ping stays a
+  /// pre-connect TCP estimate until a session replaces it with this.
+  int? tunnelDelayMs;
+
   /// Public re-run of the post-connect check, used by the analyzer screen and
   /// the "Проверить" button in the traffic banner.
   Future<void> verifyTrafficNow() async {
@@ -164,7 +236,7 @@ class VpnProvider extends ChangeNotifier {
   Future<void> checkConflicts() async {
     if (!Platform.isWindows) return;
     try {
-      final result = await Process.run('tasklist', ['/FO', 'CSV', '/NH']);
+      final result = await Process.run('tasklist', ['/FO', 'CSV', '/NH']).timeout(const Duration(seconds: 5));
       final names = ((result.stdout as String?) ?? '').toLowerCase();
       final hits = <String>[
         if (names.contains('winws.exe') && !ZapretService.instance.isRunning) 'winws.exe (zapret)',
@@ -191,14 +263,18 @@ class VpnProvider extends ChangeNotifier {
       return;
     }
     activeServerId = server.id;
+    final seq = ++_connectSeq;
     await settings.update((s) => s.selectedServerId = server.id);
     await checkConflicts();
+    if (_aborted(seq)) return;
     status = VpnStatus.connecting;
     errorMessage = null;
     notifyListeners();
+    _armConnectWatchdog(seq);
     await refreshCore();
+    if (_aborted(seq)) return;
     if (server.usesXhttp) {
-      await _connectViaXray(server, settings.settings);
+      await _connectViaXray(server, settings.settings, seq);
       return;
     }
     final validation = SingboxConfigBuilder.validationError(server);
@@ -207,7 +283,7 @@ class VpnProvider extends ChangeNotifier {
       // can: prefer a working tunnel over a refusal message.
       final xray = await _platform.xrayCoreInfo();
       if (xray.available) {
-        await _connectViaXray(server, settings.settings);
+        await _connectViaXray(server, settings.settings, seq);
         return;
       }
     }
@@ -315,6 +391,11 @@ class VpnProvider extends ChangeNotifier {
       );
       if (result.ok) _ports = ephemeral;
     }
+    if (_aborted(seq)) {
+      await _platform.stop();
+      await _platform.stopXray();
+      return;
+    }
     if (!result.ok) {
       status = VpnStatus.error;
       final raw = result.error ?? 'core-failed';
@@ -336,7 +417,7 @@ class VpnProvider extends ChangeNotifier {
     // sing-box exposes the same traffic websocket on desktop and Android.
     // Start it for every successful session so Statistics is not a static
     // zero/empty screen on Windows.
-    unawaited(_listenTraffic());
+    unawaited(_listenTraffic(port: ports.clash));
     await _stats?.addLog(server.name, 'connected', message: mode);
     _startTicker();
     notifyListeners();
@@ -385,7 +466,7 @@ class VpnProvider extends ChangeNotifier {
     return candidate;
   }
 
-  Future<void> _connectViaXray(ServerModel server, AppSettings settings) async {
+  Future<void> _connectViaXray(ServerModel server, AppSettings settings, int seq) async {
     if (!XrayConfigBuilder.supports(server)) {
       status = VpnStatus.error;
       mode = 'xray-unsupported';
@@ -419,15 +500,24 @@ class VpnProvider extends ChangeNotifier {
     final xrayPorts = await _resolvePorts(settings);
     final xrayPort = useTunFrontend ? _xrayInboundPort(xrayPorts.socks, xrayPorts.http) : xrayPorts.socks;
     try {
+      _xrayStatsPort = xrayPort + 10002;
+      if (_xrayStatsPort > 65535) _xrayStatsPort = 19091;
+      _lastXrayUp = -1;
+      _lastXrayDown = -1;
       final config = XrayConfigBuilder.buildJson(
         server: server,
         settings: settings,
         logPath: '${dir.path}/xray.log',
         inboundPort: xrayPort,
         ports: xrayPorts,
+        statsPort: _xrayStatsPort,
       );
       await _platform.stop();
       final xrayResult = await _platform.startXray(configJson: config, workDir: dir.path);
+      if (_aborted(seq)) {
+        await _platform.stopXray();
+        return;
+      }
       if (!xrayResult.ok) {
         status = VpnStatus.error;
         mode = 'xray-proxy';
@@ -452,6 +542,11 @@ class VpnProvider extends ChangeNotifier {
           serverHost: server.address,
           serverPort: server.port,
         );
+        if (_aborted(seq)) {
+          await _platform.stop();
+          await _platform.stopXray();
+          return;
+        }
         if (!frontendResult.ok) {
           await _platform.stopXray();
           status = VpnStatus.error;
@@ -475,7 +570,7 @@ class VpnProvider extends ChangeNotifier {
       _sessionUp = 0;
       _sessionDown = 0;
       _stats?.startSession();
-      if (useTunFrontend) unawaited(_listenTraffic());
+      if (useTunFrontend) unawaited(_listenTraffic(port: xrayPorts.clash));
       unawaited(_verifyTraffic(server.id));
       await _stats?.addLog(server.name, 'connected', message: mode);
       _startTicker();
@@ -499,6 +594,7 @@ class VpnProvider extends ChangeNotifier {
       // A minimized window must not repaint the whole tree every second.
       if (!AppPerf.visible) return;
       _stats?.tickDuration();
+      unawaited(_pollXrayStats());
       notifyListeners();
     });
   }
@@ -593,6 +689,10 @@ class VpnProvider extends ChangeNotifier {
       }
     }
     trafficTargets = results;
+    if (control.ok && control.ms > 0) {
+      tunnelDelayMs = control.ms;
+      await _servers?.setPing(serverId, control.ms);
+    }
     if (!control.ok) {
       trafficOk = false;
       errorMessage = 'NO_TRAFFIC:${control.status ?? control.error ?? 'no-answer'}';
@@ -620,26 +720,34 @@ class VpnProvider extends ChangeNotifier {
     _ports = null;
     trafficOk = null;
     trafficTargets = const {};
+    tunnelDelayMs = null;
     _stats?.resetSession();
     if (name.isNotEmpty) await _stats?.addLog(name, 'disconnected');
     notifyListeners();
   }
 
   Future<void> disconnect() async {
+    // Invalidate any in-flight dial and flip the UI state *first*: the
+    // platform cleanup below (process kills, stray-core sweep) can take
+    // seconds, and the user must see "Отключено" the moment they tap.
+    _connectSeq++;
+    _connectWatchdog?.cancel();
     final name = activeServer?.name ?? '';
-    await _platform.stop();
-    await _platform.stopXray();
-    await _traffic?.sink.close();
-    _traffic = null;
-    _ticker?.cancel();
-    final settings = _settings;
-    if (settings != null && (_sessionUp > 0 || _sessionDown > 0)) {
-      await settings.addTraffic(_sessionUp, _sessionDown);
-    }
     status = VpnStatus.disconnected;
     _ports = null;
     trafficOk = null;
     trafficTargets = const {};
+    tunnelDelayMs = null;
+    _ticker?.cancel();
+    notifyListeners();
+    await _traffic?.sink.close();
+    _traffic = null;
+    await _platform.stop();
+    await _platform.stopXray();
+    final settings = _settings;
+    if (settings != null && (_sessionUp > 0 || _sessionDown > 0)) {
+      await settings.addTraffic(_sessionUp, _sessionDown);
+    }
     _stats?.resetSession();
     if (name.isNotEmpty) {
       await _stats?.addLog(name, 'disconnected');
@@ -647,17 +755,17 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _listenTraffic({int attempt = 0}) async {
+  Future<void> _listenTraffic({int attempt = 0, int? port}) async {
     await _traffic?.sink.close();
     _traffic = null;
     try {
       final channel = WebSocketChannel.connect(
-        Uri.parse('ws://127.0.0.1:${AppConstants.clashApiPort}/traffic'),
+        Uri.parse('ws://127.0.0.1:${port ?? AppConstants.clashApiPort}/traffic'),
       );
       _traffic = channel;
       void retry() {
         if (status != VpnStatus.connected || attempt >= 4 || _traffic != channel) return;
-        unawaited(Future<void>.delayed(const Duration(seconds: 1), () => _listenTraffic(attempt: attempt + 1)));
+        unawaited(Future<void>.delayed(const Duration(seconds: 1), () => _listenTraffic(attempt: attempt + 1, port: port)));
       }
 
       channel.stream.listen((event) {

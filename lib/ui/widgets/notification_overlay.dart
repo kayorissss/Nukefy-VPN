@@ -317,6 +317,7 @@ class _ToastCard extends StatelessWidget {
 /// screen: the home screen no longer renders errors inline at all.)
 String friendlyVpnError(S s, String raw) {
 if (raw == 'CORE_MISSING') return s.t('coreMissing');
+    if (raw == 'CONNECT_TIMEOUT') return s.t('connectTimeout');
     if (raw == 'LIBBOX_MISSING') return s.t('libboxMissing');
     if (raw == 'information-entry') return s.t('informationEntry');
     if (raw == 'need-server') return s.t('needServer');

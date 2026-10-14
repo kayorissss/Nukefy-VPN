@@ -42,6 +42,16 @@ class ServersProvider extends ChangeNotifier {
                 ))
             .toList() ??
         [];
+    // A latency measured half an hour ago is not a latency. Expire stale
+    // values at load so lists show the honest "not measured" dot instead
+    // of a number from a previous session, network or day.
+    final staleBefore = DateTime.now().subtract(const Duration(minutes: 30));
+    for (final server in servers) {
+      final at = server.lastPingAt;
+      if (server.pingMs != null && (at == null || at.isBefore(staleBefore))) {
+        server.pingMs = null;
+      }
+    }
     subscriptions = (subJson?['items'] as List?)
             ?.whereType<Map>()
             .map((e) => SubscriptionModel.fromJson(

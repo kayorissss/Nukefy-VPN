@@ -189,6 +189,33 @@ class VpnPlatform {
     }
   }
 
+  /// Cumulative inbound byte counters of the running Xray (up = user
+  /// upload, down = user download), or null when unavailable. Used to give
+  /// xray-proxy sessions real statistics instead of permanent zeros.
+  Future<({int up, int down})?> xrayStatsTotals(int port) async {
+    final binary = await xrayBinaryPath();
+    if (binary == null) return null;
+    try {
+      final result = await Process.run(binary, ['api', 'statsquery', '--server=127.0.0.1:$port']).timeout(const Duration(seconds: 4));
+      if (result.exitCode != 0) return null;
+      final decoded = jsonDecode('${result.stdout}');
+      if (decoded is! Map || decoded['stat'] is! List) return null;
+      var up = 0;
+      var down = 0;
+      for (final entry in decoded['stat'] as List) {
+        if (entry is! Map) continue;
+        final name = '${entry['name']}';
+        final value = (entry['value'] as num?)?.toInt() ?? 0;
+        if (!name.startsWith('inbound>>>') || name.startsWith('inbound>>>api>>>')) continue;
+        if (name.endsWith('traffic>>>uplink')) up += value;
+        if (name.endsWith('traffic>>>downlink')) down += value;
+      }
+      return (up: up, down: down);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> stopXray() async {
     final process = _xrayProcess;
     _xrayProcess = null;
@@ -398,7 +425,7 @@ class VpnPlatform {
     String? version;
     if (path != null) {
       try {
-        final result = await Process.run(path, ['version']);
+        final result = await Process.run(path, ['version']).timeout(const Duration(seconds: 5));
         version = '${result.stdout}'.trim().split('\n').first;
       } catch (_) {}
     }

@@ -29,6 +29,7 @@ class XrayConfigBuilder {
     required String logPath,
     required int inboundPort,
     LocalPorts? ports,
+    int? statsPort,
   }) {
     if (!supports(server)) throw const XrayConfigException('XRAY_UNSUPPORTED_PROTOCOL');
     final outbound = server.outbound ?? const <String, dynamic>{};
@@ -59,8 +60,26 @@ class XrayConfigBuilder {
         'settings': {},
       });
     }
+    // Stats API on loopback: without it an xray-proxy session reports
+    // literally zero traffic forever, which reads as fake statistics.
+    if (statsPort != null) {
+      inbounds.add({
+        'tag': 'api',
+        'listen': '127.0.0.1',
+        'port': statsPort,
+        'protocol': 'dokodemo-door',
+        'settings': {'address': '127.0.0.1'},
+      });
+    }
     final config = <String, dynamic>{
       'log': {'loglevel': settings.logLevel, 'access': logPath, 'error': logPath},
+      if (statsPort != null) ...{
+        'stats': <String, dynamic>{},
+        'api': {'tag': 'api', 'services': ['StatsService']},
+        'policy': {
+          'system': {'statsInboundUplink': true, 'statsInboundDownlink': true, 'statsOutboundUplink': true, 'statsOutboundDownlink': true},
+        },
+      },
       'inbounds': inbounds,
       'outbounds': [
         _proxyOutbound(server, outbound, transport),
@@ -70,6 +89,7 @@ class XrayConfigBuilder {
       'routing': {
         'domainStrategy': 'AsIs',
         'rules': [
+          if (statsPort != null) {'type': 'field', 'inboundTag': ['api'], 'outboundTag': 'api'},
           {'type': 'field', 'inboundTag': ['socks-in', 'http-in'], 'outboundTag': 'proxy'},
         ],
       },
