@@ -557,6 +557,48 @@ class ZapretService extends ChangeNotifier {
   /// Human-readable conflict list, refreshed by [detectConflicts].
   List<String> conflicts = const [];
 
+  /// Explicit, user-confirmed action: pause another zapret's capture so ours
+  /// can take the single system WinDivert driver. Called only from the
+  /// "stop the other bypass" button on the conflict card — nothing in the app
+  /// does this on its own. The other program stays installed and disabled
+  /// nowhere except for the running process/service, which its own launcher
+  /// can start again.
+  Future<String> stopForeignCapture() async {
+    if (!Platform.isWindows) return 'unsupported';
+    final problems = <String>[];
+    try {
+      // Flowseal's service.bat and most winws front-ends register exactly
+      // this name. Absent service is not an error.
+      final stop = await Process.run('sc.exe', ['stop', 'zapret']).timeout(const Duration(seconds: 15));
+      if (stop.exitCode != 0 && stop.exitCode != 1060 && stop.exitCode != 1062) {
+        problems.add('service ${stop.exitCode}');
+      }
+    } catch (error) {
+      problems.add('service $error');
+    }
+    try {
+      final dir = root;
+      final ours = dir == null ? '' : p.join(dir.path, 'bin', 'winws.exe').toLowerCase();
+      final result = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        r'''Get-CimInstance Win32_Process -Filter "Name = 'winws.exe'" | ForEach-Object { "$($_.ProcessId)|$($_.ExecutablePath)" }''',
+      ]).timeout(const Duration(seconds: 10));
+      for (final line in '${result.stdout}'.split(RegExp(r'\r?\n'))) {
+        final parts = line.trim().split('|');
+        if (parts.length != 2) continue;
+        final path = parts[1].trim().toLowerCase();
+        if (path.isEmpty || (ours.isNotEmpty && path == ours)) continue;
+        final kill = await Process.run('taskkill', ['/F', '/PID', parts[0]]).timeout(const Duration(seconds: 8));
+        if (kill.exitCode != 0) problems.add('winws ${parts[0]}');
+      }
+    } catch (error) {
+      problems.add('winws $error');
+    }
+    await detectConflicts();
+    return problems.isEmpty ? 'ok' : 'partial: ${problems.join(', ')}';
+  }
+
   Future<bool> serviceInstalled() async {
     if (!Platform.isWindows) return false;
     try {

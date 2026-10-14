@@ -132,7 +132,7 @@ class AppTheme {
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: p.border),
         ),
       ),
@@ -142,7 +142,7 @@ class AppTheme {
         titleTextStyle: display(17, FontWeight.w600),
         contentTextStyle: body(14, FontWeight.w500, color: p.textSecondary),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(22),
           side: BorderSide(color: p.border),
         ),
       ),
@@ -161,7 +161,7 @@ class AppTheme {
         contentTextStyle: body(14, FontWeight.w500),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           side: BorderSide(color: p.border),
         ),
       ),
@@ -209,15 +209,15 @@ class AppTheme {
         floatingLabelStyle: body(13, FontWeight.w600, color: p.accent),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: p.border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: p.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: p.accent, width: 1.4),
         ),
       ),
@@ -269,7 +269,7 @@ class AppTheme {
         textColor: p.text,
         titleTextStyle: body(14.5, FontWeight.w600),
         subtitleTextStyle: body(12.5, FontWeight.w500, color: p.textSecondary),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {

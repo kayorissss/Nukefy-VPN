@@ -151,7 +151,7 @@ class _DomainManagerDialogState extends State<DomainManagerDialog> {
           const SizedBox(height: 10),
           Expanded(
             child: DecoratedBox(
-              decoration: BoxDecoration(color: p.surface.withValues(alpha: .55), borderRadius: BorderRadius.circular(14), border: Border.all(color: p.border)),
+              decoration: BoxDecoration(color: p.surface.withValues(alpha: .55), borderRadius: BorderRadius.circular(12), border: Border.all(color: p.border)),
               child: _domains.isEmpty
                   ? Center(child: Text(s.t('zDomainsEmpty'), style: p.secondaryStyle))
                   : ListView.separated(

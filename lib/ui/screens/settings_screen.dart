@@ -642,7 +642,7 @@ class _SettingsSubtabs extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
                     decoration: BoxDecoration(
                       color: selected == index ? p.background : Colors.transparent,
-                      borderRadius: BorderRadius.circular(17),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: selected == index ? p.accent.withValues(alpha: .65) : Colors.transparent, width: 1.2),
                     ),
                     child: Row(
@@ -753,7 +753,7 @@ class _ConnectionModeChoice extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: p.surface,
-        borderRadius: BorderRadius.circular(17),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: p.border),
       ),
       child: Row(

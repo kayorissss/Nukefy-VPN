@@ -371,7 +371,7 @@ Future<void> _showMobileMore(BuildContext context, List<_TabSpec> tabs, NavDesti
               leading: Icon(spec.icon, color: spec.destination == current ? context.palette.accent : context.palette.textSecondary),
               title: Text(spec.label),
               trailing: spec.destination == current ? Icon(Icons.check_rounded, color: context.palette.accent) : null,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               onTap: () {
                 Navigator.pop(sheetContext);
                 context.read<NavProvider>().go(spec.destination);
@@ -550,7 +550,7 @@ class _SideRailState extends State<_SideRail> {
         icon: Icon(icon, size: 21, color: selected ? p.accent : p.textSecondary),
         style: IconButton.styleFrom(
           backgroundColor: selected ? p.accent.withValues(alpha: .14) : Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
     }
@@ -624,7 +624,7 @@ class _SideRailState extends State<_SideRail> {
                       for (final l in g.leaves) iconButton(l.destination, l.icon, l.label),
                     ] else ...[
                       InkWell(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(12),
                         onTap: () => setState(() {
                           final next = !openOf(g);
                           _open[g.key] = next;
@@ -634,7 +634,7 @@ class _SideRailState extends State<_SideRail> {
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                           decoration: BoxDecoration(
                             color: g.destination == destination ? p.accent.withValues(alpha: .14) : Colors.transparent,
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
                             children: [
@@ -758,7 +758,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> {
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                         decoration: BoxDecoration(
                           color: p.accent.withValues(alpha: .12),
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: p.accent.withValues(alpha: .35)),
                         ),
                         child: Text(AppConstants.version,
@@ -771,7 +771,7 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> {
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: p.text.withValues(alpha: .06),
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: p.border),
                         ),
                         child: Text(s.t('betaTag').toUpperCase(),

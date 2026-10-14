@@ -350,7 +350,7 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: p.surface.withValues(alpha: .5),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: finding.severity == DiagSeverity.conflict ? p.error.withValues(alpha: .6) : p.border,
                     ),
@@ -437,7 +437,7 @@ class _AutoTuneScreenState extends State<AutoTuneScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: p.success.withValues(alpha: .12),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: p.success.withValues(alpha: .4)),
                     ),
                     child: Row(

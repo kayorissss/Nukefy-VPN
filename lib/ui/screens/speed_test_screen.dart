@@ -247,7 +247,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                                       decoration: BoxDecoration(
                                         color: phaseColor.withValues(alpha: .14),
-                                        borderRadius: BorderRadius.circular(20),
+                                        borderRadius: BorderRadius.circular(16),
                                       ),
                                       child: Text(
                                         phaseLabel.toUpperCase(),
@@ -389,7 +389,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: p.accent.withValues(alpha: .14),
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text('${_history.length}',
                                       style: AppTextStyles.tab.copyWith(fontSize: 10, color: p.accent)),
@@ -472,7 +472,7 @@ class _Metric extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         decoration: BoxDecoration(
           color: p.surface.withValues(alpha: .55),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: p.border),
         ),
         child: Row(
@@ -480,7 +480,7 @@ class _Metric extends StatelessWidget {
             Container(
               width: 30,
               height: 30,
-              decoration: BoxDecoration(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(9)),
+              decoration: BoxDecoration(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(10)),
               child: Icon(icon, size: 16, color: color),
             ),
             const SizedBox(width: 10),
@@ -533,7 +533,7 @@ class _HistoryRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: p.surface.withValues(alpha: .5),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: p.border),
       ),
       child: Row(
@@ -543,7 +543,7 @@ class _HistoryRow extends StatelessWidget {
             height: 32,
             decoration: BoxDecoration(
               color: (item.viaVpn ? p.accent : p.textSecondary).withValues(alpha: .12),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(item.viaVpn ? Icons.vpn_lock_rounded : Icons.public_rounded,
                 size: 16, color: item.viaVpn ? p.accent : p.textSecondary),

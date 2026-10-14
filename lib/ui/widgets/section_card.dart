@@ -152,7 +152,7 @@ class SettingsTile extends StatelessWidget {
         return Material(
           color: Colors.transparent,
           child: InkWell(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2, vertical: kRowVPad),

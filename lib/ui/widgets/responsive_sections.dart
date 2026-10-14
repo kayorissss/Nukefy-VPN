@@ -34,31 +34,54 @@ class ResponsiveSections extends StatelessWidget {
         final requestedColumns = ((bounds.maxWidth - 40) / minColumnWidth).floor().clamp(1, maxColumns).toInt();
         final columns = content.isEmpty ? 1 : requestedColumns.clamp(1, content.length).toInt();
 
+        // One gap value for every mode: the same page used to space cards by
+        // 14 px in one column and 16 px in two, so the rhythm changed with the
+        // window size.
+        const gap = 14.0;
+        const columnGap = 20.0;
+
         Widget columnsView() {
           if (columns == 1) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (final child in content)
-                  Padding(padding: const EdgeInsets.only(bottom: 14), child: child),
+                  Padding(padding: EdgeInsets.only(bottom: gap), child: child),
               ],
             );
           }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          // Explicit rows instead of independent column stacks: cards that sit
+          // side by side now share a row height, so their tops and bottoms line
+          // up instead of one column ending higher than the other.
+          final rows = <List<Widget>>[];
+          for (var i = 0; i < content.length; i += columns) {
+            final row = content.sublist(i, (i + columns).clamp(0, content.length).toInt());
+            rows.add(row);
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (var col = 0; col < columns; col++) ...[
-                if (col > 0) const SizedBox(width: 20),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = col; i < content.length; i += columns)
-                        Padding(padding: const EdgeInsets.only(bottom: 16), child: content[i]),
-                    ],
-                  ),
+              for (final row in rows)
+                Padding(
+                  padding: EdgeInsets.only(bottom: gap),
+                  child: row.length == 1
+                      ? row.first
+                      : IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var col = 0; col < columns; col++) ...[
+                                if (col > 0) const SizedBox(width: columnGap),
+                                Expanded(
+                                  child: col < row.length
+                                      ? row[col]
+                                      : const SizedBox.shrink(),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                 ),
-              ],
             ],
           );
         }

@@ -177,6 +177,23 @@ class _ZapretScreenState extends State<ZapretScreen> {
 
   ZapretStrategy? _selected() => _strategies.where((e) => e.id == context.read<SettingsProvider>().settings.zapretStrategy).firstOrNull ?? _strategies.firstOrNull;
 
+  /// Consent-based conflict resolution: the user tapped the button, so the
+  /// other bypass may be stopped (its program stays installed).
+  Future<void> _stopForeignAndStart() async {
+    final settings = context.read<SettingsProvider>();
+    _zapret.configure(settings.settings);
+    final result = await _zapret.stopForeignCapture();
+    await _refreshConflicts();
+    if (!mounted) return;
+    if (result == 'ok' || result == 'unsupported') {
+      showNukefySnack(context, s.t('zConflictStopped'));
+      final strategy = _selected();
+      if (strategy != null) await _start(strategy);
+    } else {
+      setState(() => _error = '${s.t('zConflictStopFailed')}$result');
+    }
+  }
+
   Future<void> _restart() async {
     if (_zapret.isRunning && _selected() != null) await _start(_selected()!);
   }
@@ -366,27 +383,53 @@ class _ZapretScreenState extends State<ZapretScreen> {
               borderRadius: BorderRadius.circular(22),
               border: Border.all(color: p.accent.withValues(alpha: .38)),
             ),
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.warning_amber_rounded, color: p.accent, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(s.t('zConflictTitle'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 4),
-                      NukefySelectableText(
-                        '${s.t('zConflictBody')}\n${_conflicts.join('\n')}',
-                        style: p.secondaryStyle,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: p.accent, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(s.t('zConflictTitle'), style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 4),
+                          NukefySelectableText(
+                            '${s.t('zConflictBody')}\n${_conflicts.join('\n')}',
+                            style: p.secondaryStyle,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    TextButton(
+                      onPressed: _refreshConflicts,
+                      child: Text(s.t('zConflictRecheck')),
+                    ),
+                  ],
                 ),
-                TextButton(
-                  onPressed: _refreshConflicts,
-                  child: Text(s.t('zConflictRecheck')),
+                const SizedBox(height: 10),
+                Text(s.t('zConflictDriver'), style: p.secondaryStyle),
+                const SizedBox(height: 10),
+                // Explicit consent, one tap: stop the other bypass's process
+                // and service, then start ours. Its program is not removed,
+                // not uninstalled and not disabled for the future.
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: busy || chosen == null ? null : () => _run(_stopForeignAndStart),
+                      icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                      label: Text(s.t('zConflictStopForeign')),
+                    ),
+                    TextButton(
+                      onPressed: busy ? null : () => setState(() => _conflicts = const []),
+                      child: Text(s.t('zConflictKeepForeign')),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -619,7 +662,7 @@ class _ZapretScreenState extends State<ZapretScreen> {
               Container(
                 decoration: BoxDecoration(
                   color: p.surface.withValues(alpha: .42),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: p.border),
                 ),
                 child: Column(

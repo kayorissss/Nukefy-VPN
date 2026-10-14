@@ -415,7 +415,7 @@ class _ServiceIconState extends State<_ServiceIcon> {
       child: bytes == null
           ? Icon(widget.fallback, size: 20, color: widget.color)
           : ClipRRect(
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: BorderRadius.circular(10),
               child: Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true,
                   errorBuilder: (_, _, _) => Icon(widget.fallback, size: 20, color: widget.color)),
             ),

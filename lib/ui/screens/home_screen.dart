@@ -623,7 +623,7 @@ class _ErrorCard extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
         decoration: BoxDecoration(
           color: p.error.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: p.error.withValues(alpha: 0.35)),
         ),
         child: Row(

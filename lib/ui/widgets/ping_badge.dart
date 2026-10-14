@@ -34,7 +34,7 @@ class PingBadge extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: compact ? 7 : 9, vertical: compact ? 4 : 6),
         decoration: BoxDecoration(
           color: p.error.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: p.error.withValues(alpha: 0.35)),
         ),
         child: Row(
@@ -55,7 +55,7 @@ class PingBadge extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10, vertical: compact ? 4 : 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         '$pingMs ms',

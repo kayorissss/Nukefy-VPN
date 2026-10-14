@@ -209,7 +209,7 @@ class _AddonCard extends StatelessWidget {
               if (installed != null)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: p.success.withValues(alpha: .16), borderRadius: BorderRadius.circular(8)),
+                  decoration: BoxDecoration(color: p.success.withValues(alpha: .16), borderRadius: BorderRadius.circular(10)),
                   child: Text(s.t('addonsInstalled'), style: AppTextStyles.tab.copyWith(fontSize: 8.5, color: p.success)),
                 ),
             ],

@@ -342,7 +342,7 @@ class _SubscriptionBlockState extends State<_SubscriptionBlock> {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: p.accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text('${widget.number}', style: AppTextStyles.number.copyWith(color: p.accent, fontSize: 12)),
                     ),

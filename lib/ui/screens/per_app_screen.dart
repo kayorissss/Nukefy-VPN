@@ -252,7 +252,7 @@ class _AppRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
             color: on ? p.accent.withValues(alpha: 0.10) : p.card.withValues(alpha: p.isDark ? 0.85 : 0.96),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: on ? p.accent.withValues(alpha: 0.45) : p.border),
           ),
           child: Row(
