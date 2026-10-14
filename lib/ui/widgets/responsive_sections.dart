@@ -66,9 +66,8 @@ class ResponsiveSections extends StatelessWidget {
                   padding: EdgeInsets.only(bottom: gap),
                   child: row.length == 1
                       ? row.first
-                      : IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                      : Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               for (var col = 0; col < columns; col++) ...[
                                 if (col > 0) const SizedBox(width: columnGap),

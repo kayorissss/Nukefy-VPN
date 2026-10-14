@@ -130,7 +130,7 @@ class SettingsTile extends StatelessWidget {
                 child: Text(title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+                    style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600, fontStyle: FontStyle.normal)),
               ),
               if (subtitle != null) ...[
                 const SizedBox(width: 6),
@@ -231,7 +231,7 @@ class SwitchTile extends StatelessWidget {
                       child: Text(title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600)),
+                          style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600, fontStyle: FontStyle.normal)),
                     ),
                     const SizedBox(width: 6),
                     HintBadge(message: subtitle!),

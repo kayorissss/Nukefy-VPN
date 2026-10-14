@@ -464,8 +464,6 @@ class _ZapretScreenState extends State<ZapretScreen> {
               s.t(running ? 'zapretOn' : 'zapretOff'),
               style: AppTextStyles.title.copyWith(color: statusColor, fontSize: 20),
             ),
-            const SizedBox(height: 4),
-            Text('${s.t('zVersion')}: ${_zapret.version ?? '—'}', style: p.secondaryStyle),
             const SizedBox(height: 14),
             // The active strategy stays next to the power button: switching
             // it is the most frequent action on the page.
@@ -1175,39 +1173,88 @@ class _ZapretScreenState extends State<ZapretScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: Text('ZAPRET', style: AppTextStyles.title)),
-                  SizedBox(
-                    height: 40,
-                    child: Center(
-                      child: TextButton.icon(
-                        onPressed: _checking || busy ? null : _checkUpdate,
-                        icon: const Icon(Icons.system_update_alt),
-                        label: Text(s.t(_checking ? 'zChecking' : 'zCheckUpdate')),
+              // Hero: the page no longer opens with a bare caption. Status,
+              // active strategy and core version read at a glance, and the
+              // frame lights up while the bypass is actually running.
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 18, 14, 18),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [p.accent.withValues(alpha: running ? .16 : .07), p.card],
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: running ? p.success.withValues(alpha: .45) : p.border),
+                  boxShadow: running
+                      ? [BoxShadow(color: p.success.withValues(alpha: .12), blurRadius: 28, spreadRadius: 2)]
+                      : null,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: (running ? p.success : p.accent).withValues(alpha: .14),
+                        border: Border.all(color: (running ? p.success : p.accent).withValues(alpha: .35)),
+                      ),
+                      child: Icon(Icons.shield_rounded, size: 28, color: running ? p.success : p.accent),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text('ZAPRET', style: AppTextStyles.title),
+                              const SizedBox(width: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: .14),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  s.t(running ? 'zapretOn' : 'zapretOff').toUpperCase(),
+                                  style: AppTextStyles.status.copyWith(color: statusColor, fontSize: 10, letterSpacing: 1.1),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          if (_error == null)
+                            Text(s.t('zapretHint'), style: p.secondaryStyle, maxLines: 2, overflow: TextOverflow.ellipsis)
+                          else
+                            InkWell(
+                              onTap: () => _text(s.t('zError'), _error!),
+                              child: Text(_error!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.error)),
+                            ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              _heroChip(context, Icons.memory_rounded, '${s.t('zVersion')}: ${_zapret.version ?? '—'}'),
+                              if (chosen != null) _heroChip(context, Icons.route_rounded, '#${chosen.number.toString().padLeft(2, '0')} ${chosen.title}'),
+                              if (_best != null && _best == chosen?.id) _heroChip(context, Icons.verified_rounded, s.t('zBestStrategy')),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
-              ),
-              SizedBox(
-                height: 48,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: _error == null
-                      ? Text(s.t('zapretHint'), style: context.palette.secondaryStyle)
-                      : InkWell(
-                          onTap: () => _text(s.t('zError'), _error!),
-                          child: Text(
-                            _error!,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: AppColors.error),
-                          ),
-                        ),
+                    TextButton.icon(
+                      onPressed: _checking || busy ? null : _checkUpdate,
+                      icon: const Icon(Icons.system_update_alt),
+                      label: Text(s.t(_checking ? 'zChecking' : 'zCheckUpdate')),
+                    ),
+                  ],
                 ),
               ),
+              const SizedBox(height: 16),
               // A failed capture must not be a one-line mystery: the same
               // report the log holds (strategy, command line, last winws
               // lines) is shown and can be copied in one tap.
@@ -1291,6 +1338,26 @@ class _ZapretScreenState extends State<ZapretScreen> {
             NukefyDropdown<String>(value: selected, items: values, onChanged: changed),
           ]),
         ),
+      ),
+    );
+  }
+
+  Widget _heroChip(BuildContext context, IconData icon, String label) {
+    final p = context.palette;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: p.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: p.accent),
+          const SizedBox(width: 6),
+          Text(label, style: AppTextStyles.bodySecondary.copyWith(fontSize: 12, fontWeight: FontWeight.w600)),
+        ],
       ),
     );
   }

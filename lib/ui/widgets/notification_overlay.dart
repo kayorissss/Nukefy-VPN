@@ -177,9 +177,14 @@ class _NotificationOverlayState extends State<NotificationOverlay> {
   Widget build(BuildContext context) {
     final desktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
     final toast = _toast;
+    // Notifications belong to the home page: the bell and toasts must not
+    // float over servers, settings or Zapret. History still accumulates in
+    // the hub and is waiting behind the bell when the user comes back.
+    final onHome = context.watch<NavProvider>().destination == NavDestination.home;
     return Stack(
       children: [
         widget.child,
+        if (onHome)
         Positioned(
           top: desktop ? 50 : 10,
           right: 14,
@@ -190,7 +195,16 @@ class _NotificationOverlayState extends State<NotificationOverlay> {
                 _BellButton(unread: _hub.unread, onTap: _openHistory),
                 if (toast != null) ...[
                   const SizedBox(height: 10),
-                  _ToastCard(
+                  TweenAnimationBuilder<double>(
+                    key: ValueKey(toast.id),
+                    tween: Tween(begin: 0, end: 1),
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, value, child) => Opacity(
+                      opacity: value,
+                      child: Transform.translate(offset: Offset((1 - value) * 48, 0), child: child),
+                    ),
+                    child: _ToastCard(
                     notice: toast,
                     onClose: () {
                       _timer?.cancel();
@@ -203,6 +217,7 @@ class _NotificationOverlayState extends State<NotificationOverlay> {
                             _hub.markRead();
                             setState(() => _toast = null);
                           },
+                    ),
                   ),
                 ],
               ],

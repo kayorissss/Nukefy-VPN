@@ -31,6 +31,9 @@ class NukefyApp extends StatelessWidget {
       child: MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Nukefy Client',
+      // Without this, framework widgets (and anything reading the locale)
+      // stay in the platform language while the UI is already translated.
+      locale: Locale(settings.strings.code),
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(settings.settings.accent, settings.settings.visualTheme),
       darkTheme: AppTheme.dark(settings.settings.accent, settings.settings.visualTheme),

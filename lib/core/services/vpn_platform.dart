@@ -238,11 +238,18 @@ class VpnPlatform {
 
   Future<String> downloadXrayCore({void Function(DownloadProgress progress)? onProgress}) async {
     if (Platform.isAndroid || Platform.isIOS) throw CoreDownloadException('xray-platform-unsupported');
-    final response = await _dio.get<Map<String, dynamic>>(
-      'https://api.github.com/repos/XTLS/Xray-core/releases/latest',
+    // Newest release wins, including prereleases: XTLS publishes long
+    // stretches where /releases/latest is months behind the actual newest
+    // build (e.g. stable v26.3.27 vs prerelease v26.10.10), and "обновить
+    // Xray" must offer what is actually current. The list endpoint is
+    // chronological, so the first entry is the newest release.
+    final response = await _dio.get<List<dynamic>>(
+      'https://api.github.com/repos/XTLS/Xray-core/releases?per_page=5',
       options: Options(headers: {'Accept': 'application/vnd.github+json', 'User-Agent': AppConstants.clientUserAgent}, responseType: ResponseType.json),
     );
-    final assets = (response.data?['assets'] as List?) ?? const [];
+    final releases = (response.data ?? const []).whereType<Map>().map((item) => item.map((k, v) => MapEntry(k.toString(), v))).toList();
+    if (releases.isEmpty) throw const CoreDownloadException('xray-no-asset');
+    final assets = (releases.first['assets'] as List?) ?? const [];
     final asset = _pickXrayAsset(assets);
     if (asset == null) throw const CoreDownloadException('xray-no-asset');
     final url = '${asset['browser_download_url'] ?? ''}';

@@ -758,7 +758,6 @@ class _SideRailState extends State<_SideRail> {
           if (collapsed)
             Column(
               children: [
-                const Padding(padding: EdgeInsets.only(top: 2, bottom: 4), child: NukefyLogo(size: 26, glow: false)),
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints.tightFor(width: 30, height: 30),
@@ -781,13 +780,8 @@ class _SideRailState extends State<_SideRail> {
               height: 34,
               child: Row(
                 children: [
-                  // Same left offset as the section icons below, so the logo,
-                  // every section icon and every leaf icon share one column.
-                  const SizedBox(width: 10),
-                  const NukefyLogo(size: 20, glow: false),
-                  // The spelled-out brand caption is gone: it pushed «ГЛАВНАЯ»
-                  // down and read as a second title. The rail starts with the
-                  // sections, and the three lines on the right fold it.
+                  // No brand glyph here: it sat above «ГЛАВНАЯ» as a stray
+                  // icon with no job. The sections start immediately.
                   const Spacer(),
                   // Right side of the header: the pinned pages as plain icons,
                   // then the three-dot map of everything else.

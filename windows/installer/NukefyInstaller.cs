@@ -1,4 +1,4 @@
-﻿// Nukefy Client — собственный установщик.
+// Nukefy Client — собственный установщик.
 //
 // Окно полностью своё: тёмная карточка в стиле приложения, выбор языка,
 // галочки, прогресс и финальная страница. Никакого системного мастера Inno:
@@ -256,10 +256,9 @@ namespace NukefySetup
             // title row
             using (var dot = new SolidBrush(Accent)) g.FillEllipse(dot, 20, 19, 8, 8);
             DrawText(g, L.T(0), new Rectangle(36, 14, 300, 20), 9.5f, Muted, FontStyle.Bold, 2f);
-            using (var icon = LoadIcon())
-            {
-                if (icon != null) g.DrawIcon(icon, new Rectangle(W - 236, 13, 20, 20));
-            }
+            // No app icon in the title row: it read as a stray glyph next to
+            // the language switch. RU/EN chips are the right-aligned header
+            // controls, and they are clickable (see OnMouseUp).
             DrawChip(g, RuChip, "RU", L.Lang == 0);
             DrawChip(g, EnChip, "EN", L.Lang == 1);
             DrawText(g, "✕", CloseButton, 12f, _hover == 9 ? Danger : Muted, FontStyle.Regular, 0f, true);

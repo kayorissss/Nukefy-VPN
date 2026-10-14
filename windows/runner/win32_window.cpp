@@ -150,7 +150,10 @@ bool Win32Window::Create(const std::wstring& title,
 }
 
 bool Win32Window::Show() {
-  return ShowWindow(window_handle_, SW_SHOWNORMAL);
+  // The app used to open as a small centred window and only grow when the
+  // user maximised it by hand. Desktop layouts are designed for a wide
+  // canvas, so the very first show is already maximised.
+  return ShowWindow(window_handle_, SW_SHOWMAXIMIZED);
 }
 
 // static
