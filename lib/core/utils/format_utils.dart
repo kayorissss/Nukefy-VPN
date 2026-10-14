@@ -1,7 +1,13 @@
 class FormatUtils {
+  /// Set by SettingsProvider whenever the UI language resolves, so byte and
+  /// speed units follow the interface language ('0 Б/с', not '0 B/s').
+  static bool russian = false;
+
+  static String get mbpsUnit => russian ? 'Мбит/с' : 'Mbit/s';
+
   static String bytes(int value) {
     if (value < 0) value = 0;
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    final units = russian ? const ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'] : const ['B', 'KB', 'MB', 'GB', 'TB'];
     var size = value.toDouble();
     var unit = 0;
     while (size >= 1024 && unit < units.length - 1) {
@@ -13,7 +19,7 @@ class FormatUtils {
   }
 
   static String speed(int bytesPerSecond) {
-    return '${bytes(bytesPerSecond)}/s';
+    return '${bytes(bytesPerSecond)}${russian ? '/с' : '/s'}';
   }
 
   static String duration(Duration value) {

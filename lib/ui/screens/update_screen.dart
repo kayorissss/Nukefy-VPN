@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers/settings_provider.dart';
@@ -13,6 +14,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/format_utils.dart';
 import '../../core/utils/network_diagnostics.dart';
+import '../widgets/nature_panel.dart';
 import '../widgets/nukefy_background.dart';
 import '../widgets/nukefy_logo.dart';
 
@@ -69,7 +71,9 @@ class _UpdateScreenState extends State<UpdateScreen> {
     try {
       final file = await UpdateService().download(widget.info, onProgress: (next) {
         if (mounted) setState(() => _progress = next);
+        _taskbarProgress(next.fraction);
       });
+      _taskbarProgress(1);
       if (!mounted) return;
       setState(() {
         _file = file;
@@ -86,6 +90,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
         }
       }
     } on UpdateDownloadException catch (error) {
+      _taskbarProgress(0);
       if (!mounted) return;
       final s = context.read<SettingsProvider>().strings;
       setState(() {
@@ -93,12 +98,23 @@ class _UpdateScreenState extends State<UpdateScreen> {
         _error = s.t(error.code == 'no-asset' ? 'updateFailed' : 'updateDownloadNetwork');
       });
     } on Exception catch (error) {
+      _taskbarProgress(0);
       if (!mounted) return;
       setState(() {
         _phase = _Phase.failed;
         _error = NetworkDiagnostics.textOrRaw(error, context.read<SettingsProvider>().strings.t);
       });
     }
+  }
+
+  /// Mirrors the download onto the taskbar icon (Windows shows it as a
+  /// fill behind the app icon, like a browser download). Best effort: a
+  /// missing plugin method must never break the update itself.
+  void _taskbarProgress(double fraction) {
+    if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
+    try {
+      (windowManager as dynamic).setProgressBar(fraction.clamp(0, 1).toDouble());
+    } catch (_) {}
   }
 
   Future<void> _install() async {
@@ -142,7 +158,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
           child: SafeArea(
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
+                constraints: BoxConstraints(maxWidth: busy ? 880 : 520),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                   child: Column(
@@ -155,7 +171,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
                         ),
                       ),
                       const Spacer(),
-                      _Hero(phase: _phase, progress: _progress),
+                      if (_phase != _Phase.downloading) _Hero(phase: _phase, progress: _progress),
                       const SizedBox(height: 28),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
@@ -214,7 +230,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
                           margin: const EdgeInsets.only(bottom: 14),
                           padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                           decoration: BoxDecoration(
-                            color: p.card.withValues(alpha: .75),
+                            color: p.card,
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: p.border),
                           ),
@@ -242,20 +258,8 @@ class _UpdateScreenState extends State<UpdateScreen> {
                           ),
                         ),
                       ],
-                      if (_phase == _Phase.downloading && _progress != null)
-                        Column(
-                          children: [
-                            Text(
-                              '${FormatUtils.bytes(_progress!.received)} ${s.t('of')} ${_progress!.total > 0 ? FormatUtils.bytes(_progress!.total) : '—'}',
-                              style: AppTextStyles.number.copyWith(fontSize: 13),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${s.t('speed')} ${FormatUtils.speed(_progress!.bps)} · ${s.t('remaining')} ${FormatUtils.eta(_progress!.eta)}',
-                              style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary),
-                            ),
-                          ],
-                        ),
+                      if (_phase == _Phase.downloading)
+                        _DownloadPanel(progress: _progress, strings: s).animate().fadeIn(duration: 350.ms),
                       if (_phase == _Phase.failed)
                         Text(
                           _error ?? '',
@@ -482,5 +486,106 @@ class _Actions extends StatelessWidget {
           ],
         );
     }
+  }
+}
+
+/// Download phase layout the user asked for: readable status on the left, a
+/// calm monochrome landscape on the right that keeps moving while the
+/// network takes its time, and the progress bar with percent along the
+/// bottom of the panel instead of a thin ring in the middle of nowhere.
+class _DownloadPanel extends StatelessWidget {
+  const _DownloadPanel({required this.progress, required this.strings});
+
+  final DownloadProgress? progress;
+  final dynamic strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final s = strings;
+    final fraction = progress?.fraction ?? 0;
+    final indeterminate = progress == null || progress!.total <= 0;
+    final percent = (fraction * 100).clamp(0, 100).toStringAsFixed(0);
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: p.card,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: p.border),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 620;
+          final status = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                indeterminate ? s.t('downloading') : '$percent%',
+                style: AppTextStyles.number.copyWith(fontSize: 26, color: p.text),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                progress == null
+                    ? '…'
+                    : '${FormatUtils.bytes(progress!.received)} ${s.t('of')} ${progress!.total > 0 ? FormatUtils.bytes(progress!.total) : '—'}',
+                style: AppTextStyles.number.copyWith(fontSize: 13.5),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                progress == null ? '' : '${s.t('speed')} ${FormatUtils.speed(progress!.bps)} · ${s.t('remaining')} ${FormatUtils.eta(progress!.eta)}',
+                style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary),
+              ),
+            ],
+          );
+          final nature = SizedBox(
+            width: wide ? 280 : double.infinity,
+            child: const NaturePanel(height: 150),
+          );
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (wide)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: status),
+                    const SizedBox(width: 18),
+                    nature,
+                  ],
+                )
+              else ...[
+                status,
+                const SizedBox(height: 14),
+                nature,
+              ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(end: fraction),
+                        duration: const Duration(milliseconds: 350),
+                        curve: Curves.easeOutCubic,
+                        builder: (_, value, _) => LinearProgressIndicator(
+                          value: indeterminate ? null : value,
+                          minHeight: 10,
+                          backgroundColor: p.border,
+                          color: p.accent,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(indeterminate ? '…' : '$percent%', style: AppTextStyles.number.copyWith(fontSize: 13)),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }

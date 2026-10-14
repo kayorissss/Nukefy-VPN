@@ -621,7 +621,7 @@ class _SettingsSubtabs extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        color: p.card.withValues(alpha: .82),
+        color: p.card,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: p.border),
       ),
@@ -1076,7 +1076,7 @@ class _MoreCardState extends State<_MoreCard> {
       margin: const EdgeInsets.only(bottom: 14),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: p.card.withValues(alpha: .82),
+        color: p.card,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: p.border),
       ),

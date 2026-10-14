@@ -177,7 +177,7 @@ class _ModeSwitch extends StatelessWidget {
       height: 44,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: p.card.withValues(alpha: p.isDark ? 0.9 : 0.96),
+        color: p.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: p.border),
       ),
@@ -251,7 +251,7 @@ class _AppRow extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
-            color: on ? p.accent.withValues(alpha: 0.10) : p.card.withValues(alpha: p.isDark ? 0.85 : 0.96),
+            color: on ? p.accent.withValues(alpha: 0.10) : p.card,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: on ? p.accent.withValues(alpha: 0.45) : p.border),
           ),

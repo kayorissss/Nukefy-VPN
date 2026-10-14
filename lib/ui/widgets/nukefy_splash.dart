@@ -54,7 +54,12 @@ class _NukefySplashState extends State<NukefySplash> with SingleTickerProviderSt
             ),
             child: ColoredBox(
               color: p.background,
-              child: LayoutBuilder(
+              // A Material ancestor is load-bearing here: without it every
+              // Text on the splash falls back to Flutter's debug style —
+              // the yellow double underline users saw under each line.
+              child: Material(
+                type: MaterialType.transparency,
+                child: LayoutBuilder(
                 builder: (context, constraints) {
                   final narrow = constraints.maxWidth < 720;
                   final brand = _Brand(strings: widget.message, controller: _controller);
@@ -80,6 +85,7 @@ class _NukefySplashState extends State<NukefySplash> with SingleTickerProviderSt
                     ],
                   );
                 },
+                ),
               ),
             ),
           ),
@@ -113,17 +119,22 @@ class _Brand extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const NukefyLogo(size: 64, glow: true),
+              const NukefyLogo(size: 64, glow: false),
               const SizedBox(width: 16),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Strictly monochrome brand block: no accent glow and no
+                  // decoration under the lines — the gold stripes that used
+                  // to sit under every splash line are gone for good.
                   Text('Nukefy Client',
-                      style: AppTextStyles.headline.copyWith(fontSize: 22, letterSpacing: 1.2, color: p.text)),
+                      style: AppTextStyles.headline
+                          .copyWith(fontSize: 22, letterSpacing: 1.2, color: p.text, decoration: TextDecoration.none)),
                   const SizedBox(height: 4),
-                  Text('sing-box · Android и Windows',
-                      style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary, fontSize: 12)),
+                  Text('sing-box · Xray · Android и Windows',
+                      style: AppTextStyles.bodySecondary
+                          .copyWith(color: p.textSecondary, fontSize: 12, decoration: TextDecoration.none)),
                 ],
               ),
             ],

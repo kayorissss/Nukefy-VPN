@@ -27,7 +27,9 @@ class SectionCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       decoration: BoxDecoration(
-        color: p.card.withValues(alpha: .82),
+        // Fully opaque on purpose: at 82% the mascot backdrop bled through
+        // every card and the settings page looked like overlapping text.
+        color: p.card,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: p.border),
       ),

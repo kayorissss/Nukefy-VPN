@@ -48,7 +48,7 @@ class SubscriptionService {
   final Dio _dio;
 
   /// Global switches, mirrored from AppSettings by SettingsProvider.
-  static bool sendHwid = true;
+  static bool sendHwid = false;
   static String clientIdentity = 'nukefy';
 
   /// User-Agent strings panels recognise. Some panels only serve clients

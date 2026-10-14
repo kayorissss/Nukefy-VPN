@@ -35,6 +35,8 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vpn = context.watch<VpnProvider>();
+    final servers = context.watch<ServersProvider>();
+    final hasServers = servers.servers.any((server) => !server.isInformational);
     final stats = context.watch<StatsProvider>();
     final settings = context.watch<SettingsProvider>();
     final p = context.palette;
@@ -134,10 +136,6 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ],
-        if (vpn.errorMessage != null) ...[
-          const SizedBox(height: 14),
-          _ErrorCard(message: _friendlyError(s, vpn.errorMessage!)),
-        ],
         // The honest answer to "вроде подключено, а ничего не работает":
         // after every connect the app asks the tunnel whether data flows and
         // shows the per-site verdict instead of a green light on faith.
@@ -191,6 +189,10 @@ class HomeScreen extends StatelessWidget {
                         const SizedBox(height: 28),
                         const _UpdateBanner(),
                         serverCard,
+                        if (!hasServers) ...[
+                          const SizedBox(height: 16),
+                          const _GuideCard(),
+                        ],
                       ],
                     ),
                   ),
@@ -209,6 +211,10 @@ class HomeScreen extends StatelessWidget {
                           const SizedBox(height: 26),
                           const _UpdateBanner(),
                           serverCard,
+                          if (!hasServers) ...[
+                            const SizedBox(height: 16),
+                            const _GuideCard(),
+                          ],
                         ],
                       ),
                     ),
@@ -219,33 +225,6 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  String _friendlyError(S s, String raw) {
-    if (raw == 'CORE_MISSING') return s.t('coreMissing');
-    if (raw == 'LIBBOX_MISSING') return s.t('libboxMissing');
-    if (raw == 'information-entry') return s.t('informationEntry');
-    if (raw == 'need-server') return s.t('needServer');
-    if (raw == 'XHTTP_UNSUPPORTED') return s.t('xhttpUnsupported');
-    if (raw == 'CORE_PROTOCOL_UNSUPPORTED') return s.t('coreProtocolUnsupported');
-    if (raw == 'CORE_MIERU_UNSUPPORTED') return s.t('coreMieruUnsupported');
-    if (raw == 'CORE_OUTBOUND_MISSING') return s.t('coreOutboundMissing');
-    if (raw == 'CORE_ENDPOINT_MISSING') return s.t('coreEndpointMissing');
-    if (raw == 'NO_TRAFFIC_MODE') return s.t('noTrafficMode');
-    if (raw == 'XRAY_TRANSPORT_REQUIRED') return s.t('xrayTransportRequired');
-    if (raw == 'XRAY_CORE_MISSING') return s.t('xrayNotInstalled');
-    if (raw == 'XRAY_PLATFORM_UNSUPPORTED') return s.t('xrayPlatformUnsupported');
-    if (raw == 'XRAY_UNSUPPORTED_PROTOCOL') return s.t('xrayUnsupportedProtocol');
-    if (raw == 'XRAY_FRONTEND_MISSING') return s.t('xrayFrontendMissing');
-    if (raw == 'XRAY_NO_TRAFFIC_MODE') return s.t('xrayNoTrafficMode');
-    if (raw.startsWith('XRAY_')) return '${s.t('xrayCore')}: $raw';
-    if (raw.startsWith('NO_TRAFFIC:')) return '${s.t('noTraffic')}\n${raw.substring(11)}';
-    if (raw == 'NO_TRAFFIC_TARGETS') return s.t('noTrafficTargets');
-    if (raw == 'TRAFFIC_PROBE_UNAVAILABLE') return s.t('trafficProbeUnavailable');
-    if (raw.contains('Permission denied') && raw.contains('sing-box')) return s.t('libboxMissing');
-    if (raw.contains('legacy inbound fields')) return s.t('coreOutdatedConfig');
-    // Strip ANSI colour codes and the timestamp prefix from core logs.
-    final clean = raw.replaceAll(RegExp(r'\x1B\[[0-9;]*m'), '').replaceAll(RegExp(r'^\S*FATAL\S*\[\d+\]\s*'), '');
-    return clean.length > 260 ? '${clean.substring(0, 260)}…' : clean;
-  }
 }
 
 /// Bottom sheet with every server; tapping one connects right away.
@@ -692,58 +671,6 @@ class _UpdateBannerState extends State<_UpdateBanner> {
   }
 }
 
-class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.message});
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    final s = context.read<SettingsProvider>().strings;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 520),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-        decoration: BoxDecoration(
-          color: p.error.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: p.error.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.error_outline_rounded, size: 18, color: p.error),
-            const SizedBox(width: 10),
-            Expanded(
-              child: SelectableText(
-                message,
-                style: AppTextStyles.bodySecondary.copyWith(color: p.error, fontSize: 12.5),
-              ),
-            ),
-            const SizedBox(width: 6),
-            IconButton(
-              tooltip: s.t('zCopyReport'),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 30, height: 30),
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: message));
-                if (context.mounted) showNukefySnack(context, s.t('copied'));
-              },
-              icon: Icon(Icons.copy_rounded, size: 15, color: p.error),
-            ),
-            IconButton(
-              tooltip: s.t('diagnostics'),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 30, height: 30),
-              onPressed: () => DiagnosticsScreen.open(context),
-              icon: Icon(Icons.health_and_safety_outlined, size: 15, color: p.error),
-            ),
-          ],
-        ),
-      ),
-    ).animate().fadeIn(duration: 250.ms).slideY(begin: 0.1);
-  }
-}
 
 class _ServerCard extends StatelessWidget {
   const _ServerCard({
@@ -767,7 +694,7 @@ class _ServerCard extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 560),
       child: Material(
-        color: p.card.withValues(alpha: p.isDark ? 0.92 : 1),
+        color: p.card,
         borderRadius: BorderRadius.circular(22),
         child: InkWell(
           borderRadius: BorderRadius.circular(22),
@@ -823,11 +750,64 @@ class _RoundIcon extends StatelessWidget {
         width: 42,
         height: 42,
         decoration: BoxDecoration(
-          color: p.card.withValues(alpha: p.isDark ? 0.9 : 0.96),
+          color: p.card,
           shape: BoxShape.circle,
           border: Border.all(color: p.border),
         ),
         child: Icon(icon, size: 20, color: p.textSecondary),
+      ),
+    );
+  }
+}
+
+/// Three-step starter shown only while there is nothing to connect to, so a
+/// first launch answers "and what do I do here?" instead of showing an
+/// empty server card. It disappears on its own once a server exists.
+class _GuideCard extends StatelessWidget {
+  const _GuideCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.read<SettingsProvider>().strings;
+    final p = context.palette;
+    Widget step(String number, String text) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: p.accent.withValues(alpha: .14)),
+                child: Text(number, style: AppTextStyles.number.copyWith(fontSize: 12, color: p.accent)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(text, style: AppTextStyles.bodyRegular.copyWith(fontSize: 13.5, height: 1.35))),
+            ],
+          ),
+        );
+    return SectionCard(
+      title: s.t('guideTitle'),
+      icon: Icons.explore_rounded,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 4),
+          step('1', s.t('guideStep1')),
+          step('2', s.t('guideStep2')),
+          step('3', s.t('guideStep3')),
+          const SizedBox(height: 2),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: FilledButton.icon(
+              onPressed: () => context.read<NavProvider>().go(NavDestination.servers),
+              icon: const Icon(Icons.add_link_rounded, size: 18),
+              label: Text(s.t('guideButton')),
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
       ),
     );
   }

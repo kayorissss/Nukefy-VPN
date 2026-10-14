@@ -204,7 +204,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                 Container(
                   padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
                   decoration: BoxDecoration(
-                    color: p.card.withValues(alpha: p.isDark ? .78 : .96),
+                    color: p.card,
                     borderRadius: BorderRadius.circular(22),
                     border: Border.all(color: phaseColor.withValues(alpha: .35)),
                     boxShadow: [
@@ -238,7 +238,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                                     style: AppTextStyles.metric.copyWith(fontSize: 46, color: p.text, height: 1),
                                   ),
                                   const SizedBox(height: 2),
-                                  Text('Mbit/s', style: AppTextStyles.metricCaption.copyWith(color: p.textSecondary)),
+                                  Text(FormatUtils.mbpsUnit, style: AppTextStyles.metricCaption.copyWith(color: p.textSecondary)),
                                   const SizedBox(height: 8),
                                   AnimatedSwitcher(
                                     duration: const Duration(milliseconds: 200),
@@ -265,13 +265,13 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Row(children: [
-                            _Metric(icon: Icons.speed_rounded, label: s.t('ping'), value: _ping == null ? '—' : '$_ping', unit: 'ms', color: p.textSecondary),
-                            _Metric(icon: Icons.timeline_rounded, label: s.t('jitter'), value: _jitter == null ? '—' : '$_jitter', unit: 'ms', color: p.textSecondary),
+                            _Metric(icon: Icons.speed_rounded, label: s.t('ping'), value: _ping == null ? '—' : '$_ping', unit: FormatUtils.russian ? 'мс' : 'ms', color: p.textSecondary),
+                            _Metric(icon: Icons.timeline_rounded, label: s.t('jitter'), value: _jitter == null ? '—' : '$_jitter', unit: FormatUtils.russian ? 'мс' : 'ms', color: p.textSecondary),
                           ]),
                           const SizedBox(height: 10),
                           Row(children: [
-                            _Metric(icon: Icons.download_rounded, label: s.t('download'), value: _down == null ? '—' : SpeedTestService.mbps(_down!).toStringAsFixed(1), unit: 'Mbit/s', color: p.success),
-                            _Metric(icon: Icons.upload_rounded, label: s.t('upload'), value: _up == null ? '—' : SpeedTestService.mbps(_up!).toStringAsFixed(1), unit: 'Mbit/s', color: p.accent),
+                            _Metric(icon: Icons.download_rounded, label: s.t('download'), value: _down == null ? '—' : SpeedTestService.mbps(_down!).toStringAsFixed(1), unit: FormatUtils.mbpsUnit, color: p.success),
+                            _Metric(icon: Icons.upload_rounded, label: s.t('upload'), value: _up == null ? '—' : SpeedTestService.mbps(_up!).toStringAsFixed(1), unit: FormatUtils.mbpsUnit, color: p.accent),
                           ]),
                         ],
                       );
@@ -331,7 +331,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                       height: 54,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
-                        color: p.card.withValues(alpha: .7),
+                        color: p.card,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: p.border),
                       ),
@@ -367,7 +367,7 @@ class _SpeedTestScreenState extends State<SpeedTestScreen> with SingleTickerProv
                 // number of past runs.
                 Container(
                   decoration: BoxDecoration(
-                    color: p.card.withValues(alpha: .55),
+                    color: p.card,
                     borderRadius: BorderRadius.circular(22),
                     border: Border.all(color: p.border),
                   ),
@@ -557,7 +557,7 @@ class _HistoryRow extends StatelessWidget {
                 Text(when, style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w600, fontSize: 12.5)),
                 const SizedBox(height: 2),
                 Text(
-                  [if (item.pingMs > 0) '${item.pingMs} ms', if ((item.server ?? '').isNotEmpty) item.server!].join(' · '),
+                  [if (item.pingMs > 0) '${item.pingMs} ${FormatUtils.russian ? 'мс' : 'ms'}', if ((item.server ?? '').isNotEmpty) item.server!].join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.bodySecondary.copyWith(fontSize: 11, color: p.textSecondary),
@@ -582,7 +582,7 @@ class _HistoryRow extends StatelessWidget {
             ),
           Text('$download', style: AppTextStyles.metric.copyWith(fontSize: 15, color: p.text)),
           const SizedBox(width: 3),
-          Text('Mbit/s', style: AppTextStyles.metricCaption.copyWith(fontSize: 9, color: p.textDisabled)),
+          Text(FormatUtils.mbpsUnit, style: AppTextStyles.metricCaption.copyWith(fontSize: 9, color: p.textDisabled)),
         ],
       ),
     );

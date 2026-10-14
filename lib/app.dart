@@ -7,6 +7,7 @@ import 'core/providers/settings_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'ui/screens/main_shell.dart';
 import 'ui/screens/welcome_screen.dart';
+import 'ui/widgets/notification_overlay.dart';
 import 'ui/widgets/nukefy_feedback.dart';
 import 'ui/widgets/nukefy_splash.dart';
 
@@ -36,7 +37,20 @@ class NukefyApp extends StatelessWidget {
       themeMode: settings.themeMode,
       // PrintScreen has to be handled inside the app: an elevated window is
       // invisible to the shell's own screenshot keys.
-      builder: (context, child) => PrintScreenCatcher(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) {
+        // Phones with giant accessibility fonts used to stack every label
+        // onto its neighbour. Clamp the scale to a range the layouts were
+        // designed for; the app stays readable without breaking apart.
+        final media = MediaQuery.of(context);
+        final clamped = media.copyWith(
+          textScaler: media.textScaler.clamp(minScaleFactor: 0.85, maxScaleFactor: 1.2),
+        );
+        return PrintScreenCatcher(
+          child: NotificationOverlay(
+            child: MediaQuery(data: clamped, child: child ?? const SizedBox.shrink()),
+          ),
+        );
+      },
       home: NukefySplash(child: welcome ? const WelcomeScreen() : const MainShell()),
       ),
     );

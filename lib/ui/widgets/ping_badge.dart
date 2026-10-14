@@ -58,7 +58,7 @@ class PingBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        '$pingMs ms',
+        '$pingMs ${Localizations.localeOf(context).languageCode == 'ru' ? 'мс' : 'ms'}',
         style: AppTextStyles.number.copyWith(color: color, fontSize: compact ? 11 : 12),
       ),
     );

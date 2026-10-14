@@ -1,4 +1,4 @@
-﻿// Nukefy Client — собственный установщик.
+// Nukefy Client — собственный установщик.
 //
 // Окно полностью своё: тёмная карточка в стиле приложения, выбор языка,
 // галочки, прогресс и финальная страница. Никакого системного мастера Inno:
@@ -141,6 +141,8 @@ namespace NukefySetup
         Page _page = Page.Options;
         double _progress;
         string _status = "";
+        string _detail = "";
+        volatile bool _cancel;
         string _error = "";
         Point _drag;
         int _hover = -1;
@@ -313,6 +315,11 @@ namespace NukefySetup
                     g.FillPath(fill, path);
             }
             DrawText(g, (int)(_progress * 100) + "%", new Rectangle(40, blockTop + 66, W - 80, 22), 10f, Fg, FontStyle.Bold, 0f);
+            // The file being written right now, so a long unpack never looks
+            // frozen at one stage percentage again.
+            if (_detail.Length > 0)
+                DrawText(g, _detail, new Rectangle(40, blockTop + 92, W - 80, 18), 8.5f, Color.FromArgb(0x62, 0x62, 0x62), FontStyle.Regular, 0f);
+            DrawButton(g, SecondaryButton, L.T(7), false);
         }
 
         void PaintDone(Graphics g)
@@ -509,6 +516,19 @@ namespace NukefySetup
                 if (PrimaryButton.Contains(point)) { Start(); return; }
                 if (SecondaryButton.Contains(point)) { Close(); return; }
             }
+            else if (_page == Page.Progress)
+            {
+                // Cancel (or the cross) only arms the flag: the worker stops
+                // at its next checkpoint and returns to the options page
+                // instead of dying mid-copy.
+                if (SecondaryButton.Contains(point) || CloseButton.Contains(point))
+                {
+                    _cancel = true;
+                    _status = L.T(7) + "…";
+                    Invalidate();
+                    return;
+                }
+            }
             else if (_page == Page.Done)
             {
                 if (PrimaryButton.Contains(point)) { Launch(); Close(); return; }
@@ -546,11 +566,13 @@ namespace NukefySetup
             catch { }
         }
 
-        void Report(double progress, string status)
+        void Report(double progress, string status) { Report(progress, status, ""); }
+
+        void Report(double progress, string status, string detail)
         {
             try
             {
-                BeginInvoke((Action)(() => { _progress = progress; _status = status; Invalidate(); }));
+                BeginInvoke((Action)(() => { _progress = progress; _status = status; _detail = detail; Invalidate(); }));
             }
             catch { }
         }
@@ -561,8 +583,11 @@ namespace NukefySetup
             {
                 Report(0.05, L.T(17));
                 StopOwnStack();
+                RemoveLegacyInstall();
+                if (_cancel) throw new OperationCanceledException();
                 Report(0.15, L.T(14));
                 ExtractPayload();
+                if (_cancel) throw new OperationCanceledException();
                 Report(0.55, L.T(15));
                 CreateShortcuts();
                 Report(0.75, L.T(16));
@@ -581,12 +606,85 @@ namespace NukefySetup
                     BeginInvoke((Action)(() => { Launch(); Close(); }));
                 }
             }
+            catch (OperationCanceledException)
+            {
+                // Back to the options page with nothing half-installed: the
+                // payload only ever lands in the staging folder until the
+                // atomic swap at the end of ExtractPayload.
+                try
+                {
+                    var staging = AppDir + ".new";
+                    if (Directory.Exists(staging)) Directory.Delete(staging, true);
+                }
+                catch { }
+                try
+                {
+                    BeginInvoke((Action)(() =>
+                    {
+                        _page = Page.Options;
+                        _cancel = false;
+                        _progress = 0;
+                        _status = "";
+                        _detail = "";
+                        Invalidate();
+                    }));
+                }
+                catch { }
+            }
             catch (Exception error)
             {
                 _error = error.ToString();
                 try
                 {
                     BeginInvoke((Action)(() => { _page = Page.Failed; Invalidate(); }));
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>Removes the pre-rename "Nukefy VPN" program so an upgrade
+        /// never leaves two Nukefy entries installed side by side. Only the
+        /// old program files and its uninstall entry go; user data in
+        /// %APPDATA% is migrated by the app itself on first launch.</summary>
+        static void RemoveLegacyInstall()
+        {
+            try { KillByName("Nukefy VPN"); } catch { }
+            var legacyDirs = new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Nukefy VPN"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Nukefy VPN"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Nukefy VPN"),
+            };
+            foreach (var dir in legacyDirs)
+            {
+                try
+                {
+                    if (Directory.Exists(dir) && !string.Equals(dir, AppDir, StringComparison.OrdinalIgnoreCase))
+                        Directory.Delete(dir, true);
+                }
+                catch { }
+            }
+            foreach (var root in new[] { Registry.CurrentUser, Registry.LocalMachine })
+            {
+                try
+                {
+                    using (var uninstall = root.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", true))
+                    {
+                        if (uninstall == null) continue;
+                        foreach (var name in uninstall.GetSubKeyNames())
+                        {
+                            try
+                            {
+                                using (var entry = uninstall.OpenSubKey(name))
+                                {
+                                    var display = entry == null ? null : entry.GetValue("DisplayName") as string;
+                                    if (string.Equals(display, "Nukefy VPN", StringComparison.OrdinalIgnoreCase))
+                                        uninstall.DeleteSubKeyTree(name);
+                                }
+                            }
+                            catch { }
+                        }
+                    }
                 }
                 catch { }
             }
@@ -603,7 +701,37 @@ namespace NukefySetup
                 Directory.CreateDirectory(Path.GetDirectoryName(AppDir));
                 using (var zip = new ZipArchive(stream, ZipArchiveMode.Read))
                 {
-                    zip.ExtractToDirectory(incoming);
+                    // Entry-by-entry extraction: the progress page shows the
+                    // file being written instead of sitting at one stage for
+                    // the whole archive, and Cancel gets regular checkpoints.
+                    var entries = zip.Entries;
+                    long totalBytes = 0;
+                    foreach (var e in entries) totalBytes += e.Length;
+                    long doneBytes = 0;
+                    int fileCount = 0;
+                    var incomingFull = Path.GetFullPath(incoming);
+                    foreach (var entry in entries)
+                    {
+                        if (_cancel) throw new OperationCanceledException();
+                        var target = Path.GetFullPath(Path.Combine(incomingFull, entry.FullName));
+                        // Zip-slip guard: a crafted entry must never write
+                        // outside the staging folder.
+                        if (!target.StartsWith(incomingFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(target, incomingFull, StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidDataException("bad payload entry: " + entry.FullName);
+                        if (string.IsNullOrEmpty(entry.Name))
+                        {
+                            Directory.CreateDirectory(target);
+                            continue;
+                        }
+                        Directory.CreateDirectory(Path.GetDirectoryName(target));
+                        using (var src = entry.Open())
+                        using (var dst = File.Create(target)) src.CopyTo(dst);
+                        doneBytes += entry.Length;
+                        fileCount++;
+                        if (fileCount % 4 == 0 || entry.Length > (1 << 20))
+                            Report(0.15 + 0.40 * (totalBytes > 0 ? (double)doneBytes / totalBytes : 0), L.T(14), entry.FullName);
+                    }
                 }
                 // User-editable zapret lists must survive an upgrade.
                 var oldLists = Path.Combine(AppDir, "zapret", "lists");

@@ -275,7 +275,11 @@ class _ZapretScreenState extends State<ZapretScreen> {
       }
       if (!automatic && mounted && update == null) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.t('zUpToDate'))));
     } catch (e) {
-      if (mounted) setState(() => _error = NetworkDiagnostics.textOrRaw(e, s.t));
+      // An automatic background check must never greet the user with
+      // "the remote service is not responding" just because GitHub is
+      // unreachable — that banner made the whole Zapret page look broken.
+      // Only a manual check reports the failure.
+      if (mounted && !automatic) setState(() => _error = NetworkDiagnostics.textOrRaw(e, s.t));
     }
     finally { if (mounted) setState(() => _checking = false); }
   }

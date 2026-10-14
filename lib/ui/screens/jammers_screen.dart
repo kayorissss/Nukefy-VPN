@@ -10,6 +10,7 @@ import '../../core/providers/settings_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/services/game_icon_service.dart';
+import '../../core/utils/format_utils.dart';
 import '../../core/utils/ping_utils.dart';
 import '../../l10n/strings.dart';
 import '../widgets/section_card.dart';
@@ -468,7 +469,7 @@ class _HostRow extends StatelessWidget {
             ),
           ),
           if (ok)
-            Text('$ms ms', style: AppTextStyles.number.copyWith(color: p.success, fontSize: 12))
+            Text('$ms ${FormatUtils.russian ? 'мс' : 'ms'}', style: AppTextStyles.number.copyWith(color: p.success, fontSize: 12))
           else
             Icon(Icons.close_rounded, size: 18, color: AppColors.error),
         ],

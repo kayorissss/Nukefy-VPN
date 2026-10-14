@@ -93,7 +93,7 @@ class _PowerCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: p.card.withValues(alpha: .82),
+        color: p.card,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: service.running ? brand.withValues(alpha: .55) : p.border),
         boxShadow: service.running ? [BoxShadow(color: brand.withValues(alpha: .25), blurRadius: 34, spreadRadius: 2)] : null,

@@ -12,6 +12,7 @@ import '../../core/models/vpn_status.dart';
 import '../../core/providers/nav_provider.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../core/providers/vpn_provider.dart';
+import '../../core/services/storage_service.dart';
 import '../../core/services/tg_ws_proxy_service.dart';
 import '../../core/services/zapret_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -335,7 +336,7 @@ class _BottomBar extends StatelessWidget {
       child: Container(
         height: 62,
         decoration: BoxDecoration(
-          color: p.card.withValues(alpha: p.isDark ? 0.92 : 0.96),
+          color: p.card,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: p.border),
           boxShadow: [
@@ -651,6 +652,11 @@ class _SideRail extends StatefulWidget {
 class _SideRailState extends State<_SideRail> {
   static final Map<String, bool> _open = {};
 
+  /// User-dragged rail width (expanded mode). Dragging the right edge is
+  /// faster than hunting for the collapse button, and the choice persists.
+  double _customWidth = (double.tryParse(StorageService.instance.read('railWidth') ?? '') ?? 272).clamp(220, 380).toDouble();
+  bool _draggingRail = false;
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
@@ -734,14 +740,14 @@ class _SideRailState extends State<_SideRail> {
       );
     }
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
+    final rail = AnimatedContainer(
+      duration: _draggingRail ? Duration.zero : const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
-      width: collapsed ? 82 : 272,
+      width: collapsed ? 82 : _customWidth,
       margin: const EdgeInsets.fromLTRB(12, 0, 0, 12),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       decoration: BoxDecoration(
-        color: p.card.withValues(alpha: .82),
+        color: p.card,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: p.border),
       ),
@@ -919,6 +925,34 @@ class _SideRailState extends State<_SideRail> {
         ],
       ),
     );
+    if (collapsed) return rail;
+    // Drag handle on the right edge: grab and pull to resize the menu
+    // instead of only toggling it with the collapse button.
+    return Stack(
+      children: [
+        rail,
+        Positioned(
+          right: 0,
+          top: 0,
+          bottom: 12,
+          width: 12,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.resizeLeftRight,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragStart: (_) => setState(() => _draggingRail = true),
+              onHorizontalDragUpdate: (details) {
+                setState(() => _customWidth = (_customWidth + details.delta.dx).clamp(220, 380).toDouble());
+              },
+              onHorizontalDragEnd: (_) {
+                setState(() => _draggingRail = false);
+                StorageService.instance.write('railWidth', _customWidth.round().toString());
+              },
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -990,8 +1024,12 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> {
               ),
             ),
           ),
-          // Only Close: the desktop shell lives maximized, so a restore /
-          // minimize control did nothing except snap the window back.
+          // Minimize + Close. The shell still lives maximized (the guard in
+          // main.dart re-maximizes on restore and explicitly leaves a
+          // minimized window alone), but the user asked for the minimize
+          // dash back next to the cross — minimizing to the taskbar is a
+          // real, working action, not a restore that snaps back.
+          _WindowButton(icon: Icons.remove_rounded, onTap: windowManager.minimize),
           _WindowButton(icon: Icons.close_rounded, danger: true, onTap: windowManager.close),
         ],
       ),
@@ -1053,8 +1091,11 @@ class _MascotBackdrop extends StatelessWidget {
         alignment: Alignment.bottomRight,
         child: FractionallySizedBox(
           heightFactor: 0.96,
-          child: Opacity(
-            opacity: dark ? 0.14 : 0.92,
+            child: Opacity(
+            // Kept visible as brand art, but never strong enough to fight the
+            // text: at 0.92 in the light theme the mascot showed through the
+            // (then translucent) cards and read as overlapping ghost text.
+            opacity: dark ? 0.12 : 0.25,
             child: ShaderMask(
               blendMode: BlendMode.dstIn,
               shaderCallback: (bounds) => LinearGradient(

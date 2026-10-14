@@ -8,6 +8,7 @@ import '../models/vpn_status.dart';
 import '../services/storage_service.dart';
 import '../services/subscription_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/format_utils.dart';
 import '../../l10n/strings.dart';
 
 class SettingsProvider extends ChangeNotifier {
@@ -25,6 +26,7 @@ class SettingsProvider extends ChangeNotifier {
       LanguagePreference.system =>
         PlatformDispatcher.instance.locale.languageCode == 'ru' ? 'ru' : 'en',
     };
+    FormatUtils.russian = code == 'ru';
     return S(code);
   }
 

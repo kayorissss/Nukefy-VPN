@@ -153,7 +153,7 @@ Future<void> _main() async {
       size: Size(1280, 820),
       minimumSize: Size(980, 680),
       center: true,
-      title: 'Nukefy VPN',
+      title: 'Nukefy Client',
       titleBarStyle: TitleBarStyle.hidden,
       backgroundColor: Color(0xFF0D0D0D),
     );
