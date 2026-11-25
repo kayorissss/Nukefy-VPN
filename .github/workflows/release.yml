@@ -212,7 +212,7 @@ jobs:
           Write-Host 'bundled cores:'
           Get-ChildItem "$rel/core", "$rel/xray" | ForEach-Object { "{0} {1:N0} bytes" -f $_.Name, $_.Length }
 
-      - name: Build branded installer
+      - name: Build Windows installer (Inno Setup)
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -220,41 +220,39 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $ver = "${{ env.RELEASE_TAG }}".TrimStart('v')
           if ($ver -notmatch '^\d+\.\d+\.\d+$') { $ver = '0.0.0' }
-          $log = @()
-          try {
-            Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath payload.zip -CompressionLevel Optimal -ErrorAction Stop
-            $lines = @(
-              'using System.Reflection;',
-              '[assembly: AssemblyTitle("Nukefy Client")]',
-              '[assembly: AssemblyProduct("Nukefy Client")]',
-              '[assembly: AssemblyCompany("@kayorisan")]',
-              "[assembly: AssemblyVersion(`"$ver.0`")]",
-              "[assembly: AssemblyFileVersion(`"$ver.0`")]"
-            )
-            Set-Content -Path AssemblyInfo.cs -Value $lines
-            $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-            $setup = "NukefyClient-$ver-x64.exe"
-            Copy-Item windows\runner\resources\app_icon.ico installer_icon.ico -Force
-            $out = & $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:$setup `
-              /win32icon:installer_icon.ico `
-              /win32manifest:windows\installer\setup.manifest `
-              /resource:payload.zip,payload.zip `
-              /resource:installer_icon.ico,app_icon.ico `
-              /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll `
-              /reference:System.Windows.Forms.dll /reference:System.Drawing.dll `
-              /reference:System.Core.dll `
-              windows\installer\NukefyInstaller.cs AssemblyInfo.cs 2>&1
-            $log += $out
-            if ($LASTEXITCODE -ne 0) { throw "csc exit $LASTEXITCODE" }
-            if (-not (Test-Path $setup)) { throw "$setup not produced" }
-            Get-Item $setup | Format-List Name,Length
-          } catch {
-            $log += "ERROR: $_"
-            $fence = '```'
-            $body = "Installer build failed:`n`n$fence`n" + ($log -join "`n") + "`n$fence"
-            gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" | Out-Null
-            throw
+          # Inno Setup is preinstalled on windows-latest, but a pinned install
+          # keeps the build reproducible if the image changes.
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           }
+          if (-not (Test-Path $iscc)) { throw 'ISCC.exe not found' }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          & $iscc "/DAppVersion=$ver" "/DSourceDir=$PWD\build\windows\x64\runner\Release" "windows\installer\Nukefy.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ISCC exit $LASTEXITCODE" }
+          Get-ChildItem dist | Format-Table Name, Length
+          if (-not (Test-Path "dist\NukefyClient-$ver-x64.exe")) { throw 'installer not produced' }
+      - name: Verify installer uninstall entry
+        shell: pwsh
+        run: |
+          # A release must never ship a setup that forgets its uninstaller: the
+          # old build pointed UninstallString back at the app, so "Remove" in
+          # Windows Settings only opened the client.
+          $ver = "${{ env.RELEASE_TAG }}".TrimStart('v')
+          $setup = "dist\NukefyClient-$ver-x64.exe"
+          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="$env:RUNNER_TEMP\install.log" /DIR="$env:RUNNER_TEMP\NukefyTest"
+          Start-Sleep -Seconds 3
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1'
+          if (-not (Test-Path $key)) { throw 'uninstall registry entry was not created' }
+          $entry = Get-ItemProperty $key
+          Write-Host "UninstallString: $($entry.UninstallString)"
+          if ($entry.UninstallString -match 'NukefyClient\.exe') { throw 'UninstallString points at the app, not unins000.exe' }
+          if (-not (Test-Path "$env:RUNNER_TEMP\NukefyTest\unins000.exe")) { throw 'unins000.exe missing' }
+          & "$env:RUNNER_TEMP\NukefyTest\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          Start-Sleep -Seconds 3
+          if (Test-Path $key) { throw 'uninstall did not remove the registry entry' }
+          Write-Host 'installer and uninstaller verified'
       - name: Sign Windows files when a certificate is configured
         shell: pwsh
         env:
@@ -268,7 +266,9 @@ jobs:
           }
           $pfx = Join-Path $env:RUNNER_TEMP 'nukefy-signing.pfx'
           [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
-          $files = Get-ChildItem 'NukefyClient-*.exe' | ForEach-Object FullName
+          # The installer and every executable that ends up on disk, so a
+          # signed release also carries a signed core folder.
+          $files = Get-ChildItem 'dist\NukefyClient-*.exe' | ForEach-Object FullName
           $files += Get-ChildItem 'build/windows/x64/runner/Release' -Recurse -Filter '*.exe' | ForEach-Object FullName
           $signtool = (Get-Command signtool.exe -ErrorAction Stop).Source
           foreach ($file in ($files | Select-Object -Unique)) {
@@ -280,7 +280,7 @@ jobs:
         with:
           name: NukefyClient-windows-x64
           path: |
-            NukefyClient-*-x64.exe
+            dist/NukefyClient-*-x64.exe
           if-no-files-found: error
 
   publish:

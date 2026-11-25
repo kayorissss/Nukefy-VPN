@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -31,12 +32,16 @@ class AddonRelease {
     required this.assetName,
     required this.assetUrl,
     required this.size,
+    this.digest,
   });
 
   final String version;
   final String assetName;
   final String assetUrl;
   final int size;
+
+  /// `sha256:<hex>` from the release API, when the asset has one.
+  final String? digest;
 }
 
 class InstalledAddon {
@@ -187,11 +192,13 @@ class AddonsService extends ChangeNotifier {
       final tag = '${data['tag_name'] ?? ''}';
       final url = '${asset['browser_download_url'] ?? ''}';
       if (tag.isEmpty || url.isEmpty) return null;
+      final rawDigest = '${asset['digest'] ?? ''}';
       return AddonRelease(
         version: tag.startsWith('v') ? tag.substring(1) : tag,
         assetName: '${asset['name'] ?? ''}',
         assetUrl: url,
         size: (asset['size'] as num?)?.toInt() ?? 0,
+        digest: RegExp(r'^sha256:[a-f0-9]{64}$').hasMatch(rawDigest) ? rawDigest.substring(7) : null,
       );
     } catch (_) {
       return null;
@@ -240,6 +247,19 @@ class AddonsService extends ChangeNotifier {
         }
       } finally {
         await sink.close();
+      }
+      // An add-on is a program the user can launch from here, so a downloaded
+      // file is checked against the digest GitHub published for the asset
+      // before it is kept. Components shipped elsewhere in the app already do
+      // this; add-ons silently did not.
+      if (release.digest != null) {
+        final actual = await sha256.bind(file.openRead()).first;
+        if (actual.toString() != release.digest) {
+          try {
+            await file.delete();
+          } catch (_) {}
+          throw StateError('addon-integrity-failed');
+        }
       }
       // Drop older versions of the same add-on: only one copy stays on disk.
       final parent = dir.parent;

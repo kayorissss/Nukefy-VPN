@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
@@ -26,6 +27,7 @@ class UpdateInfo {
     this.assetName,
     this.assetUrl,
     this.assetSize,
+    this.assetDigest,
   });
 
   final String version;
@@ -34,6 +36,9 @@ class UpdateInfo {
   final String? assetName;
   final String? assetUrl;
   final int? assetSize;
+
+  /// `sha256:<hex>` published by GitHub for this asset, when present.
+  final String? assetDigest;
 
   bool get hasAsset => assetUrl != null && assetUrl!.isNotEmpty;
 }
@@ -86,6 +91,7 @@ class UpdateService {
       assetName: asset?['name'] as String?,
       assetUrl: asset?['browser_download_url'] as String?,
       assetSize: (asset?['size'] as num?)?.toInt(),
+      assetDigest: _normalizedDigest(asset?['digest']),
     );
   }
 
@@ -120,6 +126,31 @@ class UpdateService {
     return maps.isEmpty ? null : maps.first;
   }
 
+  /// GitHub returns `sha256:<hex>` for new release assets. Anything else is
+  /// ignored: a digest we cannot parse must not be treated as verified.
+  static String? _normalizedDigest(Object? raw) {
+    final value = '${raw ?? ''}';
+    if (!RegExp(r'^sha256:[a-f0-9]{64}$').hasMatch(value)) return null;
+    return value.substring(7);
+  }
+
+  /// Verifies a downloaded file against the release digest.
+  ///
+  /// The Windows updater runs the downloaded setup with administrator rights,
+  /// so an unverified file was the weakest link in an otherwise careful
+  /// release pipeline (Android checks the APK signature, every optional
+  /// component checks its SHA-256). Releases published before GitHub exposed
+  /// asset digests have none, and those are accepted as before.
+  Future<void> _verifyIntegrity(File part, String? digest) async {
+    if (digest == null) return;
+    final actual = await sha256.bind(part.openRead()).first;
+    if (actual.toString() == digest) return;
+    try {
+      await part.delete();
+    } catch (_) {}
+    throw const UpdateDownloadException('updateIntegrityFailed');
+  }
+
   Future<File> download(
     UpdateInfo info, {
     void Function(DownloadProgress progress)? onProgress,
@@ -139,10 +170,15 @@ class UpdateService {
     final expected = info.assetSize;
     final started = DateTime.now();
 
-    var received = part.existsSync() ? await part.length() : 0;
-    if (expected != null && received == expected) {
+    Future<File> finalize() async {
+      await _verifyIntegrity(part, info.assetDigest);
       if (file.existsSync()) await file.delete();
       return part.rename(file.path);
+    }
+
+    var received = part.existsSync() ? await part.length() : 0;
+    if (expected != null && received == expected) {
+      return finalize();
     }
     if (expected != null && received > expected) {
       await part.delete();
@@ -195,14 +231,12 @@ class UpdateService {
         if (expected != null && received > expected) {
           throw const UpdateDownloadException('updateDownloadFailed');
         }
-        if (file.existsSync()) await file.delete();
-        return await part.rename(file.path);
+        return await finalize();
       } catch (error) {
         lastError = error;
         received = part.existsSync() ? await part.length() : 0;
         if (expected != null && received == expected) {
-          if (file.existsSync()) await file.delete();
-          return await part.rename(file.path);
+          return await finalize();
         }
         if (attempt < 4) {
           await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));

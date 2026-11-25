@@ -1,10 +1,20 @@
-# Fast syntax check for the C# installer/launcher. A full release build takes
-# minutes before it ever reaches csc, so a typo there used to cost a whole
-# release cycle.
+# Fast syntax check for the Windows installer and the portable launcher.
+#
+# The setup is an Inno Setup script now: a typo there used to cost a whole
+# release cycle because the first place it surfaced was the release job, after
+# a full Flutter build. Here the script is compiled against a dummy payload in
+# under a minute, and the resulting installer is actually run silently and
+# uninstalled again — the one regression that matters (an install that cannot
+# be removed) is caught before a tag is ever cut.
 name: Installer check
 on:
   push:
-    branches: ['arena/**']
+    branches: ['arena/**', 'main']
+    paths:
+      - 'windows/installer/**'
+      - 'windows/portable/**'
+      - '.github/workflows/installer-check.yml'
+  pull_request:
     paths:
       - 'windows/installer/**'
       - 'windows/portable/**'
@@ -12,59 +22,50 @@ on:
   workflow_dispatch:
 
 jobs:
-  csc:
-    name: Compile setup and launcher
+  inno:
+    name: Compile and smoke-test the installer
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Build a dummy payload
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dummy | Out-Null
-          Set-Content -Path dummy/readme.txt -Value 'payload placeholder'
-          Compress-Archive -Path dummy/* -DestinationPath payload.zip -Force
-      - name: Compile both executables
+          $payload = 'build/windows/x64/runner/Release'
+          New-Item -ItemType Directory -Force -Path $payload | Out-Null
+          Set-Content -Path "$payload/NukefyClient.exe" -Value 'placeholder'
+          Set-Content -Path "$payload/flutter_windows.dll" -Value 'placeholder'
+
+      - name: Compile Nukefy.iss
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $ErrorActionPreference = 'Continue'
-          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-          $lines = @(
-            'using System.Reflection;',
-            '[assembly: AssemblyTitle("Nukefy Client")]',
-            '[assembly: AssemblyProduct("Nukefy Client")]',
-            '[assembly: AssemblyCompany("@kayorisan")]',
-            '[assembly: AssemblyVersion("1.0.0.0")]',
-            '[assembly: AssemblyFileVersion("1.0.0.0")]'
-          )
-          Set-Content -Path AssemblyInfo.cs -Value $lines
-          $common = @('/nologo','/target:winexe','/platform:anycpu','/optimize+','/resource:payload.zip,payload.zip',
-                      '/reference:System.IO.Compression.dll','/reference:System.IO.Compression.FileSystem.dll',
-                      '/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Core.dll')
-          $setup = & $csc @common /out:setup-test.exe /win32manifest:windows/installer/setup.manifest windows/installer/NukefyInstaller.cs AssemblyInfo.cs 2>&1
-          $setupCode = $LASTEXITCODE
-          $portable = & $csc @common /out:portable-test.exe /win32manifest:windows/portable/launcher.manifest windows/portable/Launcher.cs AssemblyInfo.cs 2>&1
-          $portableCode = $LASTEXITCODE
-          $all = @()
-          $all += '=== setup ==='
-          $all += $setup
-          $all += '=== portable ==='
-          $all += $portable
-          $all | Set-Content -Path csc-output.txt
-          $all | ForEach-Object { Write-Host $_ }
-          if ($setupCode -ne 0 -or $portableCode -ne 0) {
-            $fence = '```'
-            $body = "installer-check failed (setup $setupCode, portable $portableCode):`n`n$fence`n" +
-                    ((($setup + $portable) | Select-Object -Last 40) -join "`n") + "`n$fence"
-            gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$body" | Out-Null
-            throw "csc failed: setup=$setupCode portable=$portableCode"
+          $ErrorActionPreference = 'Stop'
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           }
-          Write-Host 'both compiled'
-      - name: Upload compiler output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: csc-output
-          path: csc-output.txt
-          if-no-files-found: ignore
+          & $iscc "/DAppVersion=0.0.0" "/DSourceDir=$PWD\build\windows\x64\runner\Release" "windows\installer\Nukefy.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ISCC exit $LASTEXITCODE" }
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Install and remove it again
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = "dist\NukefyClient-0.0.0-x64.exe"
+          if (-not (Test-Path $setup)) { throw 'installer not produced' }
+          $target = Join-Path $env:RUNNER_TEMP 'NukefyCheck'
+          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$target"
+          Start-Sleep -Seconds 3
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1'
+          if (-not (Test-Path $key)) { throw 'uninstall entry missing' }
+          $entry = Get-ItemProperty $key
+          Write-Host "UninstallString: $($entry.UninstallString)"
+          if ($entry.UninstallString -match 'NukefyClient\.exe') { throw 'UninstallString points at the app' }
+          if (-not (Test-Path (Join-Path $target 'unins000.exe'))) { throw 'unins000.exe missing' }
+          & (Join-Path $target 'unins000.exe') /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          Start-Sleep -Seconds 3
+          if (Test-Path $key) { throw 'silent uninstall left the registry entry behind' }
+          if (Test-Path $target) { throw 'silent uninstall left files behind' }
+          Write-Host 'installer round-trip ok'

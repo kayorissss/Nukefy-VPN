@@ -95,7 +95,11 @@ class _UpdateScreenState extends State<UpdateScreen> {
       final s = context.read<SettingsProvider>().strings;
       setState(() {
         _phase = _Phase.failed;
-        _error = s.t(error.code == 'no-asset' ? 'updateFailed' : 'updateDownloadNetwork');
+        _error = s.t(switch (error.code) {
+          'no-asset' => 'updateFailed',
+          'updateIntegrityFailed' => 'updateIntegrityFailed',
+          _ => 'updateDownloadNetwork',
+        });
       });
     } on Exception catch (error) {
       _taskbarProgress(0);

@@ -41,16 +41,28 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     _init();
   }
 
+  Timer? _menuDebounce;
+
+  /// VpnProvider ticks once per second while connected, and every tick used
+  /// to rebuild the whole native tray menu (including a file-system probe for
+  /// the proxy binary) plus rewrite the tray icon file. Both are now debounced
+  /// and the icon is only touched when the status actually changed.
   void _queueMenu() {
-    if (mounted) {
+    if (!mounted) return;
+    _menuDebounce?.cancel();
+    _menuDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
       unawaited(_menu());
       unawaited(_syncTrayIcon());
-    }
+    });
   }
+
+  String? _lastTrayAsset;
+  String? _lastTrayTooltip;
 
   /// The tray icon carries a status dot so the user sees at a glance whether
   /// the tunnel is up, dialing or down, even with the window hidden.
-  Future<void> _syncTrayIcon() async {
+  Future<void> _syncTrayIcon({bool force = false}) async {
     if (!mounted) return;
     final vpn = context.read<VpnProvider>();
     final s = context.read<SettingsProvider>().strings;
@@ -68,10 +80,12 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
       VpnStatus.error => 'tray_bad',
       VpnStatus.disconnected => 'tray_idle',
     };
+    final tooltip = 'Nukefy Client — $label';
     try {
       final ext = Platform.isWindows ? 'ico' : 'png';
       final dir = await getApplicationSupportDirectory();
       final icon = File('${dir.path}/$asset.$ext');
+      if (!force && _lastTrayAsset == asset && _lastTrayTooltip == tooltip && icon.existsSync()) return;
       // Always refresh from the bundle: a cached copy may belong to an older
       // build (or be gone after a "remove my data" pass) and the tray used to
       // end up with a missing or stale icon.
@@ -82,7 +96,9 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
         if (!icon.existsSync()) rethrow;
       }
       await trayManager.setIcon(icon.path);
-      await trayManager.setToolTip('Nukefy Client — $label');
+      await trayManager.setToolTip(tooltip);
+      _lastTrayAsset = asset;
+      _lastTrayTooltip = tooltip;
     } catch (_) {}
   }
 
@@ -99,7 +115,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
     } catch (_) {
       if (!icon.existsSync()) return;
     }
-    await _syncTrayIcon();
+    await _syncTrayIcon(force: true);
     if (Platform.isWindows) {
       // window_manager applies the same ICO to the taskbar/window, not only
       // the tray. Linux and macOS keep their native bundle icon and use the
@@ -144,6 +160,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
 
   @override
   void dispose() {
+    _menuDebounce?.cancel();
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       context.read<VpnProvider>().removeListener(_queueMenu);
       context.read<ServersProvider>().removeListener(_queueMenu);
@@ -160,7 +177,19 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   // A minimized or hidden window must not keep repainting: the traffic
   // ticker and log tail consult AppPerf.visible before notifying listeners.
   @override
-  void onWindowMinimize() => AppPerf.visible = false;
+  void onWindowMinimize() {
+    AppPerf.visible = false;
+    _trimMemory();
+  }
+
+  /// Gives decoded images back while the window is not on screen. The client
+  /// lives in the tray for days; without this, every flag, game cover and app
+  /// icon stayed decoded in RAM even though nobody could see them.
+  void _trimMemory() {
+    final cache = PaintingBinding.instance.imageCache;
+    cache.clear();
+    cache.clearLiveImages();
+  }
 
   @override
   void onWindowRestore() => AppPerf.visible = true;
@@ -185,6 +214,7 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
       case 'tray':
         await windowManager.hide();
         AppPerf.visible = false;
+        _trimMemory();
       case 'exit':
         await _quit();
       default:

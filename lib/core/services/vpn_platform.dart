@@ -789,8 +789,11 @@ Remove-Item -LiteralPath $backup -Force
       if (raw is! Map) return;
       final autostart = raw['autostart'] == true;
       // Autostart is owned by the app: the same scheduled task name and
-      // arguments are used no matter who asked for it.
-      final startInTray = false;
+      // arguments are used no matter who asked for it. A login launch starts
+      // hidden in the tray unless the installer explicitly asked otherwise —
+      // nobody wants a maximised VPN window in the middle of the desktop
+      // right after signing in.
+      final startInTray = raw['startInTray'] != false;
       await setAutoStart(autostart, startInTray: startInTray);
       final desktop = raw['desktopShortcut'] == true;
       final shortcut = File(p.join(
@@ -806,26 +809,42 @@ Remove-Item -LiteralPath $backup -Force
     }
   }
 
-  /// Points the Windows "Apps & features" entry at our own uninstall window.
-  /// Only touches the key the installer created for this AppId (a portable
-  /// copy has none, so nothing happens there).
-  Future<void> ensureBrandedUninstallEntry() async {
+  /// Repairs a Windows "Apps & features" entry that older builds damaged.
+  ///
+  /// Every start used to rewrite `UninstallString` to `NukefyClient.exe
+  /// --uninstall`. Windows then launched the app when the user asked to remove
+  /// it, and there was no uninstaller left to fall back to — "the app just
+  /// opens and nothing happens". The installer owns that entry now
+  /// (`unins000.exe`), so the app must never touch it again; this only puts a
+  /// hijacked entry back to the real uninstaller.
+  Future<void> repairUninstallEntry() async {
     if (!Platform.isWindows) return;
     try {
-      final exe = Platform.resolvedExecutable;
-      final command = '"$exe" --uninstall';
+      final exeDir = File(Platform.resolvedExecutable).parent.path;
+      final uninstaller = File(p.join(exeDir, 'unins000.exe'));
+      if (!uninstaller.existsSync()) return;
       final quote = String.fromCharCode(39);
-      final script = '\$cmd = ' + quote + command + quote + '; '
+      final cmd = '"' + uninstaller.path + '"';
+      final quiet = cmd + ' /VERYSILENT /SUPPRESSMSGBOXES /NORESTART';
+      String ps(String value) => quote + value.replaceAll(quote, quote + quote) + quote;
+      final script = '\$cmd = ${ps(cmd)}; '
+          '\$quiet = ${ps(quiet)}; '
           "\$keys = @('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1', "
           "'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1', "
           "'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1'); "
           'foreach (\$key in \$keys) { if (Test-Path \$key) { '
+          '\$current = (Get-ItemProperty -Path \$key -ErrorAction SilentlyContinue).UninstallString; '
+          "if (\$current -match 'NukefyClient\\.exe' -or [string]::IsNullOrWhiteSpace(\$current)) { "
           'Set-ItemProperty -Path \$key -Name UninstallString -Value \$cmd -ErrorAction SilentlyContinue; '
-          'Set-ItemProperty -Path \$key -Name QuietUninstallString -Value \$cmd -ErrorAction SilentlyContinue } }';
-      await Process.run('powershell.exe', ['-NoProfile', '-Command', script])
+          'Set-ItemProperty -Path \$key -Name QuietUninstallString -Value \$quiet -ErrorAction SilentlyContinue; '
+          'Write-Output "repaired" } } }';
+      final result = await Process.run('powershell.exe', ['-NoProfile', '-Command', script])
           .timeout(const Duration(seconds: 10));
+      if ('${result.stdout}'.contains('repaired')) {
+        appendLog('uninstall entry repaired: ${uninstaller.path}');
+      }
     } catch (_) {
-      // The installer's own entry is a perfectly working fallback.
+      // A portable copy has no installer entry at all: nothing to repair.
     }
   }
 
@@ -838,19 +857,24 @@ Remove-Item -LiteralPath $backup -Force
       final support = await getApplicationSupportDirectory();
       final ours = [
         p.join(support.path, 'core').toLowerCase(),
+        p.join(support.path, 'xray').toLowerCase(),
         File(Platform.resolvedExecutable).parent.path.toLowerCase(),
-      ];
+      ].map((dir) => dir.replaceAll('/', '\\')).toList();
+      // Both cores can survive a crash or a force-closed update and keep a TUN
+      // adapter, a cache database and hundreds of megabytes alive. They are
+      // never shared with another product, so any match is an orphan.
       final result = await Process.run('powershell.exe', [
         '-NoProfile',
         '-Command',
-        r'''Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "sing-box.exe" } | ForEach-Object { "$($_.ProcessId)|$($_.ExecutablePath)" }''',
+        r'''Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('sing-box.exe','xray.exe') } | ForEach-Object { "$($_.ProcessId)|$($_.ExecutablePath)" }''',
       ]).timeout(const Duration(seconds: 8));
       for (final line in '${result.stdout}'.split('\n')) {
         final parts = line.trim().split('|');
         if (parts.length != 2) continue;
         final path = parts[1].toLowerCase().replaceAll('/', '\\');
-        if (!ours.any((dir) => path.startsWith(dir.replaceAll('/', '\\')))) continue;
+        if (!ours.any((dir) => path.startsWith(dir))) continue;
         await Process.run('taskkill', ['/F', '/PID', parts[0]]);
+        appendLog('stopped orphaned core pid ${parts[0]}');
       }
     } catch (_) {}
   }

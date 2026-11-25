@@ -1,3 +1,5 @@
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -97,12 +99,15 @@ class AppTheme {
       fontFamily: AppTextStyles.body,
       textTheme: textTheme,
       primaryTextTheme: textTheme,
-      // No material ink: rectangles were flashing behind rounded controls.
-      // Feedback comes from Pressable's scale animation instead.
-      splashFactory: NoSplash.splashFactory,
-      splashColor: Colors.transparent,
-      highlightColor: Colors.transparent,
-      hoverColor: p.accent.withValues(alpha: 0.05),
+      // Real, contained press feedback. The previous build disabled ink
+      // entirely ("feedback comes from Pressable") — but that widget was never
+      // written, so every button in the app pressed with no visual reaction at
+      // all. A soft accent sparkle with a short fade reads as instant without
+      // the old square flash behind rounded controls.
+      splashFactory: InkSparkle.splashFactory,
+      splashColor: p.accent.withValues(alpha: 0.12),
+      highlightColor: p.accent.withValues(alpha: 0.05),
+      hoverColor: p.accent.withValues(alpha: 0.06),
       focusColor: p.accent.withValues(alpha: 0.10),
       scrollbarTheme: ScrollbarThemeData(
         thickness: WidgetStateProperty.all(5),
@@ -342,5 +347,26 @@ class AppTheme {
         },
       ),
     );
+  }
+}
+
+/// Desktop scrolling that feels like a desktop app: the wheel works, and the
+/// mouse can drag lists, cards and long settings pages the way touch does.
+class AppScrollBehavior extends MaterialScrollBehavior {
+  const AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
+    // No glow and no stretching band: the cards are opaque, the old effect
+    // only produced a coloured smear on top of them.
+    return child;
   }
 }

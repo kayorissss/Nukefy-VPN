@@ -55,7 +55,7 @@ class AppSettings {
     this.karingEnabled = false,
     this.karingBalancer = true,
     this.karingExcludeRu = true,
-    this.karingAllowInsecure = true,
+    this.karingAllowInsecure = false,
     this.karingHourly = true,
     List<String> zapretCheckTargets = const ['youtube', 'discord'],
     this.closeAction = 'ask',
@@ -63,7 +63,7 @@ class AppSettings {
     this.seenWelcome = false,
     this.autoConnect = false,
     this.launchOnBoot = false,
-    this.startInTray = false,
+    this.startInTray = true,
     this.notifications = true,
     this.minimizeToTray = true,
     this.checkUpdatesOnStart = true,
@@ -305,7 +305,9 @@ class AppSettings {
       seenWelcome: json['seenWelcome'] == true,
       autoConnect: json['autoConnect'] == true,
       launchOnBoot: json['launchOnBoot'] == true,
-      startInTray: json['startInTray'] == true,
+      // Absent key keeps the new default (start hidden); an explicit false
+      // still means "open the window at sign-in".
+      startInTray: json['startInTray'] != false,
       notifications: json['notifications'] != false,
       minimizeToTray: json['minimizeToTray'] != false,
       checkUpdatesOnStart: json['checkUpdatesOnStart'] != false,

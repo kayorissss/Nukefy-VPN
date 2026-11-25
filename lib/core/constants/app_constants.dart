@@ -74,7 +74,11 @@ class AppConstants {
   static const int defaultSocksPort = 10808;
   static const int defaultHttpPort = 10809;
   static const int clashApiPort = 19090;
-  static const int defaultMtu = 9000;
+  /// 9000 was the old default and a memory trap: the gvisor stack buffers
+  /// packets per connection, and a 9000-byte MTU multiplied those buffers on
+  /// busy links (plus fragmentation on paths that do not support jumbo
+  /// frames). 1500 is what every network actually carries.
+  static const int defaultMtu = 1500;
   static const String tunInterface = 'nkfy';
   static const String tunAddress = '172.19.0.1/30';
 

@@ -22,7 +22,9 @@ class NukefySplash extends StatefulWidget {
 class _NukefySplashState extends State<NukefySplash> with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1700),
+    // Was 1700 ms: long enough that the app felt slow to start even when the
+    // first frame was already drawn under the overlay.
+    duration: const Duration(milliseconds: 950),
   );
   bool _finished = false;
 

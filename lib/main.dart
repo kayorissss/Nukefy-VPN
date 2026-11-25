@@ -87,6 +87,12 @@ Future<void> _quitFromAnotherProcess() async {
 
 Future<void> _main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // A long-running desktop window used to accumulate every decoded image
+  // (flags, game art, app icons, 4K mascot) in the default unbounded cache.
+  // A fixed budget keeps RSS flat over hours of use instead of growing.
+  PaintingBinding.instance.imageCache
+    ..maximumSize = 120
+    ..maximumSizeBytes = 64 * 1024 * 1024;
   // Dark native chrome (tray menu, common dialogs) before any window appears.
   forceDarkWin32Chrome();
   _migrateLegacyData();
@@ -108,6 +114,10 @@ Future<void> _main() async {
     // Draw behind the status and gesture bars; colours come from AppTheme.overlay.
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
+  // Both spellings exist in the wild: the scheduled task passes --autostart
+  // (plus --tray), older shortcuts passed only --tray.
+  final loginLaunch = Platform.executableArguments.contains('--autostart') ||
+      Platform.executableArguments.contains('--tray');
   DesktopInstanceGuard? desktopGuard;
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
@@ -157,6 +167,9 @@ Future<void> _main() async {
       titleBarStyle: TitleBarStyle.hidden,
       backgroundColor: Color(0xFF0D0D0D),
     );
+    // A login launch (scheduled task) must never steal focus: nobody wants a
+    // maximised window in the middle of the desktop right after signing in.
+    final startHidden = loginLaunch || Platform.executableArguments.contains('--tray');
     windowManager.waitUntilReadyToShow(options, () async {
       // The app lives maximized: a small floating window wasted screen room
       // and the user asked for "always maximal, no mini window".
@@ -170,7 +183,11 @@ Future<void> _main() async {
         } catch (_) {}
       }
       windowManager.addListener(_MaximizeGuard());
-      _MaximizeGuard.start();
+      if (startHidden) {
+        AppLog.log('started in tray (login launch)');
+        AppPerf.visible = false;
+        return;
+      }
       await windowManager.show();
       await windowManager.focus();
       AppLog.log('window shown at normal size');
@@ -260,11 +277,16 @@ Future<void> _main() async {
     if (seeded.isNotEmpty) AppLog.log('bundle cores installed: ${seeded.join(', ')}');
   }, seconds: 15);
   await guard('core', vpn.refreshCore, seconds: 5);
-  // "Remove" in the Windows settings must open our branded window. The
-  // installer writes that command at the end of setup; this also repairs
-  // installs made by older builds, where the entry still pointed at the bare
-  // Inno uninstaller.
-  await guard('uninstall-entry', () => VpnPlatform().ensureBrandedUninstallEntry(), seconds: 12);
+  // Older builds pointed the Windows "Remove" entry at the app itself, so the
+  // button only reopened the client. The setup owns that entry now; this puts
+  // a hijacked value back to the real uninstaller, once, and never touches it
+  // again.
+  await guard('uninstall-entry', () => VpnPlatform().repairUninstallEntry(), seconds: 12);
+  // A crashed or force-closed session can leave its own core running. Those
+  // orphans keep a TUN adapter and hundreds of megabytes alive, and people
+  // see the memory of "the VPN app" grow over days. We are the single
+  // instance here, so anything of ours that is already running is orphaned.
+  await guard('stray-cores', () => VpnPlatform().killStrayCores(), seconds: 10);
 
   runApp(
     MultiProvider(
@@ -321,12 +343,13 @@ Future<void> _main() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       // Safety net: if waitUntilReadyToShow never fired, show the window now.
       try {
-        final loginLaunch = Platform.executableArguments.contains('--autostart');
-        if (loginLaunch && settings.settings.startInTray) {
-          await windowManager.hide();
+        if (loginLaunch) {
+          if (await windowManager.isVisible()) await windowManager.hide();
+          AppPerf.visible = false;
         } else if (!await windowManager.isVisible()) {
           await windowManager.show();
           await windowManager.focus();
+          AppPerf.visible = true;
         }
       } catch (_) {}
     }
@@ -390,21 +413,11 @@ class _ResumeActions extends WidgetsBindingObserver {
 /// The desktop app exists only maximized: restoring or dragging the window
 /// back to a floating state immediately re-maximizes it.
 class _MaximizeGuard extends WindowListener {
-  static Timer? _enforcer;
-
-  /// Belt and braces: a periodic check re-maximizes the window on setups
-  /// where the event callbacks never fire (DPI-scaled multi-monitor shells).
-  static void start() {
-    _enforcer?.cancel();
-    _enforcer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      try {
-        if (!await windowManager.isMaximized() && !await windowManager.isMinimized()) {
-          await windowManager.maximize();
-        }
-      } catch (_) {}
-    });
-  }
-
+  // Event-driven only. The old 2-second Timer.periodic re-checked
+  // isMaximized() forever — including while the window sat in the tray — and
+  // was one of the few things that kept the process awake when "nothing was
+  // happening". Restoring or resizing still snaps the window back to full
+  // size, which is what the layout expects.
   @override
   void onWindowRestore() {
     windowManager.maximize();

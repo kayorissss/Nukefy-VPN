@@ -94,19 +94,17 @@ class MainShell extends StatelessWidget {
       NavDestination.settingsDns => tabs.indexWhere((tab) => tab.destination == NavDestination.dns),
       _ => tabs.indexWhere((tab) => tab.destination == destination),
     };
+    // Snappier switch: 320 ms + a 3 px slide + a scale layer felt like the
+    // app was thinking about it. A 180 ms fade reads as instant and saves two
+    // composited layers per transition (the scale one cost the most on weak
+    // integrated GPUs).
     final body = AnimatedSwitcher(
-      duration: const Duration(milliseconds: 320),
+      duration: const Duration(milliseconds: 180),
       switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+      switchOutCurve: Curves.easeIn,
       transitionBuilder: (child, animation) => FadeTransition(
         opacity: animation,
-        child: SlideTransition(
-          position: Tween<Offset>(begin: const Offset(.03, 0), end: Offset.zero).animate(animation),
-          child: ScaleTransition(
-            scale: Tween<double>(begin: .985, end: 1).animate(animation),
-            child: child,
-          ),
-        ),
+        child: child,
       ),
       // Keep the page host itself stable.  Keying an IndexedStack by the
       // destination rebuilt every screen on each tap (and discarded the
@@ -248,7 +246,7 @@ class _PageReveal extends StatefulWidget {
 
 class _PageRevealState extends State<_PageReveal> with SingleTickerProviderStateMixin {
   late final AnimationController _controller =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 280), value: 1);
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 150), value: 1);
 
   @override
   void didUpdateWidget(covariant _PageReveal oldWidget) {
@@ -264,13 +262,12 @@ class _PageRevealState extends State<_PageReveal> with SingleTickerProviderState
 
   @override
   Widget build(BuildContext context) {
-    final curve = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    final curve = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    // Fade only: a page that also slides re-lays-out every list inside it on
+    // each frame of the animation.
     return FadeTransition(
-      opacity: Tween<double>(begin: .45, end: 1).animate(curve),
-      child: SlideTransition(
-        position: Tween<Offset>(begin: const Offset(0, .012), end: Offset.zero).animate(curve),
-        child: widget.child,
-      ),
+      opacity: Tween<double>(begin: .72, end: 1).animate(curve),
+      child: widget.child,
     );
   }
 }
@@ -1096,23 +1093,24 @@ class _MascotBackdrop extends StatelessWidget {
             // text: at 0.92 in the light theme the mascot showed through the
             // (then translucent) cards and read as overlapping ghost text.
             opacity: dark ? 0.12 : 0.25,
+            // One ShaderMask instead of two nested ones: every mask is a
+            // saveLayer, and the pair re-blended the whole backdrop on each
+            // repaint. A single diagonal gradient gives the same soft fade.
             child: ShaderMask(
               blendMode: BlendMode.dstIn,
               shaderCallback: (bounds) => LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
                 colors: const [Colors.transparent, Colors.white],
-                stops: const [0.0, 0.22],
+                stops: const [0.0, 0.42],
               ).createShader(bounds),
-              child: ShaderMask(
-                blendMode: BlendMode.dstIn,
-                shaderCallback: (bounds) => LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: const [Colors.transparent, Colors.white],
-                  stops: const [0.04, 0.5],
-                ).createShader(bounds),
-                child: Image.asset('assets/rkntyan.png', fit: BoxFit.contain, alignment: Alignment.bottomRight, gaplessPlayback: true),
+              child: Image.asset(
+                'assets/rkntyan.png',
+                fit: BoxFit.contain,
+                alignment: Alignment.bottomRight,
+                gaplessPlayback: true,
+                // The artwork is 736x981 and never displayed above ~900 px.
+                filterQuality: FilterQuality.medium,
               ),
             ),
           ),

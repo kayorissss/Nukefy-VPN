@@ -163,6 +163,13 @@ class VpnProvider extends ChangeNotifier {
 
   Future<void> checkConflicts() async {
     if (!Platform.isWindows) return;
+    // `tasklist` on every tap cost hundreds of milliseconds on slower
+    // machines and returned the same answer a second later. Once per 20 s is
+    // enough to notice a foreign capture that was started in between.
+    final now = DateTime.now();
+    final last = _lastConflictCheck;
+    if (last != null && now.difference(last) < const Duration(seconds: 20)) return;
+    _lastConflictCheck = now;
     try {
       final result = await Process.run('tasklist', ['/FO', 'CSV', '/NH']);
       final names = ((result.stdout as String?) ?? '').toLowerCase();
@@ -176,7 +183,44 @@ class VpnProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// True while a dial is in flight. Two taps on the connect button used to
+  /// start two cores in parallel and the loser left the UI in `connecting`.
+  bool _connecting = false;
+  int _connectAttempt = 0;
+  DateTime? _lastConflictCheck;
+
   Future<void> connect(ServerModel? server) async {
+    if (_connecting) return;
+    _connecting = true;
+    final attempt = ++_connectAttempt;
+    try {
+      await _connectNow(server, attempt);
+    } catch (error) {
+      // A failed write, a locked config file or an unexpected platform error
+      // must end in an explained state, never in a spinner that never stops.
+      _platform.appendLog('connect failed: $error');
+      if (attempt == _connectAttempt) {
+        status = VpnStatus.error;
+        mode = 'failed';
+        errorMessage = '$error';
+        notifyListeners();
+      }
+    } finally {
+      _connecting = false;
+    }
+    if (attempt != _connectAttempt) {
+      // The user pressed "disconnect" while the tunnel was still coming up.
+      await _platform.stop();
+      await _platform.stopXray();
+      if (status != VpnStatus.disconnected) {
+        status = VpnStatus.disconnected;
+        _ports = null;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _connectNow(ServerModel? server, int attempt) async {
     final settings = _settings;
     final servers = _servers;
     if (server == null || settings == null || servers == null) {
@@ -626,6 +670,7 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
+    _connectAttempt++;
     final name = activeServer?.name ?? '';
     await _platform.stop();
     await _platform.stopXray();
@@ -651,8 +696,13 @@ class VpnProvider extends ChangeNotifier {
     await _traffic?.sink.close();
     _traffic = null;
     try {
+      // The clash API port is resolved per session (Windows reserves ranges
+      // that make 19090 unbindable), so the socket has to follow the config
+      // instead of the constant. Hardcoding it made Statistics read zeros
+      // exactly on the machines the port fallback exists for.
+      final clashPort = _ports?.clash ?? AppConstants.clashApiPort;
       final channel = WebSocketChannel.connect(
-        Uri.parse('ws://127.0.0.1:${AppConstants.clashApiPort}/traffic'),
+        Uri.parse('ws://127.0.0.1:$clashPort/traffic'),
       );
       _traffic = channel;
       void retry() {

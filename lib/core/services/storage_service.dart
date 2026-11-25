@@ -24,12 +24,41 @@ class StorageService {
         _boxName,
         encryptionCipher: HiveAesCipher(key),
       );
+      return;
     } catch (_) {
-      await Hive.deleteBoxFromDisk(_boxName);
-      _box = await Hive.openBox<String>(
-        _boxName,
-        encryptionCipher: HiveAesCipher(key),
-      );
+      // One retry: a locked file (antivirus scan, a dying second instance)
+      // fails exactly once and opens fine a moment later.
+      try {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        _box = await Hive.openBox<String>(
+          _boxName,
+          encryptionCipher: HiveAesCipher(key),
+        );
+        return;
+      } catch (_) {}
+    }
+    // Really unreadable (corrupted file, or the key was lost with a cleared
+    // preferences store). The old code deleted the box outright, so every
+    // server, subscription and setting disappeared without a trace. Keep the
+    // file under a dated name instead: the app starts empty, and the data can
+    // still be recovered by hand.
+    await _quarantine();
+    _box = await Hive.openBox<String>(
+      _boxName,
+      encryptionCipher: HiveAesCipher(key),
+    );
+  }
+
+  /// Renames an unreadable vault next to the live one instead of deleting it.
+  Future<void> _quarantine() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final source = File('${dir.path}${Platform.pathSeparator}$_boxName.hive');
+      if (!source.existsSync()) return;
+      final stamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
+      await source.rename('${source.path}.unreadable-$stamp');
+    } catch (_) {
+      // Nothing else to do: the caller still gets a fresh, empty vault.
     }
   }
 

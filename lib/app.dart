@@ -31,6 +31,8 @@ class NukefyApp extends StatelessWidget {
       child: MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Nukefy Client',
+      // Mouse drag + no overscroll glow on desktop.
+      scrollBehavior: const AppScrollBehavior(),
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(settings.settings.accent, settings.settings.visualTheme),
       darkTheme: AppTheme.dark(settings.settings.accent, settings.settings.visualTheme),

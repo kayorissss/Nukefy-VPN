@@ -15,6 +15,7 @@ class SettingsProvider extends ChangeNotifier {
   SettingsProvider(this._storage);
 
   static const _carbonThemeMigration = 'theme_default_carbon_v255';
+  static const _mtuMigration = 'mtu_default_1500';
 
   final StorageService _storage;
   AppSettings settings = AppSettings();
@@ -67,6 +68,15 @@ class SettingsProvider extends ChangeNotifier {
     if (!ThemePresets.all.containsKey(settings.visualTheme)) {
       settings.visualTheme = 'carbon';
       changed = true;
+    }
+    // 9000 was only ever the shipped default, never a meaningful user choice.
+    // Move it once; a deliberate value stays as the user set it.
+    if (_storage.read(_mtuMigration) != '1') {
+      if (settings.mtu >= 9000) {
+        settings.mtu = AppConstants.defaultMtu;
+        changed = true;
+      }
+      await _storage.write(_mtuMigration, '1');
     }
     // Older builds wrote a pinned client version into the saved agent string.
     // A user-chosen agent (Happ, v2rayNG, …) is kept exactly as it is.

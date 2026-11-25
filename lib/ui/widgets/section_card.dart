@@ -151,7 +151,12 @@ class SettingsTile extends StatelessWidget {
             ],
           ],
         );
-        return Material(
+        // A hand cursor is the cheapest possible sign that a row is
+        // clickable; without it a desktop mouse gave no feedback at all until
+        // the row was already pressed.
+        return MouseRegion(
+          cursor: onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
+          child: Material(
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
@@ -175,6 +180,7 @@ class SettingsTile extends StatelessWidget {
                 ],
               ),
             ),
+          ),
           ),
         );
       },
