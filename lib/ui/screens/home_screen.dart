@@ -735,7 +735,7 @@ class _ServerCard extends StatelessWidget {
                   ),
                 ),
                 if (server?.pingMs != null)
-                  PingBadge(pingMs: server!.pingMs, tunnelOk: server.tunnelOk, strings: s),
+                  PingBadge(pingMs: server!.pingMs, tunnelOk: server?.tunnelOk, strings: s),
                 const SizedBox(width: 4),
                 Icon(Icons.unfold_more_rounded, color: p.textSecondary),
               ],
