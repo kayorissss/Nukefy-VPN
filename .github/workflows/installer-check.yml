@@ -56,16 +56,29 @@ jobs:
           $setup = "dist\NukefyClient-0.0.0-x64.exe"
           if (-not (Test-Path $setup)) { throw 'installer not produced' }
           $target = Join-Path $env:RUNNER_TEMP 'NukefyCheck'
-          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$target"
-          Start-Sleep -Seconds 3
+          # -Wait, not "&": PowerShell returns immediately for GUI-subsystem
+          # executables, so the old step read the registry while setup was
+          # still extracting.
+          $install = Start-Process -FilePath $setup -Wait -PassThru `
+            -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$target`""
+          Write-Host "setup exit code: $($install.ExitCode)"
+          if ($install.ExitCode -ne 0) { throw "setup failed with $($install.ExitCode)" }
           $key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1'
           if (-not (Test-Path $key)) { throw 'uninstall entry missing' }
           $entry = Get-ItemProperty $key
+          Write-Host "DisplayName: $($entry.DisplayName)"
           Write-Host "UninstallString: $($entry.UninstallString)"
           if ($entry.UninstallString -match 'NukefyClient\.exe') { throw 'UninstallString points at the app' }
+          if ($entry.UninstallString -notmatch 'unins000\.exe') { throw 'UninstallString does not use unins000.exe' }
           if (-not (Test-Path (Join-Path $target 'unins000.exe'))) { throw 'unins000.exe missing' }
-          & (Join-Path $target 'unins000.exe') /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-          Start-Sleep -Seconds 3
+          $uninstall = Start-Process -FilePath (Join-Path $target 'unins000.exe') -Wait -PassThru `
+            -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          Write-Host "uninstaller exit code: $($uninstall.ExitCode)"
+          # Inno's uninstaller copies itself to %TEMP% and returns at once, so
+          # poll instead of trusting the exit code alone.
+          $deadline = (Get-Date).AddSeconds(120)
+          while ((Test-Path $key) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          while ((Test-Path $target) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
           if (Test-Path $key) { throw 'silent uninstall left the registry entry behind' }
           if (Test-Path $target) { throw 'silent uninstall left files behind' }
           Write-Host 'installer round-trip ok'

@@ -241,18 +241,30 @@ jobs:
           # Windows Settings only opened the client.
           $ver = "${{ env.RELEASE_TAG }}".TrimStart('v')
           $setup = "dist\NukefyClient-$ver-x64.exe"
-          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="$env:RUNNER_TEMP\install.log" /DIR="$env:RUNNER_TEMP\NukefyTest"
-          Start-Sleep -Seconds 3
+          $dir = Join-Path $env:RUNNER_TEMP 'NukefyTest'
+          $log = Join-Path $env:RUNNER_TEMP 'install.log'
+          # -Wait: PowerShell returns at once for GUI executables, so the entry
+          # used to be read before setup had written it.
+          $install = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=`"$log`"", "/DIR=`"$dir`"")
+          Write-Host "setup exit code: $($install.ExitCode)"
+          if ($install.ExitCode -ne 0) { throw "setup failed with $($install.ExitCode)" }
           $key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{7D1D2E7B-4C0A-4E36-9B2E-7A9C3E1F5A10}_is1'
           if (-not (Test-Path $key)) { throw 'uninstall registry entry was not created' }
           $entry = Get-ItemProperty $key
+          Write-Host "DisplayName: $($entry.DisplayName)"
           Write-Host "UninstallString: $($entry.UninstallString)"
           if ($entry.UninstallString -match 'NukefyClient\.exe') { throw 'UninstallString points at the app, not unins000.exe' }
-          if (-not (Test-Path "$env:RUNNER_TEMP\NukefyTest\unins000.exe")) { throw 'unins000.exe missing' }
-          & "$env:RUNNER_TEMP\NukefyTest\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-          Start-Sleep -Seconds 3
+          if ($entry.UninstallString -notmatch 'unins000\.exe') { throw 'UninstallString does not use unins000.exe' }
+          if (-not (Test-Path (Join-Path $dir 'unins000.exe'))) { throw 'unins000.exe missing' }
+          Start-Process -FilePath (Join-Path $dir 'unins000.exe') -Wait -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') | Out-Null
+          # The uninstaller relaunches itself from %TEMP% and returns early.
+          $deadline = (Get-Date).AddSeconds(120)
+          while ((Test-Path $key) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
           if (Test-Path $key) { throw 'uninstall did not remove the registry entry' }
           Write-Host 'installer and uninstaller verified'
+
       - name: Sign Windows files when a certificate is configured
         shell: pwsh
         env:
