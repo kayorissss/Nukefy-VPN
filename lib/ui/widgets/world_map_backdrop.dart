@@ -46,16 +46,30 @@ class _WorldMapBackdropState extends State<WorldMapBackdrop>
   @override
   void initState() {
     super.initState();
-    // First frame: no flight, just let the marker arrive.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _ring.forward(from: 0);
-    });
+    // Nothing flies on the first frame: the map used to start its zoom the
+    // moment the app opened, before anybody had pressed Connect, which read as
+    // a glitch rather than an animation.
+    if (widget.connected && widget.countryCode != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _camera.forward(from: 0);
+          _ring.forward(from: 0);
+        }
+      });
+    }
   }
 
   @override
   void didUpdateWidget(covariant WorldMapBackdrop oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.countryCode != widget.countryCode) {
+    final justConnected = !oldWidget.connected && widget.connected;
+    if (!widget.connected) {
+      // Back to the whole world, quietly.
+      _camera.value = 0;
+      _ring.value = 1;
+      return;
+    }
+    if (oldWidget.countryCode != widget.countryCode || justConnected) {
       _camera.forward(from: 0);
       _ring.forward(from: 0);
     }
@@ -79,7 +93,7 @@ class _WorldMapBackdropState extends State<WorldMapBackdrop>
         animation: Listenable.merge([_camera, _ring]),
         builder: (context, _) => CustomPaint(
           painter: _WorldMapPainter(
-            progress: _camera.value,
+            progress: widget.connected ? _camera.value : 0,
             pulse: _ring.value,
             dark: p.isDark,
             dotColor: p.text,
@@ -139,7 +153,7 @@ class _WorldMapPainter extends CustomPainter {
 
     // Camera: p' = p * s + t, where s grows 1 → zoom and t keeps the chosen
     // country drifting towards the upper middle of the canvas.
-    const zoom = 2.7;
+    const zoom = 2.4;
     final anchor = Offset(size.width / 2, size.height * 0.42);
     // Local, because a field never promotes: `country.$1` needs a non-null
     // receiver that the compiler can actually prove.
@@ -154,12 +168,12 @@ class _WorldMapPainter extends CustomPainter {
     // Land dots. Two passes: the whole world faintly, then everything near
     // the marker a little brighter, so the eye goes to the right place.
     final base = Paint()
-      ..color = dotColor.withValues(alpha: dark ? 0.16 : 0.22)
+      ..color = dotColor.withValues(alpha: dark ? 0.13 : 0.18)
       ..isAntiAlias = true;
     final near = Paint()
-      ..color = accent.withValues(alpha: dark ? 0.42 : 0.34)
+      ..color = accent.withValues(alpha: dark ? 0.38 : 0.30)
       ..isAntiAlias = true;
-    final r = math.max(0.7, cell * 0.30);
+    final r = math.max(0.6, cell * 0.26);
     final glowRadius = focal == null ? 0.0 : cell * 9;
     for (final dot in _dots) {
       final x = dot.dx * s + tx;

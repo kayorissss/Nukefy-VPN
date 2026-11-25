@@ -171,17 +171,6 @@ Future<void> _main() async {
     // maximised window in the middle of the desktop right after signing in.
     final startHidden = loginLaunch || Platform.executableArguments.contains('--tray');
     windowManager.waitUntilReadyToShow(options, () async {
-      // The app lives maximized: a small floating window wasted screen room
-      // and the user asked for "always maximal, no mini window".
-      try {
-        await windowManager.maximize();
-      } catch (error) {
-        AppLog.log('window maximize failed: $error');
-        try {
-          await windowManager.setSize(options.size!);
-          await windowManager.center();
-        } catch (_) {}
-      }
       windowManager.addListener(_MaximizeGuard());
       if (startHidden) {
         AppLog.log('started in tray (login launch)');
@@ -190,8 +179,35 @@ Future<void> _main() async {
       }
       await windowManager.show();
       await windowManager.focus();
-      AppLog.log('window shown at normal size');
+      // Windows ignores maximise() on a window that has not been mapped yet,
+      // which is why the client opened as a medium floating card. Show first,
+      // then maximise, then verify once the compositor had its turn.
+      await _maximizeWindow(options);
+      AppLog.log('window shown and maximized');
     });
+  }
+
+  /// Maximises the main window and makes sure it stuck. Earlier the call ran
+  /// before `show()`, Windows dropped it, and the app kept opening in a small
+  /// window with no way back except the taskbar.
+  Future<void> _maximizeWindow(WindowOptions options) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        await windowManager.maximize();
+        await Future<void>.delayed(Duration(milliseconds: 120 + attempt * 160));
+        if (await windowManager.isMaximized()) {
+          AppPerf.maximized.value = true;
+          return;
+        }
+      } catch (error) {
+        AppLog.log('window maximize failed: $error');
+        break;
+      }
+    }
+    try {
+      await windowManager.setSize(options.size!);
+      await windowManager.center();
+    } catch (_) {}
   }
 
   // Every init step is bounded and non-fatal: a stuck storage read or a

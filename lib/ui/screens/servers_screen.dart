@@ -42,7 +42,13 @@ class ServersScreen extends StatelessWidget {
           await servers.refreshAll();
           await servers.pingAll();
         },
-        child: CustomScrollView(
+        // Same reading width as the settings page: a list stretched across a
+        // 34" monitor turned every row into a horizontally scrolling line.
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1180),
+            child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverPadding(
@@ -51,73 +57,46 @@ class ServersScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(child: Text(s.t('servers'), style: AppTextStyles.title)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: SizedBox(
-                            height: 40,
-                            child: TextField(
-                              onChanged: servers.setQuery,
-                              decoration: InputDecoration(
-                                hintText: s.t('search'),
-                                prefixIcon: const Icon(Icons.search_rounded),
-                                isDense: true,
-                              ),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final wide = constraints.maxWidth >= 760;
+                        final title = Text(s.t('servers'), style: AppTextStyles.title);
+                        final search = SizedBox(
+                          height: 40,
+                          child: TextField(
+                            onChanged: servers.setQuery,
+                            decoration: InputDecoration(
+                              hintText: s.t('search'),
+                              prefixIcon: const Icon(Icons.search_rounded),
+                              isDense: true,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        // «Ввести вручную», «Импорт из файла» и «Проверить пинг»
-                        // live here, the two main actions stay on the surface.
-                        PopupMenuButton<String>(
-                          tooltip: s.t('actions'),
-                          icon: const Icon(Icons.more_vert_rounded),
-                          onSelected: (value) async {
-                            if (value == 'manual') {
-                              await ImportActions.manual(context);
-                            } else if (value == 'file') {
-                              await ImportActions.fromFile(context);
-                            } else if (value == 'ping') {
-                              await context.read<ServersProvider>().pingAll();
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            PopupMenuItem(
-                              value: 'manual',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.edit_rounded, size: 18, color: context.palette.accent),
-                                  const SizedBox(width: 10),
-                                  Text(s.t('enterManually')),
+                        );
+                        // The title and the search box used to share one row at
+                        // a 1:2 ratio, so on a desktop the header was a giant
+                        // input with a squeezed word next to it. The title keeps
+                        // the row, the search gets its own capped line.
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(child: title),
+                                const SizedBox(width: 12),
+                                if (wide) ...[
+                                  SizedBox(width: 320, child: search),
+                                  const SizedBox(width: 4),
                                 ],
-                              ),
+                                _headerMenu(context, s),
+                              ],
                             ),
-                            PopupMenuItem(
-                              value: 'file',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.folder_open_rounded, size: 18, color: context.palette.accent),
-                                  const SizedBox(width: 10),
-                                  Text(s.t('importFile')),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: 'ping',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.speed_rounded, size: 18, color: context.palette.accent),
-                                  const SizedBox(width: 10),
-                                  Text(s.t('checkPing')),
-                                ],
-                              ),
-                            ),
+                            if (!wide) ...[
+                              const SizedBox(height: 10),
+                              search,
+                            ],
                           ],
-                        ),
-                      ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -184,6 +163,8 @@ class ServersScreen extends StatelessWidget {
               SliverToBoxAdapter(child: SizedBox(height: bottom + 100)),
             ],
           ],
+            ),
+          ),
         ),
       ),
     );
@@ -809,4 +790,36 @@ String _intervalLabel(dynamic s, UpdateInterval interval) {
     UpdateInterval.hour6 => s.t('hour6'),
     UpdateInterval.hour12 => s.t('hour12'),
   };
+}
+
+/// The three-dot menu of the servers page. Extracted so the header can place
+/// it next to the title on wide windows and next to the search box on narrow
+/// ones without duplicating the item list.
+Widget _headerMenu(BuildContext context, S s) {
+  final accent = context.palette.accent;
+  Widget item(IconData icon, String label) => Row(
+        children: [
+          Icon(icon, size: 18, color: accent),
+          const SizedBox(width: 10),
+          Text(label),
+        ],
+      );
+  return PopupMenuButton<String>(
+    tooltip: s.t('actions'),
+    icon: const Icon(Icons.more_vert_rounded),
+    onSelected: (value) async {
+      if (value == 'manual') {
+        await ImportActions.manual(context);
+      } else if (value == 'file') {
+        await ImportActions.fromFile(context);
+      } else if (value == 'ping') {
+        await context.read<ServersProvider>().pingAll();
+      }
+    },
+    itemBuilder: (context) => [
+      PopupMenuItem(value: 'manual', child: item(Icons.edit_rounded, s.t('enterManually'))),
+      PopupMenuItem(value: 'file', child: item(Icons.folder_open_rounded, s.t('importFile'))),
+      PopupMenuItem(value: 'ping', child: item(Icons.speed_rounded, s.t('checkPing'))),
+    ],
+  );
 }

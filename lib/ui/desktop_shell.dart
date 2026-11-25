@@ -192,13 +192,30 @@ class _DesktopShellState extends State<DesktopShell> with WindowListener, TrayLi
   }
 
   @override
-  void onWindowRestore() => AppPerf.visible = true;
+  void onWindowRestore() {
+    AppPerf.visible = true;
+    unawaited(_syncMaximized());
+  }
 
   @override
-  void onWindowMaximize() => AppPerf.visible = true;
+  void onWindowMaximize() {
+    AppPerf.visible = true;
+    AppPerf.maximized.value = true;
+  }
 
   @override
-  void onWindowUnmaximize() => AppPerf.visible = true;
+  void onWindowUnmaximize() {
+    AppPerf.visible = true;
+    AppPerf.maximized.value = false;
+  }
+
+  /// Keeps the title bar glyph truthful after restore/minimise, where Windows
+  /// does not send a maximise event.
+  Future<void> _syncMaximized() async {
+    try {
+      AppPerf.maximized.value = await windowManager.isMaximized();
+    } catch (_) {}
+  }
 
   @override
   void onWindowClose() async {

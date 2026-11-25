@@ -629,20 +629,20 @@ class _RailLeaf {
   final NavDestination destination;
 }
 
+/// One labelled block of the rail. Groups are captions, not buttons: the
+/// previous design mixed three visual species in one column (uppercase
+/// headers with chevrons, indented leaves, then outlined pills at the bottom),
+/// which is exactly what made the menu read as clutter.
 class _RailGroup {
-  const _RailGroup({required this.key, required this.icon, required this.label, this.destination, required this.leaves, this.alwaysOpen = false});
+  const _RailGroup({required this.key, required this.label, required this.leaves});
   final String key;
-  final IconData icon;
   final String label;
-  final NavDestination? destination;
   final List<_RailLeaf> leaves;
-
-  /// Home is a permanent section: it has no chevron and never folds away.
-  final bool alwaysOpen;
 }
 
-/// Grouped navigation: four sections with sub-pages, plus a fixed bottom
-/// row for auto-tune, add-ons and the wide settings button.
+/// Navigation rail: small captions, one row per page, one hover state and one
+/// active style. Everything sits on the same 10 px column, so icons line up
+/// down the whole menu.
 class _SideRail extends StatefulWidget {
   const _SideRail({required this.destination, required this.sitemap});
   final NavDestination destination;
@@ -656,7 +656,7 @@ class _SideRailState extends State<_SideRail> {
 
   /// User-dragged rail width (expanded mode). Dragging the right edge is
   /// faster than hunting for the collapse button, and the choice persists.
-  double _customWidth = (double.tryParse(StorageService.instance.read('railWidth') ?? '') ?? 272).clamp(220, 380).toDouble();
+  double _customWidth = (double.tryParse(StorageService.instance.read('railWidth') ?? '') ?? 268).clamp(216, 380).toDouble();
   bool _draggingRail = false;
 
   @override
@@ -667,6 +667,7 @@ class _SideRailState extends State<_SideRail> {
     final collapsed = nav.collapsed;
     final zapret = Platform.isWindows;
     final destination = widget.destination;
+
     // Pinned pages keep their pin order here too, so the rail and the phone
     // bar never disagree about what sits where.
     final pinnedSpecs = <_TabSpec>[];
@@ -677,105 +678,77 @@ class _SideRailState extends State<_SideRail> {
     }
 
     final groups = <_RailGroup>[
-      _RailGroup(key: 'home', alwaysOpen: true, icon: Icons.home_rounded, label: s.t('home'), destination: NavDestination.home, leaves: [
+      _RailGroup(key: 'main', label: s.t('railMain'), leaves: [
+        _RailLeaf(icon: Icons.home_rounded, label: s.t('home'), destination: NavDestination.home),
         _RailLeaf(icon: Icons.public_rounded, label: s.t('servers'), destination: NavDestination.servers),
         _RailLeaf(icon: Icons.insights_rounded, label: s.t('stats'), destination: NavDestination.stats),
       ]),
       if (zapret)
-        _RailGroup(key: 'zapret', icon: Icons.shield_rounded, label: s.t('zapret'), destination: NavDestination.zapret, leaves: [
+        _RailGroup(key: 'zapret', label: s.t('zapret'), leaves: [
+          _RailLeaf(icon: Icons.shield_rounded, label: s.t('zapret'), destination: NavDestination.zapret),
           _RailLeaf(icon: Icons.sports_esports_rounded, label: s.t('zApps'), destination: NavDestination.zapretApps),
-          _RailLeaf(icon: Icons.dns_rounded, label: s.t('dnsTitle'), destination: NavDestination.dns),
           _RailLeaf(icon: Icons.settings_suggest_rounded, label: s.t('zSettings'), destination: NavDestination.zapretSettings),
+          _RailLeaf(icon: Icons.dns_rounded, label: s.t('dnsTitle'), destination: NavDestination.dns),
         ]),
-      _RailGroup(key: 'bypass', icon: Icons.alt_route_rounded, label: s.t('railBypasses'), leaves: [
+      _RailGroup(key: 'bypass', label: s.t('railBypasses'), leaves: [
         _RailLeaf(icon: Icons.route_rounded, label: s.t('tabKaring'), destination: NavDestination.karing),
         _RailLeaf(icon: Icons.send_rounded, label: s.t('tgProxy'), destination: NavDestination.telegramProxy),
       ]),
-      _RailGroup(key: 'monitor', icon: Icons.monitor_heart_rounded, label: s.t('railMonitoring'), leaves: [
+      _RailGroup(key: 'monitor', label: s.t('railMonitoring'), leaves: [
         _RailLeaf(icon: Icons.speed_rounded, label: s.t('speedTest'), destination: NavDestination.speedTest),
         _RailLeaf(icon: Icons.radar_rounded, label: s.t('jammers'), destination: NavDestination.jammers),
         // The connection analyzer used to hide behind a button on the home
         // screen, which is exactly where nobody looks when the tunnel fails.
         _RailLeaf(icon: Icons.health_and_safety_rounded, label: s.t('diagTitle'), destination: NavDestination.diagnostics),
       ]),
+      _RailGroup(key: 'service', label: s.t('railService'), leaves: [
+        _RailLeaf(icon: Icons.auto_awesome_rounded, label: s.t('tabAuto'), destination: NavDestination.autotune),
+        _RailLeaf(icon: Icons.settings_rounded, label: s.t('settings'), destination: NavDestination.settingsGeneral),
+      ]),
     ];
 
     // Every section starts open so the whole map is visible at once; the
-    // chevron folds the ones the user does not need. Home never folds.
-    bool openOf(_RailGroup g) => g.alwaysOpen || (_open[g.key] ?? true);
+    // small chevron folds the ones the user does not need.
+    bool openOf(_RailGroup g) => _open[g.key] ?? true;
 
-    bool segSelected(NavDestination dest) =>
+    bool isActive(NavDestination dest) =>
         dest == destination ||
+        (dest == NavDestination.settingsGeneral && destination == NavDestination.settings) ||
         (dest == NavDestination.settingsGeneral &&
             (destination == NavDestination.settingsAppearance || destination == NavDestination.settingsAbout));
 
-    Widget _wideButton(NavDestination dest, IconData icon, String label) => SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () => nav.go(dest),
-            style: OutlinedButton.styleFrom(
-              backgroundColor: segSelected(dest) ? p.accent.withValues(alpha: .12) : null,
-              foregroundColor: segSelected(dest) ? p.accent : p.textSecondary,
-              padding: const EdgeInsets.symmetric(vertical: 10),
-            ),
-            icon: Icon(icon, size: 17),
-            label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-        );
-
-    Widget _segmentIcon(NavDestination dest, IconData icon, String label) => IconButton(
-          tooltip: label,
-          onPressed: () => nav.go(dest),
-          icon: Icon(icon, size: 20, color: segSelected(dest) ? p.accent : p.textSecondary),
-        );
-
-    Widget iconButton(NavDestination dest, IconData icon, String label) {
-      final selected = dest == destination;
-      return IconButton(
-        tooltip: label,
-        onPressed: () => nav.go(dest),
-        icon: Icon(icon, size: 21, color: selected ? p.accent : p.textSecondary),
-        style: IconButton.styleFrom(
-          backgroundColor: selected ? p.accent.withValues(alpha: .14) : Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    }
-
     final rail = AnimatedContainer(
-      duration: _draggingRail ? Duration.zero : const Duration(milliseconds: 220),
+      duration: _draggingRail ? Duration.zero : const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
-      width: collapsed ? 82 : _customWidth,
+      width: collapsed ? 74 : _customWidth,
       margin: const EdgeInsets.fromLTRB(12, 0, 0, 12),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
       decoration: BoxDecoration(
         color: p.card,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: p.border),
       ),
       child: Column(
         children: [
-          // Header: the brand lives here, next to the collapse toggle. The
-          // toggle used to float alone in an empty strip above "ГЛАВНАЯ".
           if (collapsed)
             Column(
               children: [
-                const Padding(padding: EdgeInsets.only(top: 2, bottom: 4), child: NukefyLogo(size: 26, glow: false)),
+                const Padding(padding: EdgeInsets.only(top: 2, bottom: 6), child: NukefyLogo(size: 24, glow: false)),
                 IconButton(
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                  constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                   tooltip: s.t('zExpandMenu'),
                   onPressed: nav.toggleRail,
-                  icon: const Icon(Icons.menu_rounded, size: 19),
+                  icon: Icon(Icons.menu_rounded, size: 19, color: p.textSecondary),
                 ),
                 IconButton(
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                  constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                   tooltip: s.t('sitemap'),
                   onPressed: () => _showSitemap(context, widget.sitemap, desktop: true),
                   icon: Icon(Icons.more_horiz_rounded, size: 19, color: p.textSecondary),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
               ],
             )
           else
@@ -783,147 +756,80 @@ class _SideRailState extends State<_SideRail> {
               height: 34,
               child: Row(
                 children: [
-                  // Same left offset as the section icons below, so the logo,
-                  // every section icon and every leaf icon share one column.
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   const NukefyLogo(size: 20, glow: false),
-                  // The spelled-out brand caption is gone: it pushed «ГЛАВНАЯ»
-                  // down and read as a second title. The rail starts with the
-                  // sections, and the three lines on the right fold it.
                   const Spacer(),
-                  // Right side of the header: the pinned pages as plain icons,
-                  // then the three-dot map of everything else.
                   for (final pin in pinnedSpecs)
                     Tooltip(
                       message: pin.label,
                       child: IconButton(
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                        constraints: const BoxConstraints.tightFor(width: 26, height: 26),
                         onPressed: () => nav.go(pin.destination),
                         icon: Icon(pin.icon,
-                            size: 16, color: pin.destination == destination ? p.accent : p.textSecondary),
+                            size: 15,
+                            color: pin.destination == destination ? p.accent : p.textSecondary),
                       ),
                     ),
                   IconButton(
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
                     tooltip: s.t('sitemap'),
                     onPressed: () => _showSitemap(context, widget.sitemap, desktop: true),
-                    icon: Icon(pinnedSpecs.isEmpty ? Icons.more_horiz_rounded : Icons.more_vert_rounded,
-                        size: 19, color: p.textSecondary),
+                    icon: Icon(Icons.more_horiz_rounded, size: 18, color: p.textSecondary),
                   ),
                   IconButton(
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                    constraints: const BoxConstraints.tightFor(width: 28, height: 28),
                     tooltip: s.t('zCollapseMenu'),
                     onPressed: nav.toggleRail,
-                    icon: const Icon(Icons.menu_rounded, size: 19),
+                    icon: Icon(Icons.menu_open_rounded, size: 18, color: p.textSecondary),
                   ),
                 ],
               ),
             ),
+          const SizedBox(height: 6),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final g in groups) ...[
-                    if (collapsed) ...[
-                      if (g != groups.first)
-                        Container(
-                          width: 30,
-                          height: 1,
-                          margin: const EdgeInsets.symmetric(vertical: 6),
-                          color: p.border,
-                        ),
-                      if (g.destination != null) iconButton(g.destination!, g.icon, g.label),
-                      for (final l in g.leaves) iconButton(l.destination, l.icon, l.label),
-                    ] else ...[
-                      InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () => setState(() {
-                          if (!g.alwaysOpen) _open[g.key] = !openOf(g);
-                          if (g.destination != null) nav.go(g.destination!);
-                        }),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: g.destination == destination ? p.accent.withValues(alpha: .14) : Colors.transparent,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(g.icon, size: 20, color: g.destination == destination ? p.accent : p.text),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(g.label.toUpperCase(),
-                                    style: AppTextStyles.bodyRegular.copyWith(fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: .8,
-                                        color: g.destination == destination ? p.accent : p.text)),
-                              ),
-                              if (!g.alwaysOpen)
-                                Icon(Icons.expand_more_rounded, size: 18, color: p.textSecondary),
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (openOf(g))
-                        for (final l in g.leaves)
-                          InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () => nav.go(l.destination),
-                            child: Container(
-                              margin: const EdgeInsets.only(left: 14, top: 2, bottom: 2),
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: l.destination == destination ? p.accent.withValues(alpha: .14) : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(l.icon, size: 17, color: l.destination == destination ? p.accent : p.textSecondary),
-                                  const SizedBox(width: 9),
-                                  Expanded(
-                                    child: Text(l.label,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTextStyles.bodyRegular.copyWith(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: l.destination == destination ? p.accent : p.textSecondary)),
-                                  ),
-                                ],
-                              ),
+                  for (var index = 0; index < groups.length; index++) ...[
+                    if (collapsed)
+                      ...() {
+                        final leaves = groups[index].leaves;
+                        return [
+                          if (index > 0)
+                            Container(
+                              height: 1,
+                              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                              color: p.border,
                             ),
+                          for (final leaf in leaves)
+                            _RailIcon(destination: leaf.destination, icon: leaf.icon, label: leaf.label, active: isActive(leaf.destination)),
+                        ];
+                      }()
+                    else ...[
+                      _RailCaption(
+                        label: groups[index].label,
+                        open: openOf(groups[index]),
+                        onTap: () => setState(() => _open[groups[index].key] = !openOf(groups[index])),
+                      ),
+                      if (openOf(groups[index]))
+                        for (final leaf in groups[index].leaves)
+                          _RailRow(
+                            icon: leaf.icon,
+                            label: leaf.label,
+                            active: isActive(leaf.destination),
+                            onTap: () => nav.go(leaf.destination),
                           ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                     ],
                   ],
                 ],
               ),
             ),
           ),
-          // One wide pill, three independent segments: auto-tune, add-ons
-          // and settings. Collapsed rail stacks them vertically.
-          if (collapsed)
-            Container(
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: p.border)),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _segmentIcon(NavDestination.autotune, Icons.auto_awesome_rounded, s.t('tabAuto')),
-                  Container(height: 1, color: p.border),
-                  _segmentIcon(NavDestination.addons, Icons.extension_rounded, s.t('tabAddons')),
-                  Container(height: 1, color: p.border),
-                  _segmentIcon(NavDestination.settingsGeneral, Icons.settings_rounded, s.t('settings')),
-                ],
-              ),
-            )
-          else ...[
-            _wideButton(NavDestination.autotune, Icons.auto_awesome_rounded, s.t('tabAuto')),
-            const SizedBox(height: 6),
-            _wideButton(NavDestination.addons, Icons.extension_rounded, s.t('tabAddons')),
-            const SizedBox(height: 6),
-            _wideButton(NavDestination.settingsGeneral, Icons.settings_rounded, s.t('settings')),
-          ],
         ],
       ),
     );
@@ -937,14 +843,14 @@ class _SideRailState extends State<_SideRail> {
           right: 0,
           top: 0,
           bottom: 12,
-          width: 12,
+          width: 10,
           child: MouseRegion(
             cursor: SystemMouseCursors.resizeLeftRight,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onHorizontalDragStart: (_) => setState(() => _draggingRail = true),
               onHorizontalDragUpdate: (details) {
-                setState(() => _customWidth = (_customWidth + details.delta.dx).clamp(220, 380).toDouble());
+                setState(() => _customWidth = (_customWidth + details.delta.dx).clamp(216, 380).toDouble());
               },
               onHorizontalDragEnd: (_) {
                 setState(() => _draggingRail = false);
@@ -954,6 +860,155 @@ class _SideRailState extends State<_SideRail> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Small uppercase caption above a group of rows.
+class _RailCaption extends StatelessWidget {
+  const _RailCaption({required this.label, required this.open, required this.onTap});
+
+  final String label;
+  final bool open;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 10, 6, 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.section.copyWith(
+                  fontSize: 10.5,
+                  letterSpacing: 1.3,
+                  color: p.textSecondary.withValues(alpha: .75),
+                ),
+              ),
+            ),
+            AnimatedRotation(
+              duration: const Duration(milliseconds: 160),
+              turns: open ? .5 : 0,
+              child: Icon(Icons.expand_more_rounded, size: 15, color: p.textSecondary.withValues(alpha: .75)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One navigation row. Height, radius, icon size and the active marker are
+/// shared by every page in the rail — that is what makes the column read as a
+/// menu instead of a pile of widgets.
+class _RailRow extends StatefulWidget {
+  const _RailRow({required this.icon, required this.label, required this.active, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  State<_RailRow> createState() => _RailRowState();
+}
+
+class _RailRowState extends State<_RailRow> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final active = widget.active;
+    final bg = active
+        ? p.accent.withValues(alpha: .13)
+        : _hover
+            ? p.text.withValues(alpha: .045)
+            : Colors.transparent;
+    final fg = active ? p.accent : (_hover ? p.text : p.textSecondary);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            widget.onTap();
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 130),
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+            child: Row(
+              children: [
+                // Marker instead of a colour change only: the eye finds the
+                // current page even at a glance.
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 130),
+                  width: 3,
+                  height: active ? 16 : 0,
+                  margin: const EdgeInsets.only(right: 7),
+                  decoration: BoxDecoration(color: p.accent, borderRadius: BorderRadius.circular(2)),
+                ),
+                Icon(widget.icon, size: 18, color: fg),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.bodyRegular.copyWith(
+                      fontSize: 13,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                      color: fg,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Collapsed variant: same icon column, tooltip instead of a label.
+class _RailIcon extends StatelessWidget {
+  const _RailIcon({required this.destination, required this.icon, required this.label, required this.active});
+
+  final NavDestination destination;
+  final IconData icon;
+  final String label;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: IconButton(
+        tooltip: label,
+        onPressed: () => context.read<NavProvider>().go(destination),
+        icon: Icon(icon, size: 20, color: active ? p.accent : p.textSecondary),
+        style: IconButton.styleFrom(
+          backgroundColor: active ? p.accent.withValues(alpha: .14) : Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          minimumSize: const Size(38, 38),
+        ),
+      ),
     );
   }
 }
@@ -1026,12 +1081,26 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> {
               ),
             ),
           ),
-          // Minimize + Close. The shell still lives maximized (the guard in
-          // main.dart re-maximizes on restore and explicitly leaves a
-          // minimized window alone), but the user asked for the minimize
-          // dash back next to the cross — minimizing to the taskbar is a
-          // real, working action, not a restore that snaps back.
+          // Minimize, maximize/restore and close — the three buttons every
+          // Windows window has. The maximize button was missing entirely, so a
+          // window that opened small could only be fixed from the taskbar.
           _WindowButton(icon: Icons.remove_rounded, onTap: windowManager.minimize),
+          ValueListenableBuilder<bool>(
+            valueListenable: AppPerf.maximized,
+            builder: (context, maximized, _) => _WindowButton(
+              icon: maximized ? Icons.filter_none_rounded : Icons.crop_square_rounded,
+              tooltip: maximized ? s.t('windowRestore') : s.t('windowMaximize'),
+              onTap: () async {
+                if (await windowManager.isMaximized()) {
+                  await windowManager.unmaximize();
+                  AppPerf.maximized.value = false;
+                } else {
+                  await windowManager.maximize();
+                  AppPerf.maximized.value = true;
+                }
+              },
+            ),
+          ),
           _WindowButton(icon: Icons.close_rounded, danger: true, onTap: windowManager.close),
         ],
       ),
@@ -1040,10 +1109,11 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> {
 }
 
 class _WindowButton extends StatefulWidget {
-  const _WindowButton({required this.icon, required this.onTap, this.danger = false});
+  const _WindowButton({required this.icon, required this.onTap, this.danger = false, this.tooltip});
   final IconData icon;
   final Future<void> Function() onTap;
   final bool danger;
+  final String? tooltip;
 
   @override
   State<_WindowButton> createState() => _WindowButtonState();
@@ -1061,14 +1131,16 @@ class _WindowButtonState extends State<_WindowButton> {
             ? p.error.withValues(alpha: 0.85)
             : p.text.withValues(alpha: 0.08);
     final fg = _hover && widget.danger ? Colors.white : p.textSecondary;
-    return MouseRegion(
+    final button = MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        // A hit target that actually shows: the old buttons reacted only with
+        // a 120 ms colour fade and felt dead under the cursor.
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
+          duration: const Duration(milliseconds: 110),
           width: 46,
           height: 40,
           color: bg,
@@ -1076,6 +1148,8 @@ class _WindowButtonState extends State<_WindowButton> {
         ),
       ),
     );
+    final tip = widget.tooltip;
+    return tip == null ? button : Tooltip(message: tip, waitDuration: const Duration(milliseconds: 500), child: button);
   }
 }
 

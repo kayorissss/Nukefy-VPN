@@ -70,7 +70,11 @@ AllowNoIcons=yes
 Compression=zip
 SolidCompression=no
 SetupLogging=yes
-UsePreviousAppDir=yes
+; The old self-made installer wrote "C:\Program Files\Nukefy VPN" into the
+; shared registry key, and remembering that path is exactly how new files kept
+; landing in the legacy folder. The client always lives in its own directory
+; now; the old one is deleted by RemoveLegacyEntries below.
+UsePreviousAppDir=no
 UsePreviousTasks=yes
 
 [Languages]
@@ -101,8 +105,12 @@ Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
+; NukefyClient.exe declares requireAdministrator (TUN + WinDivert need it).
+; Inno's own CreateProcess on such a file fails with code 740 ("запрошенная
+; операция требует повышения") on the Finish page, so the launch goes through
+; the shell: `start` raises the elevation prompt instead of failing.
 [Run]
-Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{sys}\cmd.exe"; Parameters: "/c start """" ""{app}\{#AppExeName}"""; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runhidden
 
 [UninstallRun]
 ; Only our own service and our own capture: a zapret installed by the user
