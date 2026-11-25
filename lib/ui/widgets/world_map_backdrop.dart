@@ -141,14 +141,12 @@ class _WorldMapPainter extends CustomPainter {
     // country drifting towards the upper middle of the canvas.
     const zoom = 2.7;
     final anchor = Offset(size.width / 2, size.height * 0.42);
-    final focus = country == null
-        ? null
-        : _toDevice(country!.$1, country!.$2, cell, size);
+    final focal = country == null ? null : _toDevice(country.$1, country.$2, cell, size);
     final t = Curves.easeInOutCubic.transform(progress.clamp(0.0, 1.0));
-    final active = focus == null ? 0.0 : t;
+    final active = focal == null ? 0.0 : t;
     final s = 1 + active * (zoom - 1);
-    final tx = active * (anchor.dx - focus!.dx - focus.dx * (zoom - 1));
-    final ty = active * (anchor.dy - focus.dy - focus.dy * (zoom - 1));
+    final tx = focal == null ? 0.0 : active * (anchor.dx - focal.dx - focal.dx * (zoom - 1));
+    final ty = focal == null ? 0.0 : active * (anchor.dy - focal.dy - focal.dy * (zoom - 1));
 
     // Land dots. Two passes: the whole world faintly, then everything near
     // the marker a little brighter, so the eye goes to the right place.
@@ -159,19 +157,19 @@ class _WorldMapPainter extends CustomPainter {
       ..color = accent.withValues(alpha: dark ? 0.42 : 0.34)
       ..isAntiAlias = true;
     final r = math.max(0.7, cell * 0.30);
-    final glowRadius = focus == null ? 0.0 : cell * 9;
+    final glowRadius = focal == null ? 0.0 : cell * 9;
     for (final dot in _dots) {
       final x = dot.dx * s + tx;
       final y = dot.dy * s + ty;
       if (x < -cell || y < -cell || x > size.width + cell || y > size.height + cell) continue;
-      final isNear = focus != null &&
-          (dot - focus).distance < glowRadius &&
-          (dot - focus).distance > 0;
+      final isNear = focal != null &&
+          (dot - focal).distance < glowRadius &&
+          (dot - focal).distance > 0;
       canvas.drawCircle(Offset(x, y), r * (isNear ? 1.25 : 1), isNear ? near : base);
     }
 
-    if (focus == null) return;
-    final center = Offset(focus.dx * s + tx, focus.dy * s + ty);
+    if (focal == null) return;
+    final center = Offset(focal.dx * s + tx, focal.dy * s + ty);
     final marker = connected ? success : accent;
 
     // Resting glow: one radial gradient, no blur filter.
