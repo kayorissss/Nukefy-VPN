@@ -33,7 +33,7 @@ jobs:
         run: |
           {
             echo '```'
-            grep -E ' • ' analyze.txt | head -200
+            grep -E '(error|warning) •' analyze.txt | head -80
             echo '```'
           } > body.md
           gh api -X POST "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" -F body=@body.md || true
