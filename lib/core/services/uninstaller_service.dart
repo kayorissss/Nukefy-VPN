@@ -179,8 +179,10 @@ class UninstallerService {
       ..writeln(r'$support = ' + _psQuote(support))
       // Wait for this process to exit so nothing is locked while we work.
       ..writeln(r'$appPid = $pid')
-      ..writeln('$deadline = (Get-Date).AddSeconds(90)')
-      ..writeln('while ((Get-Process -Id $appPid -ErrorAction SilentlyContinue) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Milliseconds 350 }')
+      // Raw strings: `$deadline` and `$appPid` are PowerShell variables, not
+      // Dart interpolation — without the r prefix the script got empty names.
+      ..writeln(r'$deadline = (Get-Date).AddSeconds(90)')
+      ..writeln(r'while ((Get-Process -Id $appPid -ErrorAction SilentlyContinue) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Milliseconds 350 }')
       ..writeln('Start-Sleep -Milliseconds 600')
       ..writeln('Note "app closed or timeout reached"');
 
