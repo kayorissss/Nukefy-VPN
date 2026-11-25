@@ -20,6 +20,7 @@ import '../import_actions.dart';
 import '../widgets/country_badge.dart';
 import '../widgets/nukefy_feedback.dart';
 import '../widgets/ping_badge.dart';
+import '../../l10n/strings.dart';
 import '../widgets/section_card.dart';
 import '../widgets/responsive_sections.dart';
 import 'server_edit_screen.dart';

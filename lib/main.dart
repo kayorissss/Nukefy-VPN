@@ -65,6 +65,29 @@ void _migrateLegacyData() {
   } catch (_) {}
 }
 
+/// Maximises the main window and makes sure it stuck. Earlier the call ran
+/// before `show()`, Windows dropped it, and the app kept opening in a small
+/// window with no way back except the taskbar.
+Future<void> _maximizeWindow(WindowOptions options) async {
+  for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      await windowManager.maximize();
+      await Future<void>.delayed(Duration(milliseconds: 120 + attempt * 160));
+      if (await windowManager.isMaximized()) {
+        AppPerf.maximized.value = true;
+        return;
+      }
+    } catch (error) {
+      AppLog.log('window maximize failed: $error');
+      break;
+    }
+  }
+  try {
+    await windowManager.setSize(options.size!);
+    await windowManager.center();
+  } catch (_) {}
+}
+
 Future<void> main() async {
   runZonedGuarded(_main, (error, stack) => AppLog.log('uncaught: $error\n$stack'));
 }
@@ -185,29 +208,6 @@ Future<void> _main() async {
       await _maximizeWindow(options);
       AppLog.log('window shown and maximized');
     });
-  }
-
-  /// Maximises the main window and makes sure it stuck. Earlier the call ran
-  /// before `show()`, Windows dropped it, and the app kept opening in a small
-  /// window with no way back except the taskbar.
-  Future<void> _maximizeWindow(WindowOptions options) async {
-    for (var attempt = 0; attempt < 3; attempt++) {
-      try {
-        await windowManager.maximize();
-        await Future<void>.delayed(Duration(milliseconds: 120 + attempt * 160));
-        if (await windowManager.isMaximized()) {
-          AppPerf.maximized.value = true;
-          return;
-        }
-      } catch (error) {
-        AppLog.log('window maximize failed: $error');
-        break;
-      }
-    }
-    try {
-      await windowManager.setSize(options.size!);
-      await windowManager.center();
-    } catch (_) {}
   }
 
   // Every init step is bounded and non-fatal: a stuck storage read or a
