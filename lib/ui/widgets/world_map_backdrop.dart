@@ -141,7 +141,10 @@ class _WorldMapPainter extends CustomPainter {
     // country drifting towards the upper middle of the canvas.
     const zoom = 2.7;
     final anchor = Offset(size.width / 2, size.height * 0.42);
-    final focal = country == null ? null : _toDevice(country.$1, country.$2, cell, size);
+    // Local, because a field never promotes: `country.$1` needs a non-null
+    // receiver that the compiler can actually prove.
+    final point = country;
+    final focal = point == null ? null : _toDevice(point.$1, point.$2, cell, size);
     final t = Curves.easeInOutCubic.transform(progress.clamp(0.0, 1.0));
     final active = focal == null ? 0.0 : t;
     final s = 1 + active * (zoom - 1);
