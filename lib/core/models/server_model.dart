@@ -43,6 +43,14 @@ class ServerModel {
   DateTime? lastPingAt;
   DateTime? createdAt;
 
+  /// Result of the last real probe sent *through* this server's tunnel
+  /// (`null` = never checked in this run). `pingMs` only proves that the TCP
+  /// port answered — a dead or misconfigured node happily accepts the
+  /// handshake — so the UI shows this next to the latency instead of
+  /// pretending the green number means "works".
+  bool? tunnelOk;
+  DateTime? tunnelCheckedAt;
+
   bool get isAvailable => pingMs != null && pingMs! >= 0;
   bool get isTimeout => pingMs != null && pingMs! < 0;
   bool get isBridge =>

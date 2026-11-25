@@ -647,6 +647,15 @@ class VpnProvider extends ChangeNotifier {
       trafficOk = true;
       errorMessage = null;
     }
+    // Remember the verdict per server: the list keeps showing this server
+    // long after the session ends, and a green latency next to a server that
+    // proved it passes no traffic is exactly the "обман" people complain
+    // about.
+    final probed = _servers?.byId(serverId);
+    if (probed != null) {
+      probed.tunnelOk = trafficOk;
+      probed.tunnelCheckedAt = DateTime.now();
+    }
     notifyListeners();
   }
 

@@ -137,7 +137,12 @@ class MainShell extends StatelessWidget {
                                 Expanded(
                                   child: Stack(
                                     children: [
-                                      const Positioned.fill(child: _MascotBackdrop()),
+                                      // The home screen paints its own dotted
+                                      // world map; two backdrops behind one
+                                      // page is exactly the "stuff poured in"
+                                      // look this pass is getting rid of.
+                                      if (destination != NavDestination.home)
+                                        const Positioned.fill(child: _MascotBackdrop()),
                                       Align(
                                         alignment: Alignment.topCenter,
                                         child: ConstrainedBox(
@@ -1083,7 +1088,11 @@ class _MascotBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return IgnorePointer(
+    // Its own layer: the artwork plus its gradient mask is expensive to
+    // rasterise, and the shell around it rebuilds whenever the tunnel status
+    // or the hovered rail item changes. Cached once, repainted never.
+    return RepaintBoundary(
+      child: IgnorePointer(
       child: Align(
         alignment: Alignment.bottomRight,
         child: FractionallySizedBox(
@@ -1092,7 +1101,7 @@ class _MascotBackdrop extends StatelessWidget {
             // Kept visible as brand art, but never strong enough to fight the
             // text: at 0.92 in the light theme the mascot showed through the
             // (then translucent) cards and read as overlapping ghost text.
-            opacity: dark ? 0.12 : 0.25,
+            opacity: dark ? 0.085 : 0.16,
             // One ShaderMask instead of two nested ones: every mask is a
             // saveLayer, and the pair re-blended the whole backdrop on each
             // repaint. A single diagonal gradient gives the same soft fade.
@@ -1115,6 +1124,7 @@ class _MascotBackdrop extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

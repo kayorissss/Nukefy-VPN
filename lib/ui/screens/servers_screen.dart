@@ -552,7 +552,8 @@ class ServerTile extends StatelessWidget {
                       padding: const EdgeInsets.only(right: 6),
                       child: Icon(Icons.bolt_rounded, size: 18, color: p.success),
                     ),
-                  if (!server.isInformational) PingBadge(pingMs: server.pingMs, compact: true),
+                  if (!server.isInformational)
+                    PingBadge(pingMs: server.pingMs, tunnelOk: server.tunnelOk, compact: true),
                   IconButton(tooltip: s.t('actions'), onPressed: () => _actions(context, server), icon: const Icon(Icons.more_horiz, size: 20)),
                 ],
               ),

@@ -86,7 +86,6 @@ Name: "autostart"; Description: "{cm:AutoStartProgram,{#AppName}}"; GroupDescrip
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
 [InstallDelete]
 ; Files that belonged to the old self-extractor / older builds and must not

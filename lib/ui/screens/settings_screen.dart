@@ -58,7 +58,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final vpn = context.watch<VpnProvider>();
+    // read, not watch: the provider notifies once a second while a tunnel is
+    // up, and rebuilding this whole page (and every row in it) on every tick
+    // was pure waste. Only the core cards listen, and only to their own state.
     final s = settings.strings;
     final value = settings.settings;
     final p = context.palette;
@@ -69,16 +71,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 100),
         // The rail is the desktop section switcher. On mobile the local tabs
         // and the update banner remain page-level, full-width elements.
-        minColumnWidth: 460,
-        maxColumns: 2,
-        fullWidthCount: (widget.showSubtabs ? 1 : 0) + (_section == 0 ? 1 : 0),
+        // One centred column instead of a two-column masonry. Cards of
+        // different heights side by side read as "everything was poured in
+        // here"; a single 1000 px column gives every row the same rhythm and
+        // keeps labels short enough to scan.
+        minColumnWidth: 1000,
+        maxColumns: 1,
+        maxWidth: 1000,
+        fullWidthCount: 0,
         children: [
           if (widget.showSubtabs)
             _SettingsSubtabs(selected: _section, onChanged: (value) => setState(() => _section = value)),
-          if (_section == 0) const _UpdateBanner(),
           if (_section == 0) SectionCard(
-            title: s.t('general'),
-            icon: Icons.tune_rounded,
+            title: s.t('vpn'),
+            icon: Icons.vpn_key_outlined,
             child: Column(
               children: [
                 SwitchTile(
@@ -88,54 +94,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   value: value.autoConnect,
                   onChanged: (next) => settings.update((item) => item.autoConnect = next),
                 ),
-                SwitchTile(
-                  icon: Icons.power_settings_new_rounded,
-                  title: s.t('launchOnBoot'),
-                  value: value.launchOnBoot,
-                  onChanged: (next) async {
-                    await settings.update((item) => item.launchOnBoot = next);
-                    await VpnPlatform().setAutoStart(next, startInTray: settings.settings.startInTray);
-                  },
-                ),
-                if (Platform.isWindows)
-                  SwitchTile(
-                    icon: Icons.move_to_inbox_rounded,
-                    title: s.t('startInTray'),
-                    subtitle: s.t('startInTrayHint'),
-                    value: value.startInTray,
-                    onChanged: (next) async {
-                      await settings.update((item) => item.startInTray = next);
-                      await VpnPlatform().setAutoStart(value.launchOnBoot, startInTray: next);
-                    },
-                  ),
-                SwitchTile(
-                  icon: Icons.notifications_none_rounded,
-                  title: s.t('notifications'),
-                  value: value.notifications,
-                  onChanged: (next) => settings.update((item) => item.notifications = next),
-                ),
-                if (Platform.isWindows)
-                  SettingsTile(
-                    icon: Icons.close_rounded,
-                    title: s.t('closeAction'),
-                    trailing: NukefyDropdown<String>(
-                      value: const ['ask', 'tray', 'exit'].contains(value.closeAction) ? value.closeAction : 'ask',
-                      items: {
-                        'ask': s.t('closeAsk'),
-                        'tray': s.t('closeTray'),
-                        'exit': s.t('closeExit'),
-                      },
-                      onChanged: (next) => settings.update((item) => item.closeAction = next),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (_section == 0) SectionCard(
-            title: s.t('vpn'),
-            icon: Icons.vpn_key_outlined,
-            child: Column(
-              children: [
                 SettingsTile(
                   icon: Icons.alt_route_rounded,
                   title: s.t('routing'),
@@ -191,6 +149,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   value: value.blockQuic,
                   onChanged: (next) => settings.update((item) => item.blockQuic = next),
                 ),
+              ],
+            ),
+          ),
+          if (_section == 0) SectionCard(
+            title: s.t('startupWindow'),
+            icon: Icons.power_settings_new_rounded,
+            child: Column(
+              children: [
+                SwitchTile(
+                  icon: Icons.power_settings_new_rounded,
+                  title: s.t('launchOnBoot'),
+                  value: value.launchOnBoot,
+                  onChanged: (next) async {
+                    await settings.update((item) => item.launchOnBoot = next);
+                    await VpnPlatform().setAutoStart(next, startInTray: settings.settings.startInTray);
+                  },
+                ),
+                if (Platform.isWindows)
+                  SwitchTile(
+                    icon: Icons.move_to_inbox_rounded,
+                    title: s.t('startInTray'),
+                    subtitle: s.t('startInTrayHint'),
+                    value: value.startInTray,
+                    onChanged: (next) async {
+                      await settings.update((item) => item.startInTray = next);
+                      await VpnPlatform().setAutoStart(value.launchOnBoot, startInTray: next);
+                    },
+                  ),
+                SwitchTile(
+                  icon: Icons.notifications_none_rounded,
+                  title: s.t('notifications'),
+                  value: value.notifications,
+                  onChanged: (next) => settings.update((item) => item.notifications = next),
+                ),
+                if (Platform.isWindows)
+                  SettingsTile(
+                    icon: Icons.close_rounded,
+                    title: s.t('closeAction'),
+                    trailing: NukefyDropdown<String>(
+                      value: const ['ask', 'tray', 'exit'].contains(value.closeAction) ? value.closeAction : 'ask',
+                      items: {
+                        'ask': s.t('closeAsk'),
+                        'tray': s.t('closeTray'),
+                        'exit': s.t('closeExit'),
+                      },
+                      onChanged: (next) => settings.update((item) => item.closeAction = next),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -275,8 +281,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           // Everything below is for people who know what they are doing.
           if (_section == 0 && !Platform.isAndroid) ...[
-            _CoreCard(vpn: vpn, strings: s),
-            _XrayCard(vpn: vpn, strings: s),
+            _CoreCard(strings: s),
+            _XrayCard(strings: s),
           ],
           if (_section == 0) _ToolsCard(strings: s),
           if (_section == 0) _MoreCard(
@@ -406,6 +412,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           if (_section == 1) _AppearanceCard(settings: settings),
+          if (_section == 2) const _UpdateBanner(),
           if (_section == 2) SectionCard(
             title: s.t('about'),
             icon: Icons.info_outline_rounded,
@@ -617,42 +624,46 @@ class _SettingsSubtabs extends StatelessWidget {
       (s.t('appearanceTab'), Icons.palette_outlined),
       (s.t('aboutTab'), Icons.info_outline_rounded),
     ];
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(5),
-      decoration: BoxDecoration(
-        color: p.card,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: p.border),
-      ),
-      child: Row(
+    // Pills, not a page-wide segmented bar: the old control stretched across
+    // the whole canvas and outweighed the content it was switching between.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
           for (var index = 0; index < items.length; index++)
-            Expanded(
-              child: Semantics(
-                button: true,
-                selected: selected == index,
-                label: items[index].$1,
-                child: InkWell(
-                  onTap: () => onChanged(index),
-                  borderRadius: BorderRadius.circular(16),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOutCubic,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-                    decoration: BoxDecoration(
-                      color: selected == index ? p.background : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: selected == index ? p.accent.withValues(alpha: .65) : Colors.transparent, width: 1.2),
+            Semantics(
+              button: true,
+              selected: selected == index,
+              label: items[index].$1,
+              child: InkWell(
+                onTap: () => onChanged(index),
+                borderRadius: BorderRadius.circular(999),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOutCubic,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected == index ? p.accent.withValues(alpha: .14) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: selected == index ? p.accent.withValues(alpha: .55) : p.border,
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(items[index].$2, size: 17, color: selected == index ? p.accent : p.textSecondary),
-                        const SizedBox(width: 6),
-                        Flexible(child: Text(items[index].$1, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: AppTextStyles.bodySecondary.copyWith(color: selected == index ? p.text : p.textSecondary, fontWeight: FontWeight.w700))),
-                      ],
-                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(items[index].$2, size: 16, color: selected == index ? p.accent : p.textSecondary),
+                      const SizedBox(width: 7),
+                      Text(
+                        items[index].$1,
+                        style: AppTextStyles.bodySecondary.copyWith(
+                          color: selected == index ? p.text : p.textSecondary,
+                          fontWeight: selected == index ? FontWeight.w700 : FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -828,12 +839,12 @@ class _ModeOption extends StatelessWidget {
 }
 
 class _XrayCard extends StatelessWidget {
-  const _XrayCard({required this.vpn, required this.strings});
-  final VpnProvider vpn;
+  const _XrayCard({required this.strings});
   final S strings;
 
   @override
   Widget build(BuildContext context) {
+    final vpn = context.watch<VpnProvider>();
     final p = context.palette;
     final core = vpn.xrayCore;
     final installed = core?.available == true;
@@ -874,11 +885,13 @@ class _XrayCard extends StatelessWidget {
   }
 
   Future<void> _deleteXray(BuildContext context) async {
+    final vpn = context.read<VpnProvider>();
     final ok = await confirmDialog(context, title: strings.t('deleteCore'), body: strings.t('coreDeleteBody'), confirm: strings.t('delete'), cancel: strings.t('cancel'));
     if (ok && context.mounted) await vpn.deleteXrayCore();
   }
 
   Future<void> _downloadXray(BuildContext context) async {
+    final vpn = context.read<VpnProvider>();
     final result = await showDialog<Object?>(
       context: context,
       barrierDismissible: false,
@@ -899,12 +912,12 @@ class _XrayCard extends StatelessWidget {
 }
 
 class _CoreCard extends StatelessWidget {
-  const _CoreCard({required this.vpn, required this.strings});
-  final VpnProvider vpn;
+  const _CoreCard({required this.strings});
   final S strings;
 
   @override
   Widget build(BuildContext context) {
+    final vpn = context.watch<VpnProvider>();
     final s = strings;
     final p = context.palette;
     final core = vpn.core;
@@ -1065,7 +1078,9 @@ class _MoreCard extends StatefulWidget {
 }
 
 class _MoreCardState extends State<_MoreCard> {
-  bool _open = true;
+  // Collapsed by default: this card holds mux, fragment, MTU, logs and import
+  // tools, all of which most people never touch.
+  bool _open = false;
 
   @override
   Widget build(BuildContext context) {

@@ -25,12 +25,12 @@ class SectionCard extends StatelessWidget {
     final p = context.palette;
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 13, 16, 8),
       decoration: BoxDecoration(
         // Fully opaque on purpose: at 82% the mascot backdrop bled through
         // every card and the settings page looked like overlapping text.
         color: p.card,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: p.border),
       ),
       child: Column(
@@ -62,7 +62,12 @@ class SectionCard extends StatelessWidget {
               style: AppTextStyles.bodySecondary.copyWith(color: p.textSecondary),
             ),
           ],
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
+          // A hairline separates the caption from the rows: without it the
+          // uppercase title floated inside the same block of text as the first
+          // switch, and long cards were hard to parse at a glance.
+          Container(height: 1, color: p.border.withValues(alpha: .55)),
+          const SizedBox(height: 2),
           child,
         ],
       ),
@@ -159,7 +164,7 @@ class SettingsTile extends StatelessWidget {
           child: Material(
           color: Colors.transparent,
           child: InkWell(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2, vertical: kRowVPad),

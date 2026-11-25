@@ -28,6 +28,7 @@ import '../../core/services/update_service.dart';
 import 'diagnostics_screen.dart';
 import 'main_shell.dart';
 import 'update_screen.dart';
+import '../widgets/world_map_backdrop.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -172,7 +173,19 @@ class HomeScreen extends StatelessWidget {
       ),
     );
 
-    return SafeArea(
+    return Stack(
+      children: [
+        // Where the server actually is, drawn from Natural Earth dots. It
+        // glides to the country on connect and then stops moving.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: WorldMapBackdrop(
+              countryCode: server?.countryCode,
+              connected: vpn.status == VpnStatus.connected,
+            ),
+          ),
+        ),
+        SafeArea(
       bottom: false,
       child: Padding(
         padding: EdgeInsets.fromLTRB(desktop ? 32 : 18, desktop ? 28 : 8, desktop ? 32 : 18, 0),
@@ -222,6 +235,8 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
       ),
+    ),
+      ],
     );
   }
 
@@ -355,7 +370,7 @@ class _ServerPickerSheetState extends State<_ServerPickerSheet> {
                                 ],
                               ),
                             ),
-                            PingBadge(pingMs: server.pingMs, compact: true),
+                            PingBadge(pingMs: server.pingMs, tunnelOk: server.tunnelOk, compact: true),
                             if (active) ...[
                               const SizedBox(width: 6),
                               Icon(Icons.check_circle_rounded, size: 18, color: p.accent),
@@ -719,7 +734,8 @@ class _ServerCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (server?.pingMs != null) PingBadge(pingMs: server!.pingMs, strings: s),
+                if (server?.pingMs != null)
+                  PingBadge(pingMs: server!.pingMs, tunnelOk: server.tunnelOk, strings: s),
                 const SizedBox(width: 4),
                 Icon(Icons.unfold_more_rounded, color: p.textSecondary),
               ],

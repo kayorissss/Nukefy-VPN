@@ -13,6 +13,7 @@ class ResponsiveSections extends StatelessWidget {
     this.minColumnWidth = 460,
     this.maxColumns = 3,
     this.fullWidthCount = 0,
+    this.maxWidth = double.infinity,
   });
 
   final List<Widget> children;
@@ -20,6 +21,11 @@ class ResponsiveSections extends StatelessWidget {
   final double minColumnWidth;
   final int maxColumns;
   final int fullWidthCount;
+
+  /// Upper bound for the content column. A settings page stretched over a
+  /// 3440 px monitor turned every row into a 3-metre-long line with a switch
+  /// somewhere far right; capping it keeps rows readable.
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, bounds) {
@@ -66,10 +72,12 @@ class ResponsiveSections extends StatelessWidget {
                   padding: EdgeInsets.only(bottom: gap),
                   child: row.length == 1
                       ? row.first
-                      : IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
+                      : Row(
+                          // Was IntrinsicHeight + stretch: Flutter measured the
+                          // whole subtree twice on every layout, and cards that
+                          // rebuild once a second paid for it twice a second.
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                               for (var col = 0; col < columns; col++) ...[
                                 if (col > 0) const SizedBox(width: columnGap),
                                 Expanded(
@@ -80,13 +88,12 @@ class ResponsiveSections extends StatelessWidget {
                               ],
                             ],
                           ),
-                        ),
                 ),
             ],
           );
         }
 
-        return SingleChildScrollView(
+        final view = SingleChildScrollView(
           padding: padding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -95,6 +102,14 @@ class ResponsiveSections extends StatelessWidget {
                 Padding(padding: const EdgeInsets.only(bottom: 14), child: child),
               columnsView(),
             ],
+          ),
+        );
+        if (maxWidth == double.infinity) return view;
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: SizedBox(width: double.infinity, child: view),
           ),
         );
       });
