@@ -53,6 +53,3 @@ app.*.map.json
 
 # Preview server scratch
 /preview/.cache/
-
-# Generated design mockups (large PNGs, not shipped)
-/designs/

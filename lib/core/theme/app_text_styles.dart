@@ -67,9 +67,6 @@ class AppTextStyles {
     fontFamily: mono,
     fontWeight: FontWeight.w500,
     fontSize: 13,
-    // Tabular figures keep live speed/ping/timer readouts from shifting
-    // sideways every time a digit changes.
-    fontFeatures: [FontFeature.tabularFigures()],
   );
 
   static const TextStyle number = TextStyle(

@@ -245,13 +245,10 @@ class ThemePresets {
       dark: ThemePalette(background: Color(0xFF07111F), card: Color(0xFF0D1D31), surface: Color(0xFF122943), border: Color(0xFF204568), text: Color(0xFFEEF7FF), textSecondary: Color(0xFF91ACC7), textDisabled: Color(0xFF526F8E), accent: Color(0xFF55B7FF), accent2: Color(0xFF9D8CFF), success: Color(0xFF58D6BA)),
       light: ThemePalette(background: Color(0xFFEEF7FF), card: Color(0xFFFFFFFF), surface: Color(0xFFDDECF9), border: Color(0xFFC0D7EB), text: Color(0xFF102237), textSecondary: Color(0xFF5E7890), textDisabled: Color(0xFFA4B9CB), accent: Color(0xFF0969B5), accent2: Color(0xFF6749CC), success: Color(0xFF087F69)),
     ),
-    // Cherry skin: warm near-black surfaces, one crimson accent, and a rose
-    // "success" so the palette carries no green at all. The old preset kept a
-    // green success colour, which painted connected-state dots and good pings
-    // green inside an otherwise red app.
+    // A black/red skin with red status and controls throughout the app.
     'crimson': ThemePreset(
-      dark: ThemePalette(background: Color(0xFF0B0809), card: Color(0xFF151112), surface: Color(0xFF1D1819), border: Color(0xFF2E2023), text: Color(0xFFF6EDEF), textSecondary: Color(0xFFB39BA0), textDisabled: Color(0xFF6E565C), accent: Color(0xFFD81B45), accent2: Color(0xFF7E1631), success: Color(0xFFF0919F)),
-      light: ThemePalette(background: Color(0xFFFDF6F7), card: Color(0xFFFFFFFF), surface: Color(0xFFF7E7EA), border: Color(0xFFE7C3C9), text: Color(0xFF1E0B10), textSecondary: Color(0xFF6E4A51), textDisabled: Color(0xFFB08F95), accent: Color(0xFFC4183C), accent2: Color(0xFF7E1631), success: Color(0xFFA81E3D)),
+      dark: ThemePalette(background: Color(0xFF070707), card: Color(0xFF111111), surface: Color(0xFF1B1B1B), border: Color(0xFF3A171D), text: Color(0xFFFFF1F3), textSecondary: Color(0xFFC49AA2), textDisabled: Color(0xFF70434B), accent: Color(0xFFE53950), accent2: Color(0xFF8F1D2C), success: Color(0xFF72D6A0)),
+      light: ThemePalette(background: Color(0xFFFFF5F6), card: Color(0xFFFFFFFF), surface: Color(0xFFFFE5E8), border: Color(0xFFE6B5BD), text: Color(0xFF2A0D13), textSecondary: Color(0xFF754A53), textDisabled: Color(0xFFB88B94), accent: Color(0xFFC51F42), accent2: Color(0xFF8F1D2C), success: Color(0xFF147A4A)),
     ),
   };
 

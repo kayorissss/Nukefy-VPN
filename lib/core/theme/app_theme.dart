@@ -7,12 +7,12 @@ import 'app_colors.dart';
 import 'app_text_styles.dart';
 
 class AppTheme {
-  static ThemeData dark([String accent = 'cyan', String visualTheme = 'crimson']) {
+  static ThemeData dark([String accent = 'cyan', String visualTheme = 'carbon']) {
     final palette = NukefyPalette.dark.withTheme(visualTheme);
     return _build(visualTheme == 'midnight' ? palette.withAccent(accent) : palette);
   }
 
-  static ThemeData light([String accent = 'cyan', String visualTheme = 'crimson']) {
+  static ThemeData light([String accent = 'cyan', String visualTheme = 'carbon']) {
     final palette = NukefyPalette.light.withTheme(visualTheme);
     return _build(visualTheme == 'midnight' ? palette.withAccent(accent) : palette);
   }
