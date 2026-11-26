@@ -15,6 +15,7 @@ class SettingsProvider extends ChangeNotifier {
   SettingsProvider(this._storage);
 
   static const _carbonThemeMigration = 'theme_default_carbon_v255';
+  static const _crimsonThemeMigration = 'theme_default_crimson_v130';
   static const _mtuMigration = 'mtu_default_1500';
 
   final StorageService _storage;
@@ -65,8 +66,18 @@ class SettingsProvider extends ChangeNotifier {
       }
       await _storage.write(_carbonThemeMigration, '1');
     }
+    // The shipped default moved from the monochrome carbon skin to crimson.
+    // Only the untouched default is moved: any other skin the user picked on
+    // purpose (aurora, ember, ocean, midnight) survives.
+    if (_storage.read(_crimsonThemeMigration) != '1') {
+      if (settings.visualTheme == 'carbon') {
+        settings.visualTheme = 'crimson';
+        changed = true;
+      }
+      await _storage.write(_crimsonThemeMigration, '1');
+    }
     if (!ThemePresets.all.containsKey(settings.visualTheme)) {
-      settings.visualTheme = 'carbon';
+      settings.visualTheme = 'crimson';
       changed = true;
     }
     // 9000 was only ever the shipped default, never a meaningful user choice.
